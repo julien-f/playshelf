@@ -2,13 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const {
-  buildMediaItems,
-  resolveShotIndex,
-  preferredShotIndex,
-  mediaLabel,
-  youtubeEmbedUrl,
-} = require('../public/mediaItems.ts');
+const { buildMediaItems, resolveShotIndex, preferredShotIndex, mediaLabel } = require('../public/mediaItems.ts');
 
 // ── buildMediaItems ───────────────────────────────────────────────────────────
 
@@ -197,8 +191,4 @@ test('buildMediaItems: a game outside Steam has its YouTube videos as video item
   assert.equal(preferredShotIndex(items, 'video'), 1);
   // Landscape art is cropped like Steam's header.
   assert.equal(buildMediaItems('igdb:9001', { banner: 'art.jpg', bannerIsCover: false })[0].contain, undefined);
-});
-
-test('youtubeEmbedUrl: the privacy-enhanced domain, autoplaying (it loads on a click)', () => {
-  assert.equal(youtubeEmbedUrl('a-b_C'), 'https://www.youtube-nocookie.com/embed/a-b_C?autoplay=1');
 });

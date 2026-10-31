@@ -8342,7 +8342,7 @@ test("F1 edge: a game outside Steam leads with its landscape art, and plays a Yo
   await panel.locator('.panel-hero-open').click();
   const lb = page.locator('#screenshot-lightbox');
   const player = lb.locator('iframe.lb-yt');
-  await expect(player).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/cqvideo1?autoplay=1');
+  await expect(player).toHaveAttribute('src', /^https:\/\/www\.youtube-nocookie\.com\/embed\/cqvideo1\?autoplay=1&/);
   await expect(player).toHaveAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
   await expect(player).toHaveAttribute('title', /Trailer 1 of 2: Console Quest Video 1$/);
   // A click into the player hands focus back, so ←/→ still step; leaving the video removes its player.
@@ -8362,6 +8362,65 @@ test("F1 edge: a game outside Steam leads with its landscape art, and plays a Yo
   await page.keyboard.press('Escape');
   await expect(lb).not.toHaveAttribute('open');
   await expect(player).toHaveCount(0);
+});
+
+test("F1 edge: a game outside Steam's YouTube video takes the lightbox's Space and M, at the viewer's mute", async ({
+  page,
+}) => {
+  // YouTube's player, stubbed: lists the commands it gets, and reports its state as the real one does.
+  const stub = `<button>Play</button><p id="heard"></p><ol id="got"></ol><script>
+    const state = { playerState: 1, muted: /[?&]mute=1/.test(location.search) };
+    const tell = (o) => parent.postMessage(JSON.stringify(o), '*');
+    addEventListener('message', (e) => {
+      const m = JSON.parse(e.data);
+      if (m.event === 'listening') {
+        document.getElementById('heard').textContent = 'listening';
+        tell({ event: 'infoDelivery', info: state });
+      }
+      if (m.event !== 'command') return;
+      document.getElementById('got').append(Object.assign(document.createElement('li'), { textContent: m.func }));
+      if (m.func === 'pauseVideo' || m.func === 'playVideo') {
+        state.playerState = m.func === 'playVideo' ? 1 : 2;
+        tell({ event: 'onStateChange', info: state.playerState });
+      } else {
+        state.muted = m.func === 'mute';
+        tell({ event: 'infoDelivery', info: { muted: state.muted } });
+      }
+    });
+  </script>`;
+  await page
+    .context()
+    .route('https://www.youtube-nocookie.com/**', (route) => route.fulfill({ contentType: 'text/html', body: stub }));
+  await page.addInitScript(() => localStorage.setItem('steam.isonoe.net:lightbox-muted', '1'));
+  await page.goto('/game/igdb:9001');
+  const panel = page.locator('#game-panel');
+  await panel.locator('.panel-film-item.is-video').first().click();
+  await panel.locator('.panel-hero-open').click();
+  const lb = page.locator('#screenshot-lightbox');
+  const player = lb.locator('iframe.lb-yt');
+  const origin = new URL(page.url()).origin;
+  await expect(player).toHaveAttribute(
+    'src',
+    `https://www.youtube-nocookie.com/embed/cqvideo1?autoplay=1&enablejsapi=1&origin=${encodeURIComponent(origin)}&mute=1`,
+  );
+  const frame = lb.frameLocator('iframe.lb-yt');
+  await expect(frame.locator('#heard')).toHaveText('listening');
+  await frame.getByRole('button', { name: 'Play' }).click();
+  await expect(lb.locator('.lb-surface')).toBeFocused();
+  // The player said it's playing (autoplay), so Space pauses it; then plays it again.
+  await page.keyboard.press(' ');
+  await expect(frame.locator('#got li')).toHaveText(['pauseVideo']);
+  await expect(lb.locator('.lb-osd')).toHaveAttribute('data-kind', 'pause');
+  await page.keyboard.press(' ');
+  await expect(frame.locator('#got li')).toHaveText(['pauseVideo', 'playVideo']);
+  // Muted by the viewer's choice: M unmutes, kept for the next video.
+  await page.keyboard.press('m');
+  await expect(frame.locator('#got li')).toHaveText(['pauseVideo', 'playVideo', 'unMute']);
+  expect(await page.evaluate(() => localStorage.getItem('steam.isonoe.net:lightbox-muted'))).toBe('0');
+  await page.keyboard.press('m');
+  await expect(frame.locator('#got li')).toHaveText(['pauseVideo', 'playVideo', 'unMute', 'mute']);
+  await expect(lb.locator('.lb-surface')).toBeFocused();
+  await expect(lb).toHaveAttribute('open'); // F, ←/→ and Esc are the lightbox's as for any item
 });
 
 test('F1 edge: a game outside Steam with only its portrait cover shows it whole in the hero', async ({ page }) => {

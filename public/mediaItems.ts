@@ -17,10 +17,6 @@ export type MediaMeta = Pick<GameMeta, 'banner' | 'movies'> & {
   screenshots?: { id: number | string; thumbnail: string; full: string }[];
 };
 
-// youtube-nocookie: no cookies until the viewer plays it (docs/dev/decisions.md).
-export const youtubeEmbedUrl = (id: string) =>
-  `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1`;
-
 export function buildMediaItems(appid: GameKey, details: MediaMeta | null | undefined): MediaItem[] {
   // `details.banner` (see extractAppDetails in lib/steam.js) is Steam's own header image
   // for this specific game, resolved once store metadata has loaded — before that (the

@@ -51,7 +51,8 @@ It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vector
 - `youtube-nocookie.com`: YouTube sets no cookies before the viewer plays a video, unlike `youtube.com`'s embed.
 - Mounted only once the viewer opens or steps onto the video in the lightbox (after a burst of steps settles), and removed on leaving it, which also stops it: browsing a game sends nothing to YouTube's player, only fetching thumbnails from `i.ytimg.com`.
 - A distinct kind (`movies[].youtube`, `hls: null`): Steam's HLS path and the presentation window stay untouched; such a game is never presented anyway.
-- A click into the player would give its frame the keyboard, so focus is taken back at once (the click still lands): ←/→ and Esc keep acting, the player is driven by pointer only.
+- A click into the player would give its frame the keyboard, so focus is taken back at once (the click still lands): the lightbox's keys keep acting.
+- Those keys drive the player as they do a Steam trailer (Space, M at the viewer's saved mute), through YouTube's IFrame Player API spoken over `postMessage` ([youtubePlayer.ts](../../public/youtubePlayer.ts)): `enablejsapi=1` plus `origin`, commands to the frame, its `infoDelivery`/`onStateChange` reports for play and mute state, accepted only from that origin and frame. Not `iframe_api`: another script from YouTube, loaded on every page, for four commands.
 
 ## Linting: Babel, not typescript-eslint
 

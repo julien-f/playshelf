@@ -118,7 +118,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `loadProgress.ts` — the details stream's progress bar and time left.
 - `priceLoading.ts` — the `POST /api/prices` call and the row-field mapping/fallbacks around it.
 - `panel.tsx` / `panelData.ts` / `panelNav.ts` / `panelHistory.ts` / `panelKeyboard.ts` / `ownerList.ts` — the side panel and its per-game data, prev/next nav, DLC trail rule, keyboard handler, and the pure half of the "Owned by" card.
-- `lightbox.tsx` / `mediaItems.ts` / `lightboxSwipe.ts` / `hlsPlayer.ts` — screenshot/video lightbox, its ordered media list, its swipe thresholds/decision, and trailer playback (shared with the presentation window).
+- `lightbox.tsx` / `mediaItems.ts` / `lightboxSwipe.ts` / `hlsPlayer.ts` / `youtubePlayer.ts` — screenshot/video lightbox, its ordered media list, its swipe thresholds/decision, trailer playback (shared with the presentation window), and YouTube's embed URL and `postMessage` protocol.
 - `presentation.ts` / `presentationProtocol.ts` / `PresentationChip.tsx` / `PresentationView.tsx` / `presentationScreen.ts` — presenting on a second screen: the main window's side and the nav chip, their messages, the presentation window itself, and the screen it's placed on (see [The presentation window](#the-presentation-window)).
 - `overlayHistory.ts` — the history entry each open overlay pushes (see the side panel).
 - `viewTransition.ts` / `artTint.ts` — the shared-element morphs into the panel and the lightbox; the panel ground's tint from the game's art.
@@ -402,7 +402,7 @@ Above 768px the shell is locked to the viewport and **`.app-scroll` is the page'
 
 `mediaItems.ts` builds the ordered media list and resolves a shot id to an index; the hero uses `meta.banner` (Steam's `header_image`, resolved server-side) once metadata loads, guessing the conventional CDN path only as a placeholder — that guess 404s for games on newer asset pipelines.
 
-- **A game outside Steam's media**: its banner is landscape art, a screenshot or, last, its portrait cover, which the hero shows whole (`contain`, `.panel-hero-img--contain`; [integrations.md](integrations.md#igdb--games-outside-steam)). Its videos are video items with a `youtube` id (`hls: null`): the hero and filmstrip show them like trailers; the lightbox shows YouTube's player in an iframe (`.lb-yt`) instead of the `<video>`, mounted on that item only and removed on any step or close ([decisions.md](decisions.md#igdb-videos--youtube-embeds-on-a-click)).
+- **A game outside Steam's media**: its banner is landscape art, a screenshot or, last, its portrait cover, which the hero shows whole (`contain`, `.panel-hero-img--contain`; [integrations.md](integrations.md#igdb--games-outside-steam)). Its videos are video items with a `youtube` id (`hls: null`): the hero and filmstrip show them like trailers; the lightbox shows YouTube's player in an iframe (`.lb-yt`) instead of the `<video>`, mounted on that item only and removed on any step or close; Space and M drive it as a trailer, from the player's own state reports ([decisions.md](decisions.md#igdb-videos--youtube-embeds-on-a-click)).
 
 ## The presentation window
 

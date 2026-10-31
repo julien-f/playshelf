@@ -13,7 +13,15 @@ import {
 } from './presentation.ts';
 import type { HlsVideo } from './hlsPlayer.ts';
 import { urlWithoutShot } from './urlState.ts';
-import { buildMediaItems, resolveShotIndex, preferredShotIndex, mediaLabel, youtubeEmbedUrl } from './mediaItems.ts';
+import { buildMediaItems, resolveShotIndex, preferredShotIndex, mediaLabel } from './mediaItems.ts';
+import {
+  youtubeEmbedUrl,
+  youtubeCommand,
+  parseYoutubeMessage,
+  YOUTUBE_LISTENING,
+  YOUTUBE_ORIGIN,
+  type YoutubeCommand,
+} from './youtubePlayer.ts';
 import type { MediaItem, ShotKind } from './mediaItems.ts';
 import type { PanelGame } from './types.ts';
 import { isIgdbRow, type GameKey } from './gameKey.ts';
@@ -148,18 +156,39 @@ function lbShowingVideo() {
   return lbVideoEl.isConnected;
 }
 // A game outside Steam's video: YouTube's player, in the DOM only while it's the item shown, so leaving stops it.
+// The lightbox's keys drive it through its postMessage API; its state reports keep `playing`/`muted` current.
 let lbYoutubeTimer: ReturnType<typeof setTimeout> | undefined;
+let lbYt: { frame: HTMLIFrameElement; playing: boolean; muted: boolean; heard: boolean } | null = null;
+let lbYtListenTimer: ReturnType<typeof setInterval> | undefined;
 function mountLbYoutube(lb: HTMLElement, id: string, title: string) {
   const frame = document.createElement('iframe');
+  const muted = lbMutedChoice();
+  lbYt = { frame, playing: false, muted, heard: false };
   frame.className = 'lb-yt';
-  frame.src = youtubeEmbedUrl(id);
+  frame.src = youtubeEmbedUrl(id, { origin: location.origin, muted });
   frame.title = title;
   frame.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture';
   frame.allowFullscreen = true;
+  // Re-sent until the player answers, as iframe_api does: its listener may come up after `load`.
+  frame.addEventListener('load', () => {
+    let tries = 0;
+    const listen = () => {
+      if (lbYt?.frame !== frame || lbYt.heard || ++tries > 20) return clearInterval(lbYtListenTimer);
+      frame.contentWindow?.postMessage(YOUTUBE_LISTENING, YOUTUBE_ORIGIN);
+    };
+    clearInterval(lbYtListenTimer);
+    lbYtListenTimer = setInterval(listen, 250);
+    listen();
+  });
   lb.querySelector('.lb-prev')!.before(frame); // under the chrome
+}
+function sendLbYoutube(func: YoutubeCommand) {
+  lbYt?.frame.contentWindow?.postMessage(youtubeCommand(func), YOUTUBE_ORIGIN);
 }
 function unmountLbYoutube() {
   clearTimeout(lbYoutubeTimer);
+  clearInterval(lbYtListenTimer);
+  lbYt = null;
   document.querySelector('#screenshot-lightbox .lb-yt')?.remove();
 }
 function lbShowingImage() {
@@ -239,7 +268,7 @@ export function initLightbox({
   });
   document.addEventListener('pointerdown', () => (lbByKey = false), { capture: true, signal: _lbSignal });
   // A click into YouTube's player focuses its frame, whose keys never reach this document: focus comes back
-  // (the click still lands), so ←/→ and Esc keep acting; the player itself is driven by pointer.
+  // (the click still lands), so the lightbox's keys keep acting, on the player too.
   window.addEventListener(
     'blur',
     () =>
@@ -247,6 +276,15 @@ export function initLightbox({
         const frame = document.activeElement;
         if (frame?.classList.contains('lb-yt')) lbSurface(frame.closest<HTMLElement>('#screenshot-lightbox')!).focus();
       }),
+    { signal: _lbSignal },
+  );
+  window.addEventListener(
+    'message',
+    (e) => {
+      if (!lbYt || e.origin !== YOUTUBE_ORIGIN || e.source !== lbYt.frame.contentWindow) return;
+      lbYt.heard = true;
+      Object.assign(lbYt, parseYoutubeMessage(e.data));
+    },
     { signal: _lbSignal },
   );
   document.addEventListener('fullscreenchange', syncLightboxFullscreenBtn, { signal: _lbSignal });
@@ -743,6 +781,9 @@ function syncLbTime(vc: HTMLElement, at: number, duration: number) {
 function setLbMuted(muted: boolean) {
   lbVideoEl.muted = muted;
   document.getElementById('screenshot-lightbox')?.classList.remove('lb--automuted');
+  saveLbMutedChoice(muted);
+}
+function saveLbMutedChoice(muted: boolean) {
   try {
     localStorage.setItem(LB_MUTED_KEY, muted ? '1' : '0');
   } catch {
@@ -1125,6 +1166,20 @@ function wireKeyboard(lb: HTMLElement) {
           toggleLbMute();
           osdLb(muted ? 'unmute' : 'mute');
         }
+      }
+      // YouTube's player, by the same keys.
+      const yt = lbYt;
+      if (yt && e.key === ' ' && !(e.target as HTMLElement).closest('button')) {
+        e.preventDefault();
+        osdLb(yt.playing ? 'pause' : 'play');
+        sendLbYoutube(yt.playing ? 'pauseVideo' : 'playVideo');
+        yt.playing = !yt.playing; // until the player's report
+      }
+      if (yt && (e.key === 'm' || e.key === 'M')) {
+        osdLb(yt.muted ? 'unmute' : 'mute');
+        sendLbYoutube(yt.muted ? 'unMute' : 'mute');
+        yt.muted = !yt.muted;
+        saveLbMutedChoice(yt.muted);
       }
     },
     { signal: _lbSignal },

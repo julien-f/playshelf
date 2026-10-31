@@ -261,4 +261,4 @@ Bundle games carry only an ITAD id (uuid), slug and title. `resolveSteamAppIds` 
 A third party the **browser** talks to, never the server: a game outside Steam's videos (IGDB gives only YouTube ids).
 
 - **Thumbnails**: `https://i.ytimg.com/vi/<id>/hqdefault.jpg` (built in `extractIgdbGame`), loaded by the panel's filmstrip like any image.
-- **Player**: `https://www.youtube-nocookie.com/embed/<id>?autoplay=1` in an iframe, created only when the viewer shows that video in the lightbox and removed when they leave it; nothing loads from the player's domain before. Why: [decisions.md](decisions.md#igdb-videos--youtube-embeds-on-a-click).
+- **Player**: `https://www.youtube-nocookie.com/embed/<id>?autoplay=1&enablejsapi=1&origin=<this origin>` (`&mute=1` at the viewer's saved mute) in an iframe, driven by its documented IFrame Player API over `postMessage`, created only when the viewer shows that video in the lightbox and removed when they leave it; nothing loads from the player's domain before. Why: [decisions.md](decisions.md#igdb-videos--youtube-embeds-on-a-click).
