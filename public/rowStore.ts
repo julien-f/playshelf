@@ -13,6 +13,10 @@
 // here reaches the panel with no "please re-render" bump in between. See docs/dev/frontend.md's "Frontend
 // reactivity" section.
 import { produce } from 'solid-js/store';
+import type { GameKey } from './gameKey.ts';
+
+// The rows a key can name: a numeric appid only ever a Steam game's, when T also holds games outside Steam.
+type RowOf<T, K extends GameKey> = Extract<T, { appid: K }>;
 
 export interface RowStore<T> {
   // The store's own row for `appid`, or `undefined` if it isn't one of the currently loaded rows.
@@ -20,12 +24,12 @@ export interface RowStore<T> {
   // Handed out as `Readonly<T>` — a store row can only be written through `mutateRow` below
   // (Solid rejects a direct write outright, so an unguarded `row.field = x` would otherwise be a
   // runtime error at best and a silent no-op at worst).
-  getRow(appid: number): Readonly<T> | undefined;
+  getRow<K extends GameKey>(appid: K): Readonly<RowOf<T, K>> | undefined;
   // Mutates the row at `appid` via `produce(fn)` and returns it — `undefined` (mutating nothing)
   // if `appid` isn't one of the currently loaded rows, e.g. a DLC/base-game link or a standalone
   // "look up any game" lookup, which was never added to this store at all. Callers that can be
   // handed such a game check for that and write to wherever it does live instead.
-  mutateRow(appid: number, fn: (draft: T) => void): Readonly<T> | undefined;
+  mutateRow<K extends GameKey>(appid: K, fn: (draft: RowOf<T, K>) => void): Readonly<RowOf<T, K>> | undefined;
   // Clears the index back to empty — a fresh search/tab-switch/bundle-open with nothing loaded
   // (yet).
   reset(): void;
@@ -34,7 +38,7 @@ export interface RowStore<T> {
   load(rows: readonly T[]): void;
 }
 
-export function createRowStore<T extends { appid: number }>(
+export function createRowStore<T extends { appid: GameKey }>(
   // The route's own store array and its setter, as returned by `createStore<T[]>` — the array is
   // read for `getRow`/`mutateRow`'s return value, the setter is called exactly as each route used
   // to call it directly: `setRows(idx, produce(fn))`.
@@ -43,17 +47,18 @@ export function createRowStore<T extends { appid: number }>(
 ): RowStore<T> {
   // Private to this closure: it's replaced on every `reset()`/`load()`, so a caller holding it
   // would keep operating on a stale `Map`.
-  let rowIndex = new Map<number, number>();
+  let rowIndex = new Map<GameKey, number>();
+  // The casts: the row indexed under `appid` has that appid, so it is one of the rows that key can name.
   return {
-    getRow(appid) {
+    getRow<K extends GameKey>(appid: K) {
       const idx = rowIndex.get(appid);
-      return idx === undefined ? undefined : store[idx];
+      return idx === undefined ? undefined : (store[idx] as RowOf<T, K>);
     },
-    mutateRow(appid, fn) {
+    mutateRow<K extends GameKey>(appid: K, fn: (draft: RowOf<T, K>) => void) {
       const idx = rowIndex.get(appid);
       if (idx === undefined) return undefined;
-      setStore(idx, produce(fn));
-      return store[idx];
+      setStore(idx, produce(fn as (draft: T) => void));
+      return store[idx] as RowOf<T, K>;
     },
     reset() {
       rowIndex = new Map();
@@ -69,8 +74,8 @@ export function createRowStore<T extends { appid: number }>(
       // view with no error anywhere. This warns instead, so a violation is visible rather than
       // quietly masked twice (once by whatever bug produced the duplicate, once by this module
       // silently accepting it).
-      const seen = new Set<number>();
-      const dupes = new Set<number>();
+      const seen = new Set<GameKey>();
+      const dupes = new Set<GameKey>();
       for (const r of rows) {
         if (seen.has(r.appid)) dupes.add(r.appid);
         else seen.add(r.appid);

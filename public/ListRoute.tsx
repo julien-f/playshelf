@@ -152,7 +152,7 @@ import {
   notifyOwnersChanged,
   openPanelFromRow,
 } from './panel.tsx';
-import { isIgdbKey, isIgdbRow, parseGameKey, type GameKey } from './gameKey.ts';
+import { isIgdbKey, isIgdbRow, isSteamRow, parseGameKey, type GameKey } from './gameKey.ts';
 import {
   setPanelParam,
   withAccountParam,
@@ -259,6 +259,7 @@ import type {
   CombineOp,
   ListRef,
   PanelGame,
+  TableGame,
 } from './types.ts';
 import {
   getList,
@@ -707,7 +708,7 @@ const MAX_PRICE_LOOKUP_GAMES = 500; // mirrors the server's own cap — see load
 
 // The shape of one `data:` line in /api/game-details/stream's SSE response.
 interface DetailsEvent extends GameDetailsReply {
-  appid: number;
+  appid: GameKey; // echoes the request's key: `igdb:N` for a game outside Steam
   done?: boolean;
   limited?: string; // its own event, with no appid: see detailsLimited
 }
@@ -734,7 +735,7 @@ function syncLeadColumn(t: TableState<Game>, key: string, active: boolean): void
   }
 }
 
-function applyDetailsEvent(row: Game, event: DetailsEvent) {
+function applyDetailsEvent(row: TableGame, event: DetailsEvent) {
   row.detailsFetchedAt = event.fetchedAt; // absent on a row the stream never answered: no age
   row.detailsFetchedAts = event.fetchedAts ?? null;
   row.failedSources = event.failed ?? [];
@@ -857,7 +858,7 @@ export default function ListRoute() {
   }
   // A bundle's games are priced by their resolved ITAD gid, a priced list's rows by appid.
   function priceTargets(): readonly { appid: number; gid?: string }[] | null {
-    return resolvedBundleGames ?? (hasPrices() ? rowsStore : null);
+    return resolvedBundleGames ?? (hasPrices() ? rowsStore.filter(isSteamRow) : null);
   }
 
   async function handleRefreshList(): Promise<void> {
@@ -934,7 +935,7 @@ export default function ListRoute() {
   // The bundle's games whose Steam lookup errored: neither in the table nor "not on Steam".
   const [bundleFailedCount, setBundleFailedCount] = createSignal(0);
 
-  const [rowsStore, setRowsStore] = createStore<Game[]>([]);
+  const [rowsStore, setRowsStore] = createStore<TableGame[]>([]);
   // The rows once every one's details are in, unwrapped (updateStatus): what's computed from them reads
   // ~10× faster than through store proxies, and later row writes (prices, a panel ↻) don't redo it.
   const [loadedRows, setLoadedRows] = createSignal<Game[] | null>(null);
@@ -956,7 +957,7 @@ export default function ListRoute() {
     });
     return parts.length ? `${parts.join(' · ')} — Refresh details in a game's panel retries` : '';
   });
-  const rowStore = createRowStore<Game>(rowsStore, (idx, updater) => setRowsStore(idx, updater));
+  const rowStore = createRowStore<TableGame>(rowsStore, (idx, updater) => setRowsStore(idx, updater));
   // Games opened as a standalone aside rather than as one of this list's own rows (a nav-bar
   // lookup, or a DLC/base-game hop out of the open panel — see openStandaloneInPlace). Their data
   // arrives asynchronously and the panel renders it per field, so they need to live in a store
@@ -1035,7 +1036,7 @@ export default function ListRoute() {
     setRankingState(state);
     const rankOf = ranks(state, source);
     batch(() => {
-      for (const row of rowsStore)
+      for (const row of rowsStore.filter(isSteamRow))
         rowStore.mutateRow(row.appid, (draft) => {
           draft.rank = rankOf.get(row.appid) ?? null;
         });
@@ -1113,7 +1114,7 @@ export default function ListRoute() {
     return source ? rankingsOf(source) : [];
   }
   function rankingProgressText(list: GameList): JSX.Element {
-    const p = progress(getRanking(list.id), new Set(rowsStore.map((r) => r.appid)));
+    const p = progress(getRanking(list.id), new Set(rowsStore.filter(isSteamRow).map((r) => r.appid)));
     const total = p.ranked + p.excluded + p.pending;
     return p.pending ? (
       `${p.ranked} of ${total} ranked`
@@ -1509,7 +1510,7 @@ export default function ListRoute() {
   // in the persisted list before this mount) deliberately does NOT get re-persisted just because
   // its rating/HLTB/etc. happened to stream in again — that would bump its recency/order on
   // every visit to /game, not only when it's the one actually just looked up.
-  let pendingRecentFocus: number | null = null;
+  let pendingRecentFocus: GameKey | null = null;
   // kind === 'recent' only: whether load()'s full rebuild (below) has already run once for this
   // mount. /game/:appid? is one route *definition* shared across every appid (see the
   // createEffect at the bottom of this file), so navigating from /game/440 to /game/620 re-runs
@@ -1524,7 +1525,8 @@ export default function ListRoute() {
   // must not clobber it.
   let standaloneLookupToken = 0;
 
-  const isListed = (r: Game): boolean => !r.loading;
+  // Steam rows only: the table's columns read Steam fields.
+  const isListed = (r: TableGame): r is Game => !r.loading && isSteamRow(r);
   function tableData(): Game[] {
     return rowsStore.filter(isListed);
   }
@@ -1590,12 +1592,12 @@ export default function ListRoute() {
 
   // A refreshed row: the new list's own fields, over the details the kept one already had — not
   // its placeholder `loading`/`details`/empty name, since a kept row isn't streamed again.
-  function withKept(row: Game, old: Game | undefined): Game {
+  function withKept<T extends TableGame>(row: T, old: TableGame | undefined): T {
     if (!old) return row;
     const fresh = Object.entries(row).filter(
       ([key, v]) => v !== undefined && key !== 'loading' && key !== 'details' && !(key === 'name' && !v),
     );
-    return { ...old, ...Object.fromEntries(fresh) } as Game;
+    return { ...old, ...Object.fromEntries(fresh) } as T;
   }
 
   function updateStatus(): void {
@@ -1936,7 +1938,7 @@ export default function ListRoute() {
     },
   });
 
-  async function streamGameDetails(games: { appid: number }[], gen: number): Promise<void> {
+  async function streamGameDetails(games: { appid: GameKey }[], gen: number): Promise<void> {
     const unanswered = new Set(games.map((g) => g.appid));
     let failure: string | null = null;
     try {
@@ -2080,7 +2082,7 @@ export default function ListRoute() {
   function stampMyOwnership(): void {
     const peek = peekMyOwnership();
     batch(() => {
-      for (const item of rowsStore) {
+      for (const item of rowsStore.filter(isSteamRow)) {
         const status = peek.status(item.appid);
         if (status) {
           rowStore.mutateRow(item.appid, (draft) => {
@@ -2614,14 +2616,12 @@ export default function ListRoute() {
       // metadata had streamed in with the real title. The placeholder is presentational only now
       // (panel.tsx's title falls back to it); a still-nameless row is `loading` and filtered out
       // of the table anyway until its details event lands.
-      initialRows = recents.map((g, i) => ({
-        appid: g.appid,
-        lookedUp: i + 1,
-        name: g.name,
-        capsule: g.tinyImage || undefined,
-        loading: true,
-        details: null,
-      }));
+      // A game outside Steam keeps its place in the numbering, not a row: the table's columns read Steam fields.
+      initialRows = recents.flatMap(({ appid, name, tinyImage }, i) =>
+        isIgdbKey(appid)
+          ? []
+          : [{ appid, lookedUp: i + 1, name, capsule: tinyImage || undefined, loading: true, details: null }],
+      );
     } else if (kind === 'creator') {
       const name = creatorName();
       setCreatorResult(null);
@@ -3193,13 +3193,14 @@ export default function ListRoute() {
     // those cost at their best deal right now (summed in the region's currency, currency.ts) —
     // the "is it worth it" sum the table otherwise leaves to the reader. Once ownership is known.
     const account = getEffectiveCurrentAccount();
-    if (account && rowsStore.length > 0 && rowsStore.every((r) => r.inLibrary != null)) {
-      const fresh = rowsStore.filter((r) => !r.inLibrary);
+    const steamRows = rowsStore.filter(isSteamRow);
+    if (account && steamRows.length > 0 && steamRows.every((r) => r.inLibrary != null)) {
+      const fresh = steamRows.filter((r) => !r.inLibrary);
       const target = regionCurrency();
       const total = sumBestDeals(fresh, target);
       tiles.push({
         label: 'New to you',
-        value: `${fresh.length} of ${rowsStore.length}`,
+        value: `${fresh.length} of ${steamRows.length}`,
         sub: fresh.length && total != null ? `≈ ${formatMoney(total, target)} at best deals` : undefined,
         title: `Games here that aren't in ${accountDisplayLabel(account)}'s library — the ones that are carry a ✓ in the table`,
       });
@@ -4165,7 +4166,7 @@ export default function ListRoute() {
       () => {
         setPriceFetchedAt(undefined);
         if (showsTierPrice() || showsGamePass()) void load();
-        else if (hasPrices()) void loadPrices(rowsStore, loadGuard.current());
+        else if (hasPrices()) void loadPrices(rowsStore.filter(isSteamRow), loadGuard.current());
       },
       { defer: true },
     ),

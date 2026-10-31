@@ -1,4 +1,4 @@
-import { parseGameKey } from './gameKey.ts';
+import { parseGameKey, type GameKey } from './gameKey.ts';
 import { getPref, setPref } from './prefs.ts';
 
 // Recently looked-up games — carved out of gameSearch.ts (see docs/dev/frontend.md) so this
@@ -22,7 +22,7 @@ const RECENT_GAMES_PREF_KEY = 'recentGames';
 export const MAX_RECENT_GAMES = 500;
 
 export interface RecentGame {
-  appid: number;
+  appid: GameKey;
   name: string;
   tinyImage: string | null;
 }
@@ -41,7 +41,7 @@ export function loadRecentGames(): RecentGame[] {
 // appid or store URL knows no name at all (gameSearch.ts's `pick({ appid, name: '' })`), and
 // letting that blank out an entry whose real name was resolved on an earlier visit would leave
 // the "Recently Looked Up" list showing nothing for a game it had already identified.
-export function addRecentGame(appid: number, name: string, tinyImage?: string | null): void {
+export function addRecentGame(appid: GameKey, name: string, tinyImage?: string | null): void {
   const list = loadRecentGames();
   const existing = list.find((g) => g.appid === appid);
   const rest = list.filter((g) => g.appid !== appid);
@@ -53,7 +53,7 @@ export function addRecentGame(appid: number, name: string, tinyImage?: string | 
 // real name only became known after it was already recorded (an appid/URL lookup, whose name
 // resolves from store metadata a moment later). addRecentGame would reorder the list, which is
 // wrong here: nothing was looked up again, an existing entry just learned its own name.
-export function renameRecentGame(appid: number, name: string, tinyImage?: string | null): void {
+export function renameRecentGame(appid: GameKey, name: string, tinyImage?: string | null): void {
   const list = loadRecentGames();
   const idx = list.findIndex((g) => g.appid === appid);
   if (idx === -1) return;

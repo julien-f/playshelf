@@ -29,6 +29,17 @@ test('createRowStore: load() populates getRow() keyed by appid', () => {
   assert.deepEqual(store.getRow(2), { appid: 2, name: 'b' });
 });
 
+test('createRowStore: an igdb key indexes its row beside appids', () => {
+  const [arr, set] = fakeStore([
+    { appid: 1, name: 'a' },
+    { appid: 'igdb:1', name: 'b' },
+  ]);
+  const store = createRowStore(arr, set);
+  store.load(arr);
+  assert.equal(store.getRow('igdb:1').name, 'b');
+  assert.equal(store.getRow(1).name, 'a');
+});
+
 test("createRowStore: getRow() hands back the store's own row, not a copy of it", () => {
   const [arr, set] = fakeStore([{ appid: 1, name: 'a' }]);
   const store = createRowStore(arr, set);

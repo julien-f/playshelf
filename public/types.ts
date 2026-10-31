@@ -245,6 +245,18 @@ export interface IgdbDetails {
   hltb: Hltb | null;
 }
 
+// A game outside Steam as a Recently Looked Up row: the Steam columns it has from the details stream's
+// Steam-shaped event (lib/streamEvent.mjs), the Steam-only ones left unset.
+export interface IgdbTableRow extends Omit<Game, 'appid'> {
+  appid: IgdbKey;
+  source: 'igdb';
+  igdbRating?: { score: number; count: number } | null;
+  steamAppid?: number | null; // IGDB links it to Steam: opening it opens that game
+}
+
+// A row of a list's table: a Steam game, or one outside Steam.
+export type TableGame = Game | IgdbTableRow;
+
 // A game outside Steam open in the panel: never a list's row, never in prefs (panel.tsx's igdbRow).
 export interface IgdbRow {
   readonly appid: IgdbKey;

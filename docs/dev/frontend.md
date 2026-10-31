@@ -112,7 +112,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 **Table, panel, and shared plumbing**
 
 - `gameColumns.ts` — every game-table column definition and its render/format/compare/bucket helpers (see below).
-- `rowStore.ts` — `createRowStore`: the appid→index bookkeeping and the `getRow`/`mutateRow` pair over a route's Solid store array.
+- `rowStore.ts` — `createRowStore`: the `GameKey`→index bookkeeping and the `getRow`/`mutateRow` pair over a route's Solid store array; a numeric key types its row as a Steam game's.
 - `streamBatcher.ts` — batches a high-frequency mutation stream into one `batch()` per flush.
 - `staleGuard.ts` — generation counters for "a newer load superseded this one".
 - `loadProgress.ts` — the details stream's progress bar and time left.
@@ -124,7 +124,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `viewTransition.ts` / `artTint.ts` — the shared-element morphs into the panel and the lightbox; the panel ground's tint from the game's art.
 - `gameSearch.ts` — the combobox/debounce UI for "look up any game" (the shell owns where results go).
 - `urlState.ts` — param parsing, canonical param order, and the `?game=`/`&shot=`/`?u=` writers.
-- `gameKey.ts` — `GameKey` (a Steam appid or `igdb:<id>`), `parseGameKey` for a path segment or `?game=`, `isIgdbRow`.
+- `gameKey.ts` — `GameKey` (a Steam appid or `igdb:<id>`), `parseGameKey` for a path segment or `?game=`, `isIgdbRow` (the panel's row, by its IGDB load), `isSteamRow` (a list row, by key).
 - `IgdbPanel.tsx` — the panel's body for a game outside Steam (see the side panel).
 - `prefs.ts` / `StorageFullBanner.tsx` / `prefsPopover.tsx` / `region.ts` / `navPopover.ts` — the localStorage preference blob; the banner when storage refuses a write of it; the Preferences panel's contents; the region preference and its detection; nav popovers' Escape and positioning.
 - `tableViewPrefs.ts` / `tableViewKeys.ts` / `tableViewSync.ts` / `SharedViewBanner.tsx` / `UnsavedViewBanner.tsx` — restore/persist/share/reset a table view; the table-view pref keys; the signed-in Save/Revert baseline; the shared-layout and unsaved-changes banners and the Share/Default view buttons.
@@ -142,7 +142,7 @@ Everything the frontend renders is driven by Solid's own reactivity — there is
 
 Four kinds of state, four mechanisms:
 
-- **A game/row's data** lives in a Solid **store** owned by the route that loaded it (`createStore<Game[]>` in `ListRoute.tsx`, reached through `rowStore.ts`). Writes go through `rowStore.mutateRow(appid, fn)` — `produce(fn)`, so the callback gets an assignable draft — and the store notifies per field, so a streamed field patches only the cells and panel lines that read it. `standaloneRows` (a `createStore<Record<number, Game>>` in the same file) does the same for a game opened as a standalone aside (a nav-bar lookup, a DLC/base-game hop).
+- **A game/row's data** lives in a Solid **store** owned by the route that loaded it (`createStore<TableGame[]>` in `ListRoute.tsx`, reached through `rowStore.ts`; `TableGame` is a Steam `Game` or an `IgdbTableRow`, which the table doesn't list yet). Writes go through `rowStore.mutateRow(appid, fn)` — `produce(fn)`, so the callback gets an assignable draft — and the store notifies per field, so a streamed field patches only the cells and panel lines that read it. `standaloneRows` (a `createStore<Record<number, Game>>` in the same file) does the same for a game opened as a standalone aside (a nav-bar lookup, a DLC/base-game hop).
 - **The side panel's own UI state** (which game is open, hero index, expanded collapsibles, …) is plain signals in `panel.tsx`, set by its own click handlers.
 - **A game outside Steam** (`types.ts`'s `IgdbRow`) is no store row: `panel.tsx`'s `igdbRow(key)` is an object of getters over the panel's `igdb` resource (keyed on the open `igdb:` key, fetched by `panelData.ts`'s `fetchIgdbGame`), shaped like a row (`details.meta` with IGDB's banner pick as `banner`, its screenshots, its YouTube videos as `movies`; `details.hltb`), so the hero, HLTB, the lightbox and the media list take it unchanged. Its getters read only a reply tagged with their own key.
 - **Everything the panel fetches for itself** (news, achievements, "Owned by", ownership status, price, bundles, DLC) is a `createResource` keyed on the open game, created in one module-level `createRoot` (the panel is a singleton whose data outlives every render). Fetching and session-caching is `panelData.ts`; the resource is only wiring, giving `.loading`, discard of superseded responses and re-rendering for free. `refetch()` is the panel's Refresh details; each fetcher reads `info.refetching` as "force" (bypass both the session cache and the server's TTL).

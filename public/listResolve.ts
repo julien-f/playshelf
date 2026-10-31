@@ -237,7 +237,8 @@ export function createDefaultFetchers({
         onBundleLeftOut,
         onBundleGames,
       ),
-    recentGames: async () => new Set(loadRecentGames().map((g) => g.appid)),
+    // Lists hold Steam games only.
+    recentGames: async () => new Set(loadRecentGames().flatMap((g) => (typeof g.appid === 'number' ? [g.appid] : []))),
     creator: async (role, name) => {
       let result;
       try {
