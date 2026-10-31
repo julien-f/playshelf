@@ -4,11 +4,11 @@ Every upstream this app talks to, and what is undocumented about each. Cache tie
 
 **Trust tiers.**
 
-- **Sanctioned**: Steam's keyed `api.steampowered.com` endpoints (among them `ResolveVanityURL` and `GetOwnedGames`, `lib/steam.js`), its key-less `GetAppReviews`, Steam OpenID's `check_authentication` (`lib/auth.js`) and the IsThereAnyDeal API — documented.
+- **Sanctioned**: Steam's keyed `api.steampowered.com` endpoints (among them `ResolveVanityURL` and `GetOwnedGames`, `lib/steam.js`), its key-less `GetAppReviews`, Steam OpenID's `check_authentication` (`lib/auth.js`), the IsThereAnyDeal API and IGDB — documented.
 - **Untrusted**: everything else here — HLTB's search API, Steam's wishlist/store-search/search-results/store-browse/appdetails/packagedetails/ajaxresolvebundles endpoints, ProtonDB, Fanatical's storefront feed, Microsoft's Game Pass catalog and product catalog. Undocumented, reached without a key (sometimes with spoofed browser headers), not guaranteed sanctioned by their terms, liable to break or be blocked without notice. Usage is low-volume and non-commercial; **don't scale up request volume without revisiting these notes.**
 - **Other people use the live site** (steam.isonoe.net), so their Steam IDs and profiles pass through it: attribution and privacy are real requirements, not a local tool's.
-- **Circuit breakers** (`lib/circuitBreaker.js`) on the ones that answer a block with a 403 — Steam's store, HLTB's search, ProtonDB: 2 consecutive 403s leave that upstream alone for 5 minutes, including requests already queued when it trips.
-- **Pacing**: Steam's store takes 2 requests in flight, each slot pausing `STORE_MIN_INTERVAL_MS` before reuse; HLTB's search, ProtonDB, the store browse API and Steam reviews take 3 each, pausing `UPSTREAM_MIN_INTERVAL_MS` — enough to keep pace with the store on a cold load. A store, reviews or HLTB search 429 pauses every request to that upstream for its `Retry-After` (seconds or an HTTP date), uncapped; without one, 2 s doubling per 429 up to 30 s, the requests refused together counting once (`createPause`, `lib/upstream.js`). A store or reviews request is retried at most twice before failing; an HLTB search isn't retried, and every row still waiting on HLTB waits out the pause.
+- **Circuit breakers** (`lib/circuitBreaker.js`) on the ones that answer a block with a 403 — Steam's store, HLTB's search, ProtonDB, IGDB: 2 consecutive 403s leave that upstream alone for 5 minutes, including requests already queued when it trips.
+- **Pacing**: Steam's store takes 2 requests in flight, each slot pausing `STORE_MIN_INTERVAL_MS` before reuse; HLTB's search, ProtonDB, the store browse API and Steam reviews take 3 each, pausing `UPSTREAM_MIN_INTERVAL_MS` — enough to keep pace with the store on a cold load; IGDB takes 4, its documented rate. A store, reviews, IGDB or HLTB search 429 pauses every request to that upstream for its `Retry-After` (seconds or an HTTP date), uncapped; without one, 2 s doubling per 429 up to 30 s, the requests refused together counting once (`createPause`, `lib/upstream.js`). A store, reviews or IGDB request is retried at most twice before failing (`createRetryingFetch`); an HLTB search isn't retried, and every row still waiting on HLTB waits out the pause.
 
 - [HLTB — no npm package](#hltb--no-npm-package)
 - [Owned games — `GetOwnedGames`' playtime fields](#owned-games--getownedgames-playtime-fields)
@@ -30,6 +30,7 @@ Every upstream this app talks to, and what is undocumented about each. Cache tie
   - [Rate limiting](#rate-limiting)
 - [Fanatical — pick-and-mix tier prices](#fanatical--pick-and-mix-tier-prices)
 - [Xbox PC Game Pass — catalog feed](#xbox-pc-game-pass--catalog-feed)
+- [IGDB — games outside Steam](#igdb--games-outside-steam)
 
 ## HLTB — no npm package
 
@@ -233,3 +234,19 @@ Bundle games carry only an ITAD id (uuid), slug and title. `resolveSteamAppIds` 
 
 - **Volume**: one catalog call and one ITAD lookup per market per `BUNDLES_CACHE_TTL_MINUTES`, plus titles for newly seen non-Steam products (1 call on a cold US cache).
 - **Failure**: a gid whose Steam lookup errored is counted in `failed` (uncached, retried next time), not reported as not on Steam.
+
+## IGDB — games outside Steam
+
+`lib/igdb.js`: games on every platform from [IGDB](https://api-docs.igdb.com/), Twitch's documented API — sanctioned tier.
+
+- **Optional**: gated on `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (`isIgdbConfigured()`, see `default.env`).
+- **Auth**: an app token from `POST https://id.twitch.tv/oauth2/token` (`client_id`, `client_secret`, `grant_type=client_credentials`, form-encoded in the body so the secret stays out of URLs and logs) → `access_token`, `expires_in`. Held in memory, fetched once for concurrent callers, renewed a day before it expires. A 401 drops it (unless another query already renewed it) and retries once.
+- **Queries**: `POST https://api.igdb.com/v4/games` with `Client-ID` and `Authorization: Bearer <token>`, an APIcalypse body.
+  - Search (`searchIgdb`): `search "<term>"` (`\` and `"` escaped), `where version_parent = null & game_type = (0,8,9,10,11); limit 20;` — main games, remakes, remasters, expanded games and ports; editions (`version_parent`), DLC, mods, updates and bundles otherwise crowd out the game itself. Ranked exact title first (accent-, case- and spacing-insensitive), then `total_rating_count`.
+  - One game (`getIgdbGame`): one query by id expanding platforms, cover, screenshots, videos, genres and involved companies.
+- **Limits** (documented): 4 requests per second, 8 open at once; a 429 when exceeded.
+- **Steam link** (`steamAppidOf`): an `external_games` entry with `external_game_source = 1` is the Steam appid; else a remaster's or port's (IGDB lists a console original apart from its PC version: The Last of Us Part II → 2531310).
+- **Rating**: `total_rating` (critics and users, 0–100) with `total_rating_count`; `aggregated_rating` is critics only and often missing.
+- **Images**: `https://images.igdb.com/igdb/image/upload/t_<size>/<image_id>.jpg` — `t_cover_small` (search), `t_cover_big`, `t_screenshot_big`, `t_1080p`. An image removed from IGDB stays served for 30 days.
+- **Caching**: `igdb:<id>` (the raw record, meta tier) and `igdb-search:<term>` (search tier), [data.md](data.md). The Twitch Developer Services Agreement limits storing data to 24 hours without written authorization; IGDB's FAQ gives it: "Am I allowed to store/cache the data locally? Yes. In fact, we prefer if you store and serve the data to your end users." (<https://api-docs.igdb.com/>), which the owner takes as that authorization.
+- **Field names**: a rename of `game_type` or `external_game_source` would silently empty the filters or the Steam link, so `test/igdb.test.js` asserts the query text.

@@ -31,8 +31,9 @@ Setup and dev commands are in [README.md](../../README.md); tests and hooks in [
 - **`lib/itad.js`** — IsThereAnyDeal calls (`getShopId`, `getBundles`, `resolveSteamAppIds`, prices) behind bundle browsing and every price column.
 - **`lib/fanatical.js`** — Fanatical's storefront feed, for pick-and-mix tier prices ([integrations.md](integrations.md#fanatical--pick-and-mix-tier-prices)).
 - **`lib/gamepass.js`** — the PC Game Pass catalog as Steam appids ([integrations.md](integrations.md#xbox-pc-game-pass--catalog-feed)).
-- **`lib/upstream.js`** — `createSemaphore` (concurrency cap + per-slot pacing, registered for `GET /api/metrics`) and `upstreamError`, shared by the upstream clients.
-- **`lib/circuitBreaker.js`** — one 403-storm breaker per blocking-prone upstream (Steam store, HLTB, ProtonDB).
+- **`lib/igdb.js`** — IGDB search and game lookup (`searchIgdb`, `getIgdbGame`), for games outside Steam, behind its own semaphore (`igdbLimit`) ([integrations.md](integrations.md#igdb--games-outside-steam)).
+- **`lib/upstream.js`** — `createSemaphore` (concurrency cap + per-slot pacing, registered for `GET /api/metrics`), `createPause`/`createRetryingFetch` (429 back-off and retries) and `upstreamError`, shared by the upstream clients.
+- **`lib/circuitBreaker.js`** — one 403-storm breaker per blocking-prone upstream (Steam store, HLTB, ProtonDB, IGDB).
 - **`lib/metrics.js`** — `createTrackedFetch`, outbound budgets and the counters behind `GET /api/metrics` ([observability.md](observability.md)).
 - **`lib/auth.js`** — Steam OpenID 2.0 sign-in, cookie sessions and per-key user prefs, behind `/auth/*` and `/api/me*`.
 

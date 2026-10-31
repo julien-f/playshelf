@@ -14,8 +14,8 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
                   cacheHits:    { [group]: { hits, misses, forced } } },
   lastHour:     { …same shape as sinceRestart… },
   budgets:         { [group]: { hourUsed, hourMax, hourTopClient, dayUsed, dayMax, dayTopClient } },
-  circuitBreakers: { 'steam-store' | hltb | protondb: { blockedUntil, tripCount, consecutive403s } },
-  semaphores:      { store | tag | proton | reviews | hltb | 'itad-info': { active, queued, maxQueueSeen, rejected } },
+  circuitBreakers: { 'steam-store' | hltb | protondb | igdb: { blockedUntil, tripCount, consecutive403s } },
+  semaphores:      { store | tag | proton | reviews | hltb | igdb | 'itad-info': { active, queued, maxQueueSeen, rejected } },
   cacheEntries:    { [group]: count },
   daily:           [{ day, group, label, status, count }] }
 ```
@@ -25,7 +25,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 ### Outbound — `groups`
 
 - Every outbound call goes through `trackedFetch` (`lib/metrics.js`), a drop-in for `fetch`. Modules reach it only through `createTrackedFetch(group)`, bound once per group at load; it returns `(label, url, opts)` and registers the group, which is how `budgets` lists it from startup.
-- `group` is the service or routing boundary: `steam-store` (`fetchStoreApi`/`storeLimit`), `steam-browse` (`tagLimit`), `steam-reviews` (`GetAppReviews`), `steam-api` (the keyed `api.steampowered.com` calls), `steam-openid`, `protondb`, `hltb`, `itad`, `fanatical`, `gamepass`. `label` is the calling function, so one operation stalling shows apart from its siblings.
+- `group` is the service or routing boundary: `steam-store` (`fetchStoreApi`/`storeLimit`), `steam-browse` (`tagLimit`), `steam-reviews` (`GetAppReviews`), `steam-api` (the keyed `api.steampowered.com` calls), `steam-openid`, `protondb`, `hltb`, `itad`, `fanatical`, `gamepass`, `igdb` (`token`, `search`, `game`). `label` is the calling function, so one operation stalling shows apart from its siblings.
 - `statusCounts` is a `{ [status]: count }` map, deliberately not one "errors" count: several non-2xx answers are expected outcomes (403 = private profile or no stats on achievements, 404 = no ProtonDB reports; see [integrations.md](integrations.md)). Read it against what's expected for that label.
 - `networkErrors`: `fetch()` itself threw (timeout, DNS, abort); never an expected outcome.
 - `avgLatencyMs`/`maxLatencyMs` cover every outcome, so an upstream slowing down before it errors shows here first.
@@ -37,7 +37,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 
 ### `dedupHits`, `cacheHits`, `cacheEntries`
 
-- `dedupHits`: concurrent calls `createDedup(name)` (`lib/dedup.js`) coalesced into one in flight — `steam`, `itad`, `fanatical`, `gamepass`. A burst points at a retry loop or a polling client.
+- `dedupHits`: concurrent calls `createDedup(name)` (`lib/dedup.js`) coalesced into one in flight — `steam`, `itad`, `fanatical`, `gamepass`, `igdb`. A burst points at a retry loop or a polling client.
 - `cacheHits`: `getCached()` outcomes per `lib/cache.js` `GROUPS` label (`library`, `resolve`, `rating`, `meta`, `search`, `news`, `bundles`, `itad-ids`). `forced` (a user's ↻) is kept apart from `misses`. A rate limiter's cache check doesn't record, so each request counts once; nor does a game's tags reusing the parsed tag-name map (`meta`), which reads no row. Tells "traffic grew" apart from "the cache stopped working" when outbound counts jump.
 - `cacheEntries`: row count per group, read from `db.sqlite` (survives restarts, lists every group). With `cacheHits`: few entries plus many misses means a TTL too short; many entries plus many misses, a key space the cache can't help.
 
@@ -49,7 +49,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 
 ### Live snapshots
 
-- `circuitBreakers` (`lib/circuitBreaker.js`; Steam store, HLTB search, ProtonDB): `blockedUntil` (0 = closed), `tripCount` (lifetime, tells "once long ago" from "every 20 minutes"), `consecutive403s` (one more trips it).
+- `circuitBreakers` (`lib/circuitBreaker.js`; Steam store, HLTB search, ProtonDB, IGDB): `blockedUntil` (0 = closed), `tripCount` (lifetime, tells "once long ago" from "every 20 minutes"), `consecutive403s` (one more trips it).
 - `semaphores` (`lib/upstream.js` `getSemaphoreStats`, one per `createSemaphore`): `active`/`queued` now, `maxQueueSeen` (lifetime high-water mark), `rejected` (calls turned away by the `SEMAPHORE_MAX_QUEUE` valve; should stay 0). High latency with low `queued` = slow upstream; high `queued` = our own concurrency cap.
 - `budgets`: current usage per outbound `group`, every one listed from startup (0 used) so the ceilings show before anything spends against them; see below.
 
@@ -75,6 +75,7 @@ Logged at the moment they happen, once per event rather than once per affected r
 - **`[budget:<group>] a client spent its hourly/daily share …`** — once per window per client and service, without the client's address.
 - **`[semaphore:<name>] queue saturated …`** — every rejection, unthrottled: it should never fire, so each one matters.
 - **`[HLTB] search failed …`** — throttled to one per `HLTB_SEARCH_WARN_THROTTLE_MS` (30 s); the searches themselves still run and fail normally. `[HLTB] init failed` is throttled by the auth retry backoff.
+- **`[igdb] … failed`** — the same, for an IGDB search or game lookup (`lib/igdb.js`).
 
 All are `console.warn`: degraded but recoverable. An error marked `isCircuitOpen` (thrown by `assertClosed` while a breaker is open) or `isBudgetExhausted` (thrown by `chargeBudget` past a budget) is not logged again by `routeErrorStatus` or `fetchGameDetails`, since the trip or the exhaustion already warned; without that, one open breaker or spent budget logs a line per game in a large load.
 
