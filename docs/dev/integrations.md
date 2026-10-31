@@ -239,7 +239,8 @@ Bundle games carry only an ITAD id (uuid), slug and title. `resolveSteamAppIds` 
 
 `lib/igdb.js`: games on every platform from [IGDB](https://api-docs.igdb.com/), Twitch's documented API — sanctioned tier.
 
-- **Optional**: gated on `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (`isIgdbConfigured()`, see `default.env`).
+- **Optional**: gated on `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (`isIgdbConfigured()`, see `default.env`). Unset, `GET /api/igdb-game/:igdbId` returns 503, `GET /api/health`'s `igdbConfigured` is false and startup warns.
+- **`GET /api/igdb-game/:igdbId`** (`fetchIgdbGame`, `server.js`): the game plus HLTB searched by IGDB's name (cached as `hltb:igdb:<id>`), always 200 like `GET /api/game-details` (`failed`, `limited`), 404 for an unknown id. An IGDB failure fails HLTB too. Its `igdbGame` limiter shares `DETAILS_RATE_LIMIT_MAX` and skips a request both sources answer from cache.
 - **Auth**: an app token from `POST https://id.twitch.tv/oauth2/token` (`client_id`, `client_secret`, `grant_type=client_credentials`, form-encoded in the body so the secret stays out of URLs and logs) → `access_token`, `expires_in`. Held in memory, fetched once for concurrent callers, renewed a day before it expires. A 401 drops it (unless another query already renewed it) and retries once.
 - **Queries**: `POST https://api.igdb.com/v4/games` with `Client-ID` and `Authorization: Bearer <token>`, an APIcalypse body.
   - Search (`searchIgdb`): `search "<term>"` (`\` and `"` escaped), `where version_parent = null & game_type = (0,8,9,10,11); limit 20;` — main games, remakes, remasters, expanded games and ports; editions (`version_parent`), DLC, mods, updates and bundles otherwise crowd out the game itself. Ranked exact title first (accent-, case- and spacing-insensitive), then `total_rating_count`.

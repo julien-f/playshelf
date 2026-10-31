@@ -12,6 +12,8 @@ process.env.DETAILS_RATE_LIMIT_MAX = '2';
 process.env.ACHIEVEMENTS_RATE_LIMIT_MAX = '2';
 process.env.BUNDLES_RATE_LIMIT_MAX = '2';
 process.env.ITAD_API_KEY = 'test-itad-key';
+process.env.TWITCH_CLIENT_ID = 'test-client';
+process.env.TWITCH_CLIENT_SECRET = 'test-secret';
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -44,6 +46,10 @@ function mockUpstreams(t) {
       return json(Object.fromEntries(JSON.parse(opts.body).map((key) => [key, `gid-${key.slice(4)}`])));
     if (url.includes('/games/prices/')) return json([]);
     if (url.includes('/games/bundles/')) return json([]);
+    if (url.includes('oauth2/token')) return json({ access_token: 'tok', expires_in: 5_000_000 });
+    if (url.includes('api.igdb.com')) return json([{ id: 1, name: 'Some Game' }]);
+    if (url.includes('search/site/init')) return json({ token: 't', hpKey: 'k', hpVal: 'v' });
+    if (url.includes('howlongtobeat.com/api/search/site')) return json({ data: [] });
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return calls;
@@ -107,6 +113,22 @@ test('friends limiter: counts cache misses but never counts cache hits', async (
       'cached vanity': friends(['cachedvanity']),
     },
   });
+});
+
+test('igdbGame limiter: counts a miss of either source and a refresh, never a cache hit', async (t) => {
+  _reset();
+  const calls = mockUpstreams(t);
+  setCache('igdb:410', { id: 410, name: 'Cached' });
+  setCache('hltb:igdb:410', []);
+  setCache('igdb:411', { id: 411, name: 'No HLTB yet' });
+
+  const igdbGame = (id) => () => api.get(`/api/igdb-game/${id}`);
+  await assertMissesCountHitsDont(calls, {
+    misses: { 400: igdbGame(400), 'cached game, uncached HLTB': igdbGame(411) },
+    over: igdbGame(402),
+    hits: { 410: igdbGame(410) },
+  });
+  assert.equal((await api.get('/api/igdb-game/410?refresh=1')).status, 429);
 });
 
 test('news limiter: counts cache misses but never counts cache hits', async (t) => {

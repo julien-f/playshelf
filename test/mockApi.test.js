@@ -22,6 +22,16 @@ test('mockApi: game meta for an appid outside the fixtures is null', async () =>
   assert.deepEqual(await ask('/api/game-meta/999999'), { status: 200, body: { meta: null } });
 });
 
+test('mockApi: igdb:9001 is a game outside Steam with a cover; other IGDB ids are unknown', async () => {
+  const { status, body } = await ask('/api/igdb-game/9001');
+  assert.equal(status, 200);
+  assert.equal(body.game.id, 9001);
+  assert.equal(body.game.steamAppid, null);
+  assert.ok(body.game.cover);
+  assert.equal((await ask('/api/igdb-game/9002')).status, 404);
+  assert.equal((await ask('/api/health')).body.igdbConfigured, true);
+});
+
 // As server.js's stream (lib/streamEvent.mjs): media come from /api/game-meta, the banner stays.
 test('mockApi: the details stream leaves out media and keeps the banner, as the real API does', async () => {
   const { respond } = await import('../e2e/mockApi.ts');

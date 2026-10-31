@@ -39,6 +39,7 @@ const {
 } = require('./lib/steam');
 const { getSemaphoreStats } = require('./lib/upstream');
 const { getHLTB } = require('./lib/hltb');
+const { isIgdbConfigured, getIgdbGame, extractIgdbGame } = require('./lib/igdb');
 const {
   getBundles,
   bundlesCacheKey,
@@ -92,6 +93,9 @@ const isItadConfigured = () => !!process.env.ITAD_API_KEY;
 const ITAD_UNAVAILABLE = "Bundles and prices aren't available on this instance: it isn't connected to IsThereAnyDeal.";
 const requireItad = (_req, res, next) =>
   isItadConfigured() ? next() : res.status(503).json({ error: ITAD_UNAVAILABLE });
+const IGDB_UNAVAILABLE = "This instance can't look up games outside Steam.";
+const requireIgdb = (_req, res, next) =>
+  isIgdbConfigured() ? next() : res.status(503).json({ error: IGDB_UNAVAILABLE });
 // Shared by every /api/bundles* route that takes a `country` query param — falls back to US
 // for anything that isn't a plain 2-letter code rather than rejecting the request outright,
 // same "trust but sanitize" treatment as the rest of this app's query params.
@@ -280,6 +284,13 @@ app.param('appid', (req, res, next, raw) => {
   next();
 });
 
+app.param('igdbId', (req, res, next, raw) => {
+  const igdbId = Number(raw);
+  if (!Number.isInteger(igdbId) || igdbId <= 0) return res.status(400).json({ error: 'Invalid IGDB id' });
+  req.igdbId = igdbId;
+  next();
+});
+
 // The account-list routes' (common-games, wishlist, friends) body: replies 400 and returns null
 // when invalid.
 function parseMembers(req, res) {
@@ -351,6 +362,12 @@ const detailsLimit = namedRateLimit('details', {
     if (appid === undefined) return false; // POST /api/game-details/stream has no :appid
     return allDetailsCached(appid);
   },
+});
+
+// A game outside Steam (GET /api/igdb-game/:igdbId): its IGDB record and HLTB, as detailsLimit counts.
+const igdbGameLimit = namedRateLimit('igdbGame', {
+  max: DETAILS_RATE_LIMIT_MAX,
+  skip: (req) => !isForceRefresh(req) && isCached(`igdb:${req.igdbId}`) && isCached(`hltb:igdb:${req.igdbId}`),
 });
 
 // Store metadata alone (GET /api/game-meta/:appid): the panel's DLC card, and an opened list row's media,
@@ -466,6 +483,7 @@ app.get('/api/health', (_req, res) => {
     since: startedAt,
     configured: !!process.env.STEAM_API_KEY,
     itadConfigured: isItadConfigured(),
+    igdbConfigured: isIgdbConfigured(),
     cache: { entries: Object.values(getCacheEntryCounts()).reduce((sum, n) => sum + n, 0) },
   });
 });
@@ -1017,6 +1035,47 @@ app.get('/api/game-details/:appid', detailsLimit, async (req, res) => {
   res.json(await fetchGameDetails(appid, { force: isForceRefresh(req) }));
 });
 
+// fetchGameDetails' counterpart for a game outside Steam; `game` is null when IGDB failed or doesn't know the id.
+async function fetchIgdbGame(id, { force = false } = {}) {
+  const hltbKey = `igdb:${id}`;
+  const gamePromise = getIgdbGame(id, { force });
+  // HLTB is searched by IGDB's name, never the client's; an IGDB failure fails it too.
+  const hltbPromise = gamePromise.then((game) => {
+    if (game?.name) return getHLTB(hltbKey, game.name, { force });
+    if (force || !isCached(`hltb:${hltbKey}`)) setCache(`hltb:${hltbKey}`, [], { ttlMs: MISS_CACHE_TTL_MS });
+    return null;
+  });
+  const [gameRes, hltbRes] = await Promise.allSettled([gamePromise, hltbPromise]);
+  const logErr = (label, err) => {
+    if (err?.isCircuitOpen || err?.isBudgetExhausted) return;
+    console.warn(`[igdb-game] ${label} (igdb ${id}):`, err?.message, err?.cause ?? '');
+  };
+  if (gameRes.status === 'rejected') logErr('igdb', gameRes.reason);
+  if (hltbRes.status === 'rejected' && hltbRes.reason !== gameRes.reason) logErr('hltb', hltbRes.reason);
+  const failed = Object.entries({ igdb: gameRes, hltb: hltbRes })
+    .filter(([, r]) => r.status === 'rejected')
+    .map(([source]) => source);
+  const refused = [gameRes, hltbRes].find((r) => r.status === 'rejected' && r.reason?.isClientBudgetExhausted);
+  const fetchedAts = {
+    igdb: getCachedAt(`igdb:${id}`) ?? null,
+    hltb: getCachedAt(`hltb:${hltbKey}`) ?? null,
+  };
+  return {
+    game: gameRes.status === 'fulfilled' ? gameRes.value : null,
+    hltb: hltbRes.status === 'fulfilled' ? hltbRes.value : null,
+    fetchedAt: oldestOf(Object.values(fetchedAts)),
+    fetchedAts,
+    ...(failed.length && { failed }),
+    ...(refused && { limited: refused.reason.message }),
+  };
+}
+
+app.get('/api/igdb-game/:igdbId', igdbGameLimit, requireIgdb, async (req, res) => {
+  const details = await fetchIgdbGame(req.igdbId, { force: isForceRefresh(req) });
+  if (!details.game && !details.failed) return res.status(404).json({ error: 'No such IGDB game' });
+  res.json(details);
+});
+
 app.get('/api/game-meta/:appid', metaLimit, async (req, res) => {
   const { appid } = req;
   try {
@@ -1397,8 +1456,18 @@ async function sendAppShell(
 // being silently rewritten into the shell.
 app.get(/^\/(?!api\/)(?!.*\.[a-zA-Z0-9]+$).*/, async (req, res) => {
   const appid = /^\/game\/(\d+)\/?$/.exec(req.path)?.[1];
+  const igdbId = /^\/game\/igdb(?::|%3A)(\d+)\/?$/i.exec(req.path)?.[1];
   // Cache only: a link preview mustn't cost an upstream request (integrations.md's trust tiers).
   // Not recorded: a page load isn't a meta-tier lookup the cache metrics should count.
+  if (igdbId) {
+    const raw = getCached(`igdb:${igdbId}`, { record: false });
+    const game = raw && extractIgdbGame(raw);
+    return sendAppShell(req, res, {
+      title: game?.name || undefined,
+      description: game?.summary || undefined,
+      image: game?.screenshots[0]?.full || game?.cover || undefined,
+    });
+  }
   const game = appid && getCached(`meta:${appid}`, { record: false });
   // `||`: Steam's raw details can hold null, which defaults don't replace.
   await sendAppShell(req, res, {
@@ -1425,6 +1494,8 @@ if (require.main === module) {
     process.exit(1);
   }
   if (!isItadConfigured()) console.warn('ITAD_API_KEY is not set: bundles and prices are off (see default.env).');
+  if (!isIgdbConfigured())
+    console.warn('TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET are not set: games outside Steam are off (see default.env).');
   app.listen(PORT, HOST, () => {
     console.log(`\nPlayshelf → http://${HOST}:${PORT}\n`);
   });

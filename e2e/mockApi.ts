@@ -184,6 +184,37 @@ function details(appid: number, states: ReadonlySet<string>) {
   };
 }
 
+// A game outside Steam (igdb:9001), as GET /api/igdb-game answers it.
+const IGDB_GAME = {
+  id: 9001,
+  name: 'Console Quest',
+  url: 'https://www.igdb.com/games/console-quest',
+  summary: 'Console Quest, a fixture game on consoles only.',
+  cover: mediaUrl('Console Quest Cover', false),
+  platforms: ['PS5', 'Switch'],
+  releaseDate: '2024-09-06',
+  developers: ['Console Studio'],
+  publishers: ['Console Publisher'],
+  genres: ['Platform'],
+  rating: { score: 88, count: 120 },
+  screenshots: [1, 2].map((id) => ({
+    id: `cq${id}`,
+    thumbnail: mediaUrl(`Console Quest Screenshot ${id}`, false, 'thumb'),
+    full: mediaUrl(`Console Quest Screenshot ${id}`, false, 'full'),
+  })),
+  videos: [],
+  steamAppid: null,
+};
+const igdbGame = () => {
+  const now = Date.now();
+  return {
+    game: IGDB_GAME,
+    hltb: { id: 77, main: 9, extra: 13.5, completionist: 20, all: 12 },
+    fetchedAt: now,
+    fetchedAts: { igdb: now, hltb: now },
+  };
+};
+
 const ACHIEVEMENTS = [
   { apiname: 'ACH_1', name: 'First steps', description: 'Finish the first chapter.', achieved: true, globalPct: 71.5 },
   { apiname: 'ACH_2', name: 'Completionist', description: 'Finish everything.', achieved: false, globalPct: 4.2 },
@@ -323,7 +354,13 @@ export function respond(
     };
 
   if (path === '/api/health')
-    return json({ ok: true, configured: true, itadConfigured: !states.has('no-itad'), cache: { entries: 0 } });
+    return json({
+      ok: true,
+      configured: true,
+      itadConfigured: !states.has('no-itad'),
+      igdbConfigured: true,
+      cache: { entries: 0 },
+    });
   if (path === '/api/me')
     return json(
       states.has('signed-in')
@@ -389,6 +426,8 @@ export function respond(
     const answer = json({ meta: DLC_APPIDS.includes(appid) ? dlcMeta(appid) : detailsFor(appid).meta });
     return states.has('slow-meta') ? { ...answer, delayMs: SLOW_MEDIA_MS } : answer;
   }
+  const igdbId = path.match(/^\/api\/igdb-game\/(\d+)$/)?.[1];
+  if (igdbId) return igdbId === String(IGDB_GAME.id) ? json(igdbGame()) : json({ error: 'No such IGDB game' }, 404);
   if (path.startsWith('/api/achievements/'))
     return json(achievements(url.searchParams.get('steamids'), states.has('upstream-down')));
   if (path.startsWith('/api/game-news/')) return json({ items: [], news: [] });

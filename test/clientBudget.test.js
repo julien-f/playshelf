@@ -9,6 +9,8 @@ process.env.RATE_LIMIT_ENABLED = 'true';
 process.env.TRUST_PROXY = '1';
 process.env.OUTBOUND_HOURLY_MAX = '8';
 process.env.OUTBOUND_CLIENT_SHARE_PERCENT = '25';
+process.env.TWITCH_CLIENT_ID = 'test-client';
+process.env.TWITCH_CLIENT_SECRET = 'test-secret';
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -363,4 +365,19 @@ test('a client coalescing onto another client’s refused game details gets its 
   const other = await b;
   assert.equal(other.body.meta?.name, 'Portal');
   assert.equal(other.body.failed, undefined);
+});
+
+test("an IGDB game refused by this client's share reads as failed and limited, not a 429", async (t) => {
+  const { warn } = setup(t);
+  await runAsClient('203.0.113.8', async () => {
+    for (let i = 0; i < 2; i++) await createTrackedFetch('igdb')('spend', 'https://example.com/');
+  });
+  const res = await api.get('/api/igdb-game/9001').set('X-Forwarded-For', '203.0.113.8');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.failed, ['igdb', 'hltb']);
+  assert.match(res.body.limited, /your network/);
+  assert.deepEqual(
+    warn.mock.calls.map((c) => c.arguments[0]).filter((l) => /\[igdb/.test(l)),
+    [],
+  );
 });

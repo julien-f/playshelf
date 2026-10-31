@@ -32,7 +32,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 
 ### Inbound — `rateLimiters`
 
-- Trips (requests rejected) per `express-rate-limit` instance in `server.js`, recorded by the shared `namedRateLimit` wrapper: `search`, `friends`, `details`, `meta`, `news`, `gameSearch`, `creatorGames`, `achievements`, `bundlesList`, `bundlesById`, `bundlesResolve`, `prices`, `gameBundles`, `gamePass`, `auth`. Plus `stream`: details streams refused by `STREAM_MAX_PER_IP`. `meta` also limits an opened list row's media loads.
+- Trips (requests rejected) per `express-rate-limit` instance in `server.js`, recorded by the shared `namedRateLimit` wrapper: `search`, `friends`, `details`, `meta`, `news`, `gameSearch`, `creatorGames`, `igdbGame`, `achievements`, `bundlesList`, `bundlesById`, `bundlesResolve`, `prices`, `gameBundles`, `gamePass`, `auth`. Plus `stream`: details streams refused by `STREAM_MAX_PER_IP`. `meta` also limits an opened list row's media loads.
 - Only trips count, not requests a limiter saw or skipped as cached.
 
 ### `dedupHits`, `cacheHits`, `cacheEntries`
@@ -75,7 +75,7 @@ Logged at the moment they happen, once per event rather than once per affected r
 - **`[budget:<group>] a client spent its hourly/daily share …`** — once per window per client and service, without the client's address.
 - **`[semaphore:<name>] queue saturated …`** — every rejection, unthrottled: it should never fire, so each one matters.
 - **`[HLTB] search failed …`** — throttled to one per `HLTB_SEARCH_WARN_THROTTLE_MS` (30 s); the searches themselves still run and fail normally. `[HLTB] init failed` is throttled by the auth retry backoff.
-- **`[igdb] … failed`** — the same, for an IGDB search or game lookup (`lib/igdb.js`).
+- **`[igdb] … failed`** — the same, for an IGDB search or game lookup (`lib/igdb.js`); not for an open breaker or a spent budget, which already warned.
 
 All are `console.warn`: degraded but recoverable. An error marked `isCircuitOpen` (thrown by `assertClosed` while a breaker is open) or `isBudgetExhausted` (thrown by `chargeBudget` past a budget) is not logged again by `routeErrorStatus` or `fetchGameDetails`, since the trip or the exhaustion already warned; without that, one open breaker or spent budget logs a line per game in a large load.
 

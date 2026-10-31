@@ -23,6 +23,7 @@ const { _reset, setCache, getCachedAt } = require('../lib/cache');
 const { db } = require('../lib/db');
 const { PREFS_MAX_BYTES, SYNCED_PREF_KEYS, getUserPrefs, setUserPref } = require('../lib/auth');
 const { _resetAuth } = require('../lib/hltb');
+const { _resetIgdb } = require('../lib/igdb');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
 const { SESSION_TTL_MS, MISS_CACHE_TTL_MS } = require('../lib/config');
 const { getMetrics } = require('../lib/metrics');
@@ -265,7 +266,7 @@ test('GET /api/metrics: 200 with a since timestamp and per-group/label request c
   assert.equal(res.body.circuitBreakers['steam-store'].blockedUntil, 0);
   assert.equal(typeof res.body.circuitBreakers['steam-store'].tripCount, 'number');
   assert.equal(res.body.circuitBreakers['steam-store'].consecutive403s, 0);
-  assert.deepEqual(Object.keys(res.body.circuitBreakers).sort(), ['hltb', 'protondb', 'steam-store']);
+  assert.deepEqual(Object.keys(res.body.circuitBreakers).sort(), ['hltb', 'igdb', 'protondb', 'steam-store']);
 });
 
 test('GET /api/metrics: includes semaphore, cache hit/entry, rate-limiter, and dedup stats', async (t) => {
@@ -276,7 +277,7 @@ test('GET /api/metrics: includes semaphore, cache hit/entry, rate-limiter, and d
 
   const res = await api.get('/api/metrics');
   assert.equal(res.status, 200);
-  for (const name of ['store', 'tag', 'proton', 'hltb', 'itad-info']) {
+  for (const name of ['store', 'tag', 'proton', 'hltb', 'igdb', 'itad-info']) {
     assert.equal(typeof res.body.semaphores[name].active, 'number');
     assert.equal(typeof res.body.semaphores[name].queued, 'number');
     assert.equal(typeof res.body.semaphores[name].maxQueueSeen, 'number');
@@ -1147,6 +1148,141 @@ for (const comingSoon of [true, false]) {
     assert.notEqual(getCachedAt('browse:777'), undefined, 'tags are not a miss');
   });
 }
+
+// ── GET /api/igdb-game/:igdbId ────────────────────────────────────────────────
+
+// Sets the Twitch credentials for one test; `igdb(body)` answers each IGDB query, HLTB knows one game.
+function mockIgdbRoute(t, igdb = () => ({ ok: true, status: 200, json: async () => [] })) {
+  _reset();
+  _resetAuth();
+  _resetIgdb();
+  _resetCircuitBreakers();
+  process.env.TWITCH_CLIENT_ID = 'test-client';
+  process.env.TWITCH_CLIENT_SECRET = 'test-secret';
+  t.after(() => {
+    delete process.env.TWITCH_CLIENT_ID;
+    delete process.env.TWITCH_CLIENT_SECRET;
+  });
+  const urls = [];
+  t.mock.method(globalThis, 'fetch', async (url, opts) => {
+    url = String(url);
+    urls.push(url);
+    if (url.includes('oauth2/token'))
+      return { ok: true, status: 200, json: async () => ({ access_token: 'tok', expires_in: 5_000_000 }) };
+    if (url.includes('api.igdb.com')) return igdb(opts.body);
+    if (url.includes('search/site/init'))
+      return { ok: true, status: 200, json: async () => ({ token: 't', hpKey: 'k', hpVal: 'v' }) };
+    if (url.includes('api/search/site')) {
+      const data = [{ game_id: 77, game_name: 'Astro Bot', comp_main: 36000, comp_plus: 54000, comp_100: 72000 }];
+      return { ok: true, status: 200, json: async () => ({ data }) };
+    }
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  t.mock.method(console, 'warn', () => {});
+  return urls;
+}
+
+const ASTRO_BOT = {
+  id: 9001,
+  name: 'Astro Bot',
+  summary: 'A platformer.',
+  platforms: [{ abbreviation: 'PS5' }],
+  cover: { image_id: 'cov' },
+  screenshots: [{ image_id: 'sc1' }],
+};
+const igdbReply = (games) => () => ({ ok: true, status: 200, json: async () => games });
+
+test('GET /api/igdb-game/:igdbId: 400 for an id that is not a positive integer', async () => {
+  for (const id of ['abc', '0', '-1', '1.5']) {
+    const res = await api.get(`/api/igdb-game/${id}`);
+    assert.equal(res.status, 400, id);
+    assert.equal(res.body.error, 'Invalid IGDB id');
+  }
+});
+
+test('GET /api/igdb-game/:igdbId: 503 without Twitch credentials, and health says so', async () => {
+  const res = await api.get('/api/igdb-game/9001');
+  assert.equal(res.status, 503);
+  // Shown as is to visitors, who can't act on a setup hint.
+  assert.doesNotMatch(res.body.error, /TWITCH|\.env/);
+  assert.equal((await api.get('/api/health')).body.igdbConfigured, false);
+});
+
+test('GET /api/igdb-game/:igdbId: the game, its HLTB times by IGDB name, and each source age', async (t) => {
+  mockIgdbRoute(t, igdbReply([ASTRO_BOT]));
+  assert.equal((await api.get('/api/health')).body.igdbConfigured, true);
+  const res = await api.get('/api/igdb-game/9001');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.game.name, 'Astro Bot');
+  assert.deepEqual(res.body.game.platforms, ['PS5']);
+  assert.equal(res.body.hltb.main, 10);
+  assert.equal(res.body.failed, undefined);
+  assert.equal(typeof res.body.fetchedAts.igdb, 'number');
+  assert.equal(typeof res.body.fetchedAts.hltb, 'number');
+  assert.equal(res.body.fetchedAt, Math.min(res.body.fetchedAts.igdb, res.body.fetchedAts.hltb));
+  assert.ok(getCachedAt('hltb:igdb:9001'), 'HLTB cached under the IGDB key');
+});
+
+test('GET /api/igdb-game/:igdbId: 404 for an id IGDB does not know', async (t) => {
+  mockIgdbRoute(t, igdbReply([]));
+  const res = await api.get('/api/igdb-game/123');
+  assert.equal(res.status, 404);
+});
+
+test('GET /api/igdb-game/:igdbId: IGDB failing fails HLTB too, logged once, still 200', async (t) => {
+  const urls = mockIgdbRoute(t, () => ({ ok: false, status: 500, headers: new Headers() }));
+  const res = await api.get('/api/igdb-game/9001');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.game, null);
+  assert.equal(res.body.hltb, null);
+  assert.deepEqual(res.body.failed, ['igdb', 'hltb']);
+  assert.ok(!urls.some((u) => u.includes('howlongtobeat')), 'no HLTB search without a name');
+  const lines = console.warn.mock.calls.map((c) => c.arguments[0]).filter((l) => l.startsWith('[igdb-game]'));
+  assert.deepEqual(lines, ['[igdb-game] igdb (igdb 9001):']);
+});
+
+test('GET /api/igdb-game/:igdbId: an HLTB failure leaves the game', async (t) => {
+  mockIgdbRoute(t, igdbReply([ASTRO_BOT]));
+  const fetch = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', async (url, opts) =>
+    String(url).includes('howlongtobeat') ? { ok: false, status: 500 } : fetch(url, opts),
+  );
+  const res = await api.get('/api/igdb-game/9001');
+  assert.equal(res.body.game.name, 'Astro Bot');
+  assert.deepEqual(res.body.failed, ['hltb']);
+});
+
+test('GET /api/igdb-game/:igdbId: refresh=1 fetches both sources again', async (t) => {
+  const urls = mockIgdbRoute(t, igdbReply([ASTRO_BOT]));
+  await api.get('/api/igdb-game/9001');
+  const before = urls.length;
+  await api.get('/api/igdb-game/9001');
+  assert.equal(urls.length, before, 'served from cache');
+  await api.get('/api/igdb-game/9001?refresh=1');
+  assert.ok(urls.slice(before).some((u) => u.includes('api.igdb.com')));
+  assert.ok(urls.slice(before).some((u) => u.includes('api/search/site')));
+});
+
+test('GET /game/igdb:<id>: the preview names, describes and shows a cached game, without fetching', async (t) => {
+  _reset();
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
+  setCache('igdb:9001', ASTRO_BOT);
+  for (const path of ['/game/igdb:9001', '/game/igdb%3A9001']) {
+    const res = await api.get(path);
+    assert.match(res.text, /<meta property="og:title" content="Astro Bot" \/>/);
+    assert.match(res.text, /<meta property="og:description" content="A platformer\." \/>/);
+    assert.match(
+      res.text,
+      /<meta property="og:image" content="https:\/\/images\.igdb\.com\/[^"]+\/t_1080p\/sc1\.jpg" \/>/,
+    );
+  }
+  setCache('igdb:9002', { ...ASTRO_BOT, id: 9002, screenshots: [] });
+  const coverOnly = await api.get('/game/igdb:9002');
+  assert.match(coverOnly.text, /<meta property="og:image" content="[^"]+\/t_cover_big\/cov\.jpg" \/>/);
+  const uncached = await api.get('/game/igdb:9003');
+  assert.match(uncached.text, /<meta property="og:title" content="Playshelf" \/>/);
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
 
 // ── GET /api/game-meta/:appid ─────────────────────────────────────────────────
 
