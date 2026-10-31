@@ -1,3 +1,4 @@
+import { parseGameKey } from './gameKey.ts';
 import { getPref, setPref } from './prefs.ts';
 
 // Recently looked-up games — carved out of gameSearch.ts (see docs/dev/frontend.md) so this
@@ -26,8 +27,13 @@ export interface RecentGame {
   tinyImage: string | null;
 }
 
+// An appid, or a canonical `igdb:N`.
+const isStoredKey = (appid: unknown): boolean =>
+  typeof appid === 'number' ? Number.isSafeInteger(appid) && appid > 0 : parseGameKey(String(appid)) === appid;
+
+// Drops broken entries: a tab opened before games outside Steam stores `appid: null` when it picks an `igdb:N` one.
 export function loadRecentGames(): RecentGame[] {
-  return getPref<RecentGame[]>(RECENT_GAMES_PREF_KEY, []);
+  return getPref<RecentGame[]>(RECENT_GAMES_PREF_KEY, []).filter((g) => isStoredKey(g?.appid));
 }
 
 // Moves this game to the front, refreshing its cached name/thumbnail, rather than appending a

@@ -42,6 +42,28 @@ test('addRecentGame/loadRecentGames: round-trips an entry, defaulting a missing 
   assert.deepEqual(loadRecentGames(), [{ appid: 620, name: 'Portal 2', tinyImage: null }]);
 });
 
+// A tab opened before games outside Steam stores `appid: null` (Number('igdb:N') is NaN) when it picks one.
+test('loadRecentGames: keeps appids and igdb keys, drops entries a stale tab broke', () => {
+  const recentGames = [
+    { appid: 620, name: 'Portal 2', tinyImage: null },
+    { appid: 'igdb:9001', name: 'Console Quest', tinyImage: null },
+    { appid: null, name: 'Console Quest', tinyImage: null },
+    { appid: 0, name: '', tinyImage: null },
+    { appid: 1.5, name: '', tinyImage: null },
+    { appid: '620', name: '', tinyImage: null },
+    { appid: 'igdb:0', name: '', tinyImage: null },
+    { appid: 'IGDB:9001', name: '', tinyImage: null },
+    null,
+  ];
+  global.localStorage.setItem('steam.isonoe.net:prefs', JSON.stringify({ recentGames }));
+  assert.deepEqual(
+    mod()
+      .loadRecentGames()
+      .map((g) => g.appid),
+    [620, 'igdb:9001'],
+  );
+});
+
 test('addRecentGame: re-adding an existing appid moves it to the front instead of duplicating it', () => {
   const { addRecentGame, loadRecentGames } = mod();
   addRecentGame(620, 'Portal 2', 'x');
@@ -144,7 +166,7 @@ test('addRecentGame: lookups in a row push recentGames once after a pause, and a
   prefs.setSignedInSteamid('76561198000000001');
   const { addRecentGame } = mod();
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 1; i <= 5; i++) {
     addRecentGame(i, `Game ${i}`, null);
     addRecentGame(i, `Game ${i}`, null);
   }
@@ -154,7 +176,7 @@ test('addRecentGame: lookups in a row push recentGames once after a pause, and a
     [['/api/me/prefs/recentGames', 5]],
   );
 
-  addRecentGame(4, 'Game 4', null); // already first, nothing changed
+  addRecentGame(5, 'Game 5', null); // already first, nothing changed
   t.mock.timers.tick(3000);
   assert.equal(puts.length, 1);
 });

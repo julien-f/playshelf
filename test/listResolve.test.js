@@ -80,6 +80,14 @@ test('resolveGameList: manual list resolves to its stored appids', async () => {
   assert.deepEqual(result, set(1, 2, 3));
 });
 
+// A tab opened before games outside Steam could add one to a list; lists hold Steam games only.
+test('resolveGameList: a manual list drops a stored igdb key, directly and nested', async () => {
+  const stale = manualList('m1', [1, 'igdb:9001', 2]);
+  const fetchers = makeFetchers({ lists: [['m1', stale]] });
+  assert.deepEqual(await resolveGameList(stale, fetchers), set(1, 2));
+  assert.deepEqual(await resolveRef({ kind: 'user', listId: 'm1' }, fetchers), set(1, 2));
+});
+
 test('resolveGameList: dynamic union/intersect/subtract combine every source, including a nested user list', async () => {
   const a = manualList('a', [1, 2]);
   const b = manualList('b', [2, 3]);

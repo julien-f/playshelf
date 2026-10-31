@@ -145,7 +145,9 @@ export async function resolveListWithSources(
   visited: Set<string> = new Set(),
   depth = 0,
 ): Promise<ResolvedList> {
-  if (list.kind === 'manual') return { result: new Set(list.appids ?? []), sources: [] };
+  // A tab older than games outside Steam could add an `igdb:N` key; lists hold Steam games only.
+  if (list.kind === 'manual')
+    return { result: new Set((list.appids ?? []).filter((a) => typeof a === 'number')), sources: [] };
   // A ranked list's contents are its source's; the order is the ranking's, applied by the route.
   if (list.kind === 'ranked') {
     if (!list.source) return { result: new Set(), sources: [] };
