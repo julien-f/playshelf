@@ -1,7 +1,7 @@
 // The side panel's body for a game outside Steam (panel.tsx's PanelBody picks it for an `igdb:` key).
 // Only what IGDB and HLTB answer: no store, price, status or list actions, which all need a Steam appid.
 import { Match, Show, Switch, type JSX } from 'solid-js';
-import { igdbIdOf } from './gameKey.ts';
+import { igdbIdOf, NOT_ON_STEAM } from './gameKey.ts';
 import { safeHref } from './utils.ts';
 import type { IgdbRow } from './types.ts';
 
@@ -13,7 +13,7 @@ export function IgdbPanelRest(props: {
   onRetry: () => void;
 }): JSX.Element {
   const ok = () => (props.game.igdb?.status === 'ok' ? props.game.igdb.reply.game : null);
-  const platforms = () => ['Not on Steam', ...(ok()?.platforms ?? [])].join(' · ');
+  const platforms = () => [NOT_ON_STEAM, ...(ok()?.platforms ?? [])].join(' · ');
   return (
     <>
       <div class="panel-header-sticky">

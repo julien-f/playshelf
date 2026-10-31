@@ -1818,6 +1818,24 @@ export default function ListRoute() {
     ),
   );
 
+  // A game outside Steam opened beside a list joins Recently Looked Up once IGDB names it, once per open
+  // (not on a ↻); on /game, its row's stream records it.
+  let recordedIgdbOpen: PanelGame | null = null;
+  createEffect(
+    on(
+      () => {
+        const game = getPanelGame();
+        return game && isIgdbRow(game) && game.igdb?.status === 'ok' ? game : null;
+      },
+      (game) => {
+        if (!game || kind === 'recent' || game === recordedIgdbOpen || game.igdb?.status !== 'ok') return;
+        recordedIgdbOpen = game;
+        const { name, steamAppid, cover } = game.igdb.reply.game;
+        if (name && steamAppid == null) addRecentGame(game.appid, name, cover);
+      },
+    ),
+  );
+
   // A game outside Steam's `&shot=` waits on its IGDB reply, which the panel loads.
   createEffect(
     on(
@@ -1892,11 +1910,11 @@ export default function ListRoute() {
       openGame(existing);
       return;
     }
-    // A game outside Steam not looked up before opens beside the list, never joining it or the stored recents.
-    if (isIgdbKey(key)) return openGame(igdbRow(key));
+    if (!isIgdbKey(key) && !isValidAppid(key)) return;
     const appid = key;
-    if (!isValidAppid(appid)) return;
-    const placeholder: Game = { appid, name: '', loading: true, details: null };
+    const placeholder: TableGame = isIgdbKey(appid)
+      ? { appid, source: 'igdb', name: '', loading: true, details: null }
+      : { appid, name: '', loading: true, details: null };
     const rows = [placeholder, ...rowsStore];
     setRowsStore(rows);
     rowStore.load(rows);
@@ -1909,6 +1927,16 @@ export default function ListRoute() {
     // effect above, which is the whole point of driving it off the row list rather than the
     // call sites that build one.
     streamGameDetails([{ appid }], loadGuard.current());
+  }
+
+  // Takes back the row openOrAddRecentGame added for a lookup that isn't recorded.
+  function dropLookup(key: GameKey): void {
+    const rows = rowsStore.filter((r) => r.appid !== key);
+    setRowsStore(rows);
+    rowStore.load(rows);
+    total--;
+    loaded--;
+    restampLookedUp();
   }
 
   // Registered with the shell (see onMount below) so a game looked up from the nav-bar search
@@ -1952,8 +1980,10 @@ export default function ListRoute() {
       if (!row) return;
       const capsule = (row as { capsule?: string | null }).capsule ?? null;
       if (pendingRecentFocus === event.appid) {
-        addRecentGame(row.appid, row.name, capsule);
         pendingRecentFocus = null;
+        // IGDB links it to Steam (the panel opens that game instead), or couldn't name it: nothing to list.
+        if (isIgdbKey(row.appid) && (event.steamAppid != null || !row.name)) return dropLookup(row.appid);
+        addRecentGame(row.appid, row.name, capsule);
         if (kind === 'recent') restampLookedUp();
       } else if (kind === 'recent' && !hadName && row.name) {
         // This row was already in the stored recents list, but recorded without a name (a bare

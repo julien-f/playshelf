@@ -8273,15 +8273,18 @@ async function followLink(page: Page, href: string): Promise<void> {
     a.remove();
   }, href);
 }
-const prefsBlob = (page: Page) => page.evaluate(() => localStorage.getItem('steam.isonoe.net:prefs'));
+// Recently Looked Up's stored keys, newest first.
+const recentKeys = (page: Page) =>
+  page.evaluate(() =>
+    (JSON.parse(localStorage.getItem('steam.isonoe.net:prefs')!).recentGames?.value ?? []).map(
+      (g: { appid: unknown }) => g.appid,
+    ),
+  );
 
-test('F1 edge: a link to a game outside Steam opens it in the panel, and leaves prefs and Recently Looked Up alone', async ({
+test('F1 edge: a link to a game outside Steam opens it in the panel, and joins Recently Looked Up first', async ({
   page,
 }) => {
   await asPlayer(page, ALICE, { recentGames: [620] });
-  await page.goto('/game');
-  await expect(row(page, 'Portal 2')).toBeVisible();
-  const before = await prefsBlob(page);
   await page.goto('/game/igdb:9001');
   const panel = page.locator('#game-panel');
   await expect(page.locator('#panel-title')).toHaveText('Console Quest');
@@ -8290,7 +8293,10 @@ test('F1 edge: a link to a game outside Steam opens it in the panel, and leaves 
   await expect(panel.getByRole('link', { name: /^IGDB 88/ })).toBeVisible();
   for (const name of ['Steam Store', 'IsThereAnyDeal', 'Present on second screen', 'Status'])
     await expect(panel.getByLabel(name, { exact: true })).toHaveCount(0);
-  await expect(rows(page)).toHaveCount(1); // not joined to the list
+  await expect(rows(page)).toHaveCount(2);
+  await expect(rows(page).first()).toContainText('Console Quest');
+  await expect(rows(page).first()).toContainText('Latest');
+  await expect.poll(() => recentKeys(page)).toEqual(['igdb:9001', 620]);
   await page.keyboard.press('p'); // Present: a game outside Steam isn't presented
   await expect(page.locator('.present-chip')).toHaveCount(0);
   await panel.locator('.panel-hero-open').click();
@@ -8299,7 +8305,6 @@ test('F1 edge: a link to a game outside Steam opens it in the panel, and leaves 
   await expect(page.locator('#screenshot-lightbox')).not.toHaveAttribute('open');
   await page.locator('#panel-close').click();
   await expect(page).toHaveURL(/\/game$/);
-  expect(await prefsBlob(page)).toBe(before);
 });
 
 test('F1 edge: a game outside Steam opens within a loaded Recently Looked Up, and its &shot= link opens that screenshot', async ({
@@ -8311,7 +8316,7 @@ test('F1 edge: a game outside Steam opens within a loaded Recently Looked Up, an
   await followLink(page, '/game/igdb:9001');
   await expect(page.locator('#panel-title')).toHaveText('Console Quest');
   await expect(page).toHaveURL(/\/game\/igdb:9001$/);
-  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toHaveCount(2);
   await page.goto('/game/igdb:9001?shot=scq2');
   await expect(page.locator('#screenshot-lightbox')).toHaveAttribute('open');
   await expect(page.locator('#screenshot-lightbox .lb-img')).toHaveAttribute('src', /Console%20Quest%20Screenshot%202/);
@@ -8434,6 +8439,7 @@ test('F1 edge: a list reloaded with a game outside Steam open reopens it', async
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=igdb%3A9001');
   await expect(page.locator('#panel-title')).toHaveText('Console Quest');
+  await expect.poll(() => recentKeys(page)).toEqual(['igdb:9001']); // opened beside a list, it's looked up too
   await page.reload();
   await expect(page.locator('#panel-title')).toHaveText('Console Quest');
   await expect(page).toHaveURL(/[?&]game=igdb%3A9001/);
@@ -8447,6 +8453,8 @@ test('F1 edge: a game IGDB links to Steam opens as the Steam game, in place of t
   await followLink(page, '/game/igdb:9002');
   await expect(page).toHaveURL(/\/game\/620$/);
   await expect(page.locator('#panel-title')).toHaveText('Portal 2');
+  await expect(rows(page)).toHaveCount(1); // the Steam game's row, not the link's
+  await expect.poll(() => recentKeys(page)).toEqual([620]);
   await page.goBack();
   await expect(page).toHaveURL(/\/game$/);
 });
@@ -8463,6 +8471,8 @@ test("F1 edge: a game outside Steam says when IGDB didn't answer, or when this i
   await page.reload();
   await expect(panel.getByText("This instance can't look up games outside Steam.")).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Retry' })).toHaveCount(0);
+  await expect(page.locator('.game-name-cell')).toHaveCount(0); // unnamed, it isn't looked up
+  expect((await page.evaluate(() => localStorage.getItem('steam.isonoe.net:prefs'))) ?? '').not.toContain('igdb:');
 });
 
 // Recently Looked Up holding games outside Steam, as a lookup records them.
@@ -8611,7 +8621,6 @@ test('F5: look up a game outside Steam from the nav search, in place on a list a
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(6);
-  const before = await prefsBlob(page);
   await navSearch(page, 'console quest');
   const option = page.getByRole('option', { name: /^Console Quest PS5 · Switch · 2024/ });
   await expect(option).toBeVisible();
@@ -8624,7 +8633,8 @@ test('F5: look up a game outside Steam from the nav search, in place on a list a
   await expect(panel.getByRole('link', { name: /^IGDB 88/ })).toBeVisible();
   await expect(panel).toContainText('12h');
   await expect(panel.locator('.panel-hero-open')).toBeVisible();
-  expect(await prefsBlob(page)).toBe(before);
+  await expect.poll(() => recentKeys(page)).toEqual(['igdb:9001']);
+  await expect(rows(page)).toHaveCount(6); // not one of Owned's
 
   await page.goto('/about');
   await navSearch(page, 'console quest');
@@ -8632,6 +8642,27 @@ test('F5: look up a game outside Steam from the nav search, in place on a list a
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/game\/igdb:9001$/);
   await expect(page.locator('#panel-title')).toHaveText('Console Quest');
+});
+
+test("F5 edge: a game outside Steam looked up shows in the search box's recents, and syncs when signed in", async ({
+  page,
+}) => {
+  await mockApi(page, { states: ['signed-in'] });
+  const pushed = page.waitForRequest(
+    (req) =>
+      req.method() === 'PUT' &&
+      req.url().endsWith('/api/me/prefs/recentGames') &&
+      /"igdb:9001"/.test(req.postData() ?? ''),
+  );
+  await page.goto('/game/igdb:9001');
+  await expect(page.locator('#panel-title')).toHaveText('Console Quest');
+  await pushed; // after the push's 3 s pause
+  await page.locator('#panel-close').click();
+  await page.getByPlaceholder('Look up any game…').click();
+  const recent = page.getByRole('option', { name: /^Console Quest/ });
+  await expect(recent).toContainText('Not on Steam');
+  await recent.click();
+  await expect(page).toHaveURL(/\/game\/igdb:9001$/);
 });
 
 test('F5 edge: a title also on Steam appears once, as the Steam game; sharing an exact name, the Steam one comes first', async ({

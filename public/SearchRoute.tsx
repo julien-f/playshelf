@@ -202,6 +202,9 @@ export default function SearchRoute() {
   function openIgdb(key: IgdbKey, standalone: boolean): void {
     ++lookupToken;
     setStatusText('');
+    // Named by its search result: IGDB links none of these to Steam (searchMerge lists such a game as the Steam one).
+    const result = results().find((r) => r.appid === key);
+    if (result?.name) addRecentGame(key, result.name, result.tinyImage);
     const game = igdbRow(key, standalone);
     panelOpen(game);
     setPanelParam(key);

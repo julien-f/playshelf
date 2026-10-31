@@ -1,8 +1,11 @@
 import type { IgdbRow, PanelGame } from './types.ts';
 
-// Which game: a Steam appid, or `igdb:<id>` for a game outside Steam (never stored in prefs).
+// Which game: a Steam appid, or `igdb:<id>` for a game outside Steam (Recently Looked Up stores it too).
 export type IgdbKey = `igdb:${number}`;
 export type GameKey = number | IgdbKey;
+
+// How the UI names a game outside Steam: under its name, and in a Steam-only column's group.
+export const NOT_ON_STEAM = 'Not on Steam';
 
 export const isIgdbKey = (key: GameKey | null | undefined): key is IgdbKey => typeof key === 'string';
 

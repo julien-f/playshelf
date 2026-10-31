@@ -195,7 +195,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   3. **Intersect** my Wishlist with the family's Owned
   4. save as dynamic
 - **Done when**: default name reads the formula ("Me — Wishlist ∩ Family — Owned"); renaming an account updates it.
-- **Edges**: **Subtract** order is visible and reorderable; freezing turns it into a manual list; a source that is itself a dynamic or ranked list; deleting a list another one uses.
+- **Edges**: **Subtract** order is visible and reorderable; freezing turns it into a manual list; a source that is itself a dynamic or ranked list; deleting a list another one uses; Recently Looked Up as a source leaves its games outside Steam out, with "(N not on Steam, left out)".
 
 ### L3 Customize and keep a table view
 
@@ -205,6 +205,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   3. reload
   4. **Default view**
 - **Done when**: the view persists per list kind; reset restores defaults.
+- **Edges**: grouping Recently Looked Up by a Steam-only column puts its games outside Steam in a "Not on Steam" group, last.
 
 ### L4 Turn lookups into a shortlist
 
@@ -215,6 +216,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   4. select the keepers
   5. add to a manual list
 - **Done when**: the manual list keeps them after Recently Looked Up moves on.
+- **Edges**: a selection with games outside Steam adds the Steam ones and says how many it left out; only those selected, Add says lists hold Steam games only.
 
 ### L5 Switch between views of my library
 
@@ -372,8 +374,8 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   2. type
   3. pick a result showing its platforms
   4. read the panel (platforms, IGDB rating, HLTB, media)
-- **Done when**: the dropdown and the panel show its platforms; HLTB fills in; on a list route the panel opens in place, elsewhere at `/game/igdb:<id>`; the game joins Recently Looked Up ◇.
-- **Edges**: a title also on Steam appears once, as the Steam game; a PC game IGDB doesn't link to Steam shows twice (accepted: no dedup by name, a wrong merge would hide a game); IGDB down (Steam results, a line saying so, Retry); an instance without IGDB (Steam results only, no failure line); ↑/↓ and R across /search's mixed rows, the lightbox open too.
+- **Done when**: the dropdown and the panel show its platforms; HLTB fills in; on a list route the panel opens in place, elsewhere at `/game/igdb:<id>`; the game joins Recently Looked Up, first, and the search box's recents ("Not on Steam" under its name).
+- **Edges**: a title also on Steam appears once, as the Steam game; a PC game IGDB doesn't link to Steam shows twice (accepted: no dedup by name, a wrong merge would hide a game), and labelled "Not on Steam" in Recently Looked Up (accepted, same reason); a game IGDB links to Steam opens and is recorded as the Steam game; IGDB down (Steam results, a line saying so, Retry); an instance without IGDB (Steam results only, no failure line; its lookups aren't recorded); ↑/↓ and R across /search's and Recently Looked Up's mixed rows, the lightbox open too; in Recently Looked Up, its Steam-only columns read "n/a" (neither "—" nor ⚠), sort last both ways, and a filter hiding it says so; phone width; a tab opened before this build (its broken recents dropped).
 
 ## Media
 

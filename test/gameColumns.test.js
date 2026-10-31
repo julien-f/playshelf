@@ -26,13 +26,13 @@ const {
   tagMatchScore,
   CORE_COLUMNS,
   IGDB_RATING_COLUMN,
-  NOT_ON_STEAM,
   markSteamOnly,
   steamPlatformNames,
   renderNameCell,
 } = require('../public/gameColumns.ts');
 
 const { fmtLocalDate, fmtReleaseDate } = require('../public/utils.ts');
+const { NOT_ON_STEAM } = require('../public/gameKey.ts');
 
 const day = (y, m, d) => new Date(y, m - 1, d).getTime();
 

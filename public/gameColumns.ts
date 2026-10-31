@@ -52,7 +52,7 @@ import {
   type DetailSource,
 } from './utils.ts';
 import { convert } from './currency.ts';
-import { isIgdbKey } from './gameKey.ts';
+import { isIgdbKey, NOT_ON_STEAM } from './gameKey.ts';
 import { platformLine } from './gameSearch.ts';
 
 // Rows are assembled in the still-untyped library.js/bundles.js from several independent async
@@ -870,8 +870,6 @@ function markFailedSources(columns: ColumnDef<Row>[]): ColumnDef<Row>[] {
   });
 }
 
-// A Steam-only column's value, group and checklist entry for a game outside Steam.
-export const NOT_ON_STEAM = 'Not on Steam';
 const STEAM_ONLY_TITLE = "Steam only — this game isn't on Steam";
 // The columns a game outside Steam has no value for: Steam's own data, or scored from Steam tags.
 export const STEAM_ONLY_KEYS: ReadonlySet<string> = new Set([

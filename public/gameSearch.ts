@@ -3,7 +3,7 @@ import { createComponent, createEffect, untrack } from 'solid-js';
 import ArrowRight from 'lucide-solid/icons/arrow-right';
 import { peekMyOwnership, trackMyOwnership } from './myOwnership.ts';
 import type { OwnershipStatus } from './myOwnership.ts';
-import { isIgdbKey, parseGameKey, type GameKey } from './gameKey.ts';
+import { isIgdbKey, NOT_ON_STEAM, parseGameKey, type GameKey } from './gameKey.ts';
 
 // A Steam game, or (an `igdb:` key) one outside Steam, with its platforms and year.
 export interface GameSearchResult {
@@ -96,7 +96,8 @@ export function gameSearchResultHtml(
   const thumb = r.tinyImage
     ? `<img class="game-search-thumb" src="${esc(r.tinyImage)}" alt="" loading="lazy">`
     : '<span class="game-search-thumb game-search-thumb--empty"></span>';
-  const platforms = platformLine(r);
+  // A recent lookup's entry has no platforms to list.
+  const platforms = platformLine(r) || (isIgdbKey(r.appid) ? NOT_ON_STEAM : '');
   return `
     <button type="button" id="${esc(gameSearchOptionId(r.appid))}" role="option" aria-selected="${active}" tabindex="-1"
       class="game-search-result${active ? ' active' : ''}" data-appid="${esc(r.appid)}" data-name="${esc(r.name)}">

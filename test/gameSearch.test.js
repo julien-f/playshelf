@@ -164,3 +164,10 @@ test('gameSearchMoreHtml: marks the row active when it is the highlighted option
   assert.ok(html.includes('class="game-search-more active"'));
   assert.ok(html.includes('aria-selected="true"'));
 });
+
+// A recent lookup's entry stores no platforms: it still says it isn't a Steam game.
+test('gameSearchResultHtml: a recent game outside Steam reads "Not on Steam" under its name', () => {
+  const html = gameSearchResultHtml({ appid: 'igdb:9001', name: 'Console Quest', tinyImage: null }, false);
+  assert.match(html, /<span class="game-search-platforms">Not on Steam<\/span>/);
+  assert.doesNotMatch(gameSearchResultHtml({ appid: 620, name: 'Portal 2', tinyImage: null }, false), /platforms/);
+});

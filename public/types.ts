@@ -257,7 +257,7 @@ export interface IgdbTableRow extends Omit<Game, 'appid'> {
 // A row of a list's table: a Steam game, or one outside Steam.
 export type TableGame = Game | IgdbTableRow;
 
-// A game outside Steam open in the panel: never a list's row, never in prefs (panel.tsx's igdbRow).
+// A game outside Steam open in the panel, as a list's row or beside the list (panel.tsx's igdbRow).
 export interface IgdbRow {
   readonly appid: IgdbKey;
   readonly name: string;

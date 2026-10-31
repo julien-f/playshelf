@@ -99,7 +99,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `membershipColumn.ts` — the "Owned by"/"In" column a group-by-membership list is grouped by (see each list kind below).
 - `bundleSnapshots.ts` — the last-known title and games of each bundle a saved list uses, kept for when ITAD stops listing it.
 - `myOwnership.ts` — one cached pair of owned/wishlisted appid sets for the effective account, behind both the panel's badge and the search dropdown's markers.
-- `recentGames.ts` — the recently-looked-up list backing `/game`.
+- `recentGames.ts` — the recently-looked-up list backing `/game`, Steam games and games outside Steam alike: the nav search, `/search` and a list's panel record an `igdb:N` lookup once IGDB names it; on `/game` its new row's stream does, and drops the row when IGDB links it to Steam (the panel then opens that game).
 - `PlayerProfile.tsx` — the profile cards: Owned's `OwnedProfile`, and the `ProfileBadge` and `TagBars` a comparison reuses.
 - `playerProfile.ts` — how an account plays beyond its tags: play style (`playStyle`), story games played to length (`storyGames`) and the archetype titling them (`archetypeOf`), from rows and an hours accessor so a comparison's players reuse it.
 - `tasteCache.ts` — each account's stored Taste, bounded, and the room a full storage makes by evicting them (`setItemMakingRoom`, which `prefs.ts` writes through).

@@ -176,7 +176,8 @@ A lightbox on another screen, for showing trailers and screenshots to the people
 
 - When the instance has [IGDB credentials](configuration.md), both search boxes also list games that aren't on Steam (PlayStation, Switch, Xbox…), with their platforms and year under the name ("PS5 · Switch +4 · 2025"). A game on Steam shows once, as the Steam game.
 - Order: a title matching what you typed exactly comes first (the Steam game first when both have it), then Steam's results, then up to 5 games outside Steam.
-- One opens in the panel like a Steam game: platforms, IGDB rating, How Long To Beat, summary and media; its link is `/game/igdb:<id>`. It doesn't join Recently Looked Up, lists or statuses.
+- One opens in the panel like a Steam game: platforms, IGDB rating, How Long To Beat, summary and media; its link is `/game/igdb:<id>`.
+- It joins Recently Looked Up like a Steam game, labelled "Not on Steam" with its platforms, with its IGDB rating, How Long To Beat times and release date; Steam's own columns read "n/a". Lists, statuses and combined lists hold Steam games only: adding a selection or combining Recently Looked Up leaves such games out and says how many.
 - If IGDB doesn't answer, the results are Steam's only, with a line saying so and **Retry**.
 
 ## Sharing
