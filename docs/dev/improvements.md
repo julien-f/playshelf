@@ -56,13 +56,12 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 ## Bundles and prices
 
 - **U177 · polish · B1** — shop chips (`.shop-chip`) take a hue hashed from the shop's name, outside the tokens, so a shop can land on amber, which ui-guidelines.md's Colour keeps for warnings and owned games (Humble Bundle does). One neutral chip, or a few token hues that exclude amber.
-- **U193 · minor · B1, B2, S1** — on a `?u=` link to someone else's account whose taste isn't on this device, the Taste fit column shows by default on Wishlist and bundles, all "—", with no note saying why. Hide the column by default there, or say whose taste is missing.
 
 ## Phone
 
 - **U217 · minor · C8** — a host on a phone or tablet can't show a trailer on the TV: the presentation window is a computer's (no Present button there). Cast a trailer through the Remote Playback API (`video.remote.prompt()`: Chromecast on Chrome for Android, AirPlay on Safari), trailers only — a separate feature from the presentation window.
 - **U189 · minor · L1, C3, I1** — on a phone, Home's five full-width Explore cards (~400 px, repeating the nav bar and the chip's Owned/Wishlist) push **Your lists** below the fold: its heading starts at 898 px on an 844 px screen, so a returning user sees none of their lists. With no account, the Owned and Wishlist cards still read "The current account's games" and lead to "No account selected — pick one on Home". Compact the cards on a phone (two columns, no description), or put Your lists first once it has any; drop or disable the two account cards until there's an account.
-- **U202 · minor · B1** — on a phone, a bundle's table starts at 514 px of 844 (hero 189 px, two toolbar rows 89 px, sort chips 32 px, plus the "Taste fit needs Alice's Owned list opened on this device" line), so four rows fit above the fold. Fold the taste note into the Taste fit column's header or hide that column until it has data (as U193 for `?u=`), and fit search and the view buttons on one row.
+- **U202 · minor · B1** — on a phone, a bundle's table starts at 565 px of 844 (hero 190–204 px, two toolbar rows 89 px, the active bar on two lines 55–62 px, the first group header 41 px), so three or four rows fit above the fold; names wrap in the pinned Name column. The active bar shows a grouped column twice (`⊞ Tier Price` and the sort its group order needs, `↑ Tier Price`): folding that sort into the group's pill (upstream, @vates/data-table) would bring it to one line.
 - **U222 · minor · F2** — on a phone, `/search?q=…` lands on the closest match's full-screen panel, hiding the results and the refine box until × (F2's "refines without reopening the panel" can't happen there). On a phone, open the results with the match highlighted, or open the panel only on a single match.
 
 ## Accounts and first visit

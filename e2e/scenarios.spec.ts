@@ -889,12 +889,15 @@ test("B2 edge: Taste fit scores the wishlist by the account's taste, once Owned 
   });
   const note = page.locator('.list-score-note');
   await page.goto('/lists/wishlist');
-  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
-  await expect(note).toHaveText("Taste fit needs Alice's Owned list opened on this device");
+  await expect(rows(page).first()).toBeVisible();
+  // No taste on this device yet: no column of "—", and no note about it.
+  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toHaveCount(0);
+  await expect(note).toHaveCount(0);
 
   await page.goto('/lists/owned');
   await expect(page.locator('.profile')).toBeVisible();
   await page.goto('/lists/wishlist');
+  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
   await expect(note).toHaveText(/^Taste fit: Alice's taste as of \d{4}-\d{2}-\d{2}$/);
   await expect(
     rows(page)
@@ -924,7 +927,7 @@ test('B2 edge: Taste fit says an opened Owned has too few games played, and stay
   // Someone else's wishlist from a link: nothing for the viewer to open about the sender.
   await page.goto('/lists/wishlist?u=bob');
   await expect(rows(page)).toHaveCount(BOB.wishlist!.length);
-  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toHaveCount(0);
   await expect(note).toHaveCount(0);
 
   // Once the viewer has opened that account's Owned here, its taste is on this device.
@@ -967,6 +970,15 @@ test("B2 edge: a link to my own ★ account still says to open its Owned, whoeve
   });
   await page.goto('/lists/wishlist?u=alice');
   await expect(rows(page)).toHaveCount(ALICE.wishlist!.length);
+  // Hidden with no taste here; shown from Columns, it says what to open.
+  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Columns', exact: true }).click();
+  await page
+    .locator('.dt-dd')
+    .getByRole('button', { name: /^Classification/ })
+    .click();
+  await page.locator('.dt-dd').getByRole('button', { name: 'Taste fit' }).click();
+  await page.keyboard.press('Escape');
   await expect(page.locator('.list-score-note')).toHaveText("Taste fit needs Alice's Owned list opened on this device");
 });
 
