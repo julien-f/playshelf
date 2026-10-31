@@ -206,6 +206,7 @@ export interface IgdbGame {
   cover: string | null;
   banner: string | null; // landscape art, else a screenshot, else the cover
   bannerIsCover: boolean;
+  thumb: string | null; // the game tables' landscape thumbnail
   platforms: string[];
   releaseDate: string | null;
   developers: string[];

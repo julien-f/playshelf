@@ -19,12 +19,13 @@
 //   signed-in      signed in with Steam as Alice, whose account already has prefs (fixtures.ts's signedInPrefs)
 //   creator-capped a developer's/publisher's list is Steam's first page of 523 games
 //   tagless        no game has Steam tags
-//   no-igdb        no Twitch credentials: health says so, GET /api/igdb-game answers 503, search leaves IGDB out
+//   no-igdb        no Twitch credentials: health says so, GET /api/igdb-game answers 503, search leaves IGDB out,
+//                  the details stream fails igdb:N rows and says so once
 //   client-limited this client spent its share of the outbound budgets: details say so once, achievements and prices 429
 import type { Page } from '@playwright/test';
 import { PLAYERS, CATALOG, BUNDLE, PICK_BUNDLE, SIGNED_IN, signedInPrefs, game, type Player } from './fixtures.ts';
 import { flattenBundleGames, type Bundle } from '../public/bundleData.ts';
-import { streamEvent } from '../lib/streamEvent.mjs';
+import { streamEvent, igdbStreamEvent } from '../lib/streamEvent.mjs';
 import { mergeSearchResults } from '../lib/searchMerge.mjs';
 
 // Fixed per worker, for dates that need no freshness; a "fetched" stamp takes the answer's own time: a worker outlives a minute.
@@ -195,6 +196,7 @@ const IGDB_GAME = {
   cover: mediaUrl('Console Quest Cover', false),
   banner: mediaUrl('Console Quest Artwork', false),
   bannerIsCover: false,
+  thumb: mediaUrl('Console Quest Artwork', false) as string | null,
   platforms: ['PS5', 'Switch'],
   releaseDate: '2024-09-06',
   developers: ['Console Studio'],
@@ -227,6 +229,7 @@ const IGDB_GOW_PS2 = {
   // No artwork or screenshot: its portrait cover is the banner.
   banner: IGDB_GAME.cover,
   bannerIsCover: true,
+  thumb: null,
   screenshots: [],
   videos: [],
   platforms: ['PS2'],
@@ -251,6 +254,15 @@ const igdbGame = (game: typeof IGDB_GAME) => {
     fetchedAts: { igdb: now, hltb: now },
   };
 };
+
+// As server.js's stream answers an `igdb:N` key (lib/streamEvent.mjs): an unknown id has no meta, not a failure.
+function igdbDetailsEvent(key: string, states: ReadonlySet<string>) {
+  const fixture = IGDB_GAMES.find((g) => `igdb:${g.id}` === key);
+  const none = { game: null, hltb: null, fetchedAt: null, fetchedAts: { igdb: null, hltb: null } };
+  if (states.has('no-igdb')) return igdbStreamEvent(key, { ...none, failed: ['igdb'] });
+  if (states.has('upstream-down')) return igdbStreamEvent(key, { ...none, failed: ['igdb', 'hltb'] });
+  return igdbStreamEvent(key, fixture ? igdbGame(fixture) : none);
+}
 
 const ACHIEVEMENTS = [
   { apiname: 'ACH_1', name: 'First steps', description: 'Finish the first chapter.', achieved: true, globalPct: 71.5 },
@@ -446,9 +458,12 @@ export function respond(
 
   if (path === '/api/game-details/stream') {
     const lines = (body.games ?? []).map(
-      (g: { appid: number }) => `data: ${JSON.stringify(streamEvent(detailsFor(g.appid)))}\n\n`,
+      (g: { appid: number | string }) =>
+        `data: ${JSON.stringify(typeof g.appid === 'string' ? igdbDetailsEvent(g.appid, states) : streamEvent(detailsFor(g.appid)))}\n\n`,
     );
     if (limited) lines.unshift(`data: ${JSON.stringify({ limited: LIMITED })}\n\n`);
+    if (states.has('no-igdb') && body.games?.some((g: { appid: unknown }) => typeof g.appid === 'string'))
+      lines.unshift(`data: ${JSON.stringify({ unavailable: "This instance can't look up games outside Steam." })}\n\n`);
     return {
       status: 200,
       contentType: 'text/event-stream',

@@ -1756,6 +1756,145 @@ test('POST /api/game-details/stream: does not log [game-details] for meta blocke
   assert.equal(warnMock.mock.calls.filter((c) => /\[game-details\]/.test(c.arguments[0])).length, 0);
 });
 
+// Every source of a Steam game's details, cached: the stream answers it without an upstream call.
+function cacheSteamDetails(appid) {
+  setCache(`rating:${appid}`, { total_reviews: 10, total_positive: 9, review_score_desc: 'Positive' });
+  setCache(`hltb:${appid}`, []);
+  setCache(`meta:${appid}`, { name: 'Portal' });
+  setCache(`browse:${appid}`, { tagids: TAG_IDS });
+  setCache(`protondb:${appid}`, { tier: 'gold', confidence: 'strong', total: 5 });
+  setCache('tagnames:all', TAG_NAME_MAP);
+}
+
+async function streamOf(t, games) {
+  const server = app.listen(0);
+  t.after(() => new Promise((r) => server.close(r)));
+  await new Promise((r) => server.once('listening', r));
+  const res = await ssePost(server.address().port, '/api/game-details/stream', { games });
+  assert.equal(res.status, 200);
+  return parseSseEvents(res.body);
+}
+
+const igdbQueries = (urls) => urls.filter((u) => u.includes('api.igdb.com'));
+
+test('POST /api/game-details/stream: 400 for a malformed igdb key', async () => {
+  for (const appid of ['igdb:0', 'igdb:x', 'igdb:01', 'IGDB:1', 'igdb:', 'igdb:99999999999999999999']) {
+    const res = await api.post('/api/game-details/stream').send({ games: [{ appid }] });
+    assert.equal(res.status, 400, appid);
+  }
+});
+
+test('POST /api/game-details/stream: games outside Steam beside Steam ones, one IGDB query, each key echoed', async (t) => {
+  const bodies = [];
+  const urls = mockIgdbRoute(t, (body) => {
+    bodies.push(body);
+    return { ok: true, status: 200, json: async () => [ASTRO_BOT] };
+  });
+  cacheSteamDetails(400);
+  const events = await streamOf(t, [{ appid: 400 }, { appid: 'igdb:9001' }, { appid: 'igdb:9002' }]);
+  assert.equal(igdbQueries(urls).length, 1);
+  assert.match(bodies[0], /where id = \(9001,9002\); limit 2;$/);
+  const byKey = new Map(events.filter((e) => !e.done).map((e) => [e.appid, e]));
+  assert.deepEqual([...byKey.keys()].sort(), [400, 'igdb:9001', 'igdb:9002']);
+  const astro = byKey.get('igdb:9001');
+  assert.equal(astro.source, 'igdb');
+  assert.equal(astro.meta.name, 'Astro Bot');
+  assert.equal(astro.hltb.main, 10);
+  assert.equal(astro.failed, undefined);
+  assert.equal(typeof astro.fetchedAts.igdb, 'number');
+  // Unknown to IGDB: no data, not failed.
+  assert.equal(byKey.get('igdb:9002').meta, null);
+  assert.equal(byKey.get('igdb:9002').failed, undefined);
+  assert.ok(getCachedAt('igdb:9001') && getCachedAt('igdb:9002'), 'each id cached, the miss too');
+});
+
+// A tab opened before games outside Steam joined the stream reads every event through the Steam fields.
+test('POST /api/game-details/stream: a game outside Steam comes Steam-shaped, for a client that predates it', async (t) => {
+  mockIgdbRoute(t, igdbReply([{ ...ASTRO_BOT, first_release_date: 1725840000, genres: [{ name: 'Platform' }] }]));
+  const [event] = await streamOf(t, [{ appid: 'igdb:9001' }]);
+  for (const key of ['rating', 'hltb', 'meta', 'tags', 'tagWeights', 'demo', 'protondb', 'fetchedAt', 'fetchedAts'])
+    assert.ok(key in event, key);
+  assert.equal(event.rating, null);
+  assert.deepEqual(event.meta, {
+    name: 'Astro Bot',
+    capsule: 'https://images.igdb.com/igdb/image/upload/t_cover_big/cov.jpg',
+    thumb: 'https://images.igdb.com/igdb/image/upload/t_screenshot_med/sc1.jpg',
+    releaseDate: '9 Sep, 2024',
+    genres: ['Platform'],
+    developers: [],
+    publishers: [],
+    platforms: ['PS5'],
+  });
+});
+
+test('POST /api/game-details/stream: a failed IGDB batch fails its rows, without a query per game', async (t) => {
+  const bodies = [];
+  const urls = mockIgdbRoute(t, (body) => {
+    bodies.push(body);
+    return { ok: false, status: 500, headers: new Headers() };
+  });
+  const events = await streamOf(t, [{ appid: 'igdb:9001' }, { appid: 'igdb:9002' }]);
+  assert.ok(igdbQueries(urls).length >= 1);
+  assert.ok(
+    bodies.every((b) => b.includes('where id = (9001,9002)')),
+    'retries of the batch only',
+  );
+  for (const e of events.filter((e) => !e.done)) assert.deepEqual(e.failed, ['igdb', 'hltb']);
+  assert.deepEqual(
+    console.warn.mock.calls.map((c) => c.arguments[0]).filter((l) => l.startsWith('[igdb-game]')),
+    [],
+    'lib/igdb.js logs the batch once, not each row',
+  );
+});
+
+test('POST /api/game-details/stream: without Twitch credentials, games outside Steam fail and it says so once', async (t) => {
+  _reset();
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
+  const events = await streamOf(t, [{ appid: 'igdb:9001' }, { appid: 'igdb:9002' }]);
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.deepEqual(
+    events.filter((e) => 'unavailable' in e),
+    [{ unavailable: "This instance can't look up games outside Steam." }],
+  );
+  const rows = events.filter((e) => e.appid);
+  assert.deepEqual(
+    rows.map((e) => [e.appid, e.failed]),
+    [
+      ['igdb:9001', ['igdb']],
+      ['igdb:9002', ['igdb']],
+    ],
+  );
+});
+
+test('POST /api/game-details/stream: a game outside Steam cached with its HLTB goes first, without waiting on the batch', async (t) => {
+  let release;
+  const gate = new Promise((r) => {
+    release = r;
+  });
+  const bodies = [];
+  mockIgdbRoute(t, async (body) => {
+    bodies.push(body);
+    await gate;
+    return { ok: true, status: 200, json: async () => [] };
+  });
+  setCache('igdb:9001', ASTRO_BOT);
+  setCache('hltb:igdb:9001', []);
+  const server = app.listen(0);
+  t.after(() => new Promise((r) => server.close(r)));
+  await new Promise((r) => server.once('listening', r));
+  const response = ssePost(server.address().port, '/api/game-details/stream', {
+    games: [{ appid: 'igdb:9002' }, { appid: 'igdb:9001' }],
+  });
+  await until(() => bodies.length > 0, 'the batch reaching IGDB');
+  release();
+  const events = parseSseEvents((await response).body).filter((e) => e.appid);
+  assert.deepEqual(
+    events.map((e) => e.appid),
+    ['igdb:9001', 'igdb:9002'],
+  );
+  assert.match(bodies[0], /where id = \(9002\); limit 1;$/, 'the cached game left out of the batch');
+});
+
 // ── GET /api/search-games ─────────────────────────────────────────────────────
 
 // ── GET /api/creator-games ────────────────────────────────────────────────────

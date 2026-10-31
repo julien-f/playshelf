@@ -27,7 +27,7 @@ const {
   CORE_COLUMNS,
 } = require('../public/gameColumns.ts');
 
-const { fmtLocalDate } = require('../public/utils.ts');
+const { fmtLocalDate, fmtReleaseDate } = require('../public/utils.ts');
 
 const day = (y, m, d) => new Date(y, m - 1, d).getTime();
 
@@ -53,6 +53,23 @@ test('endOfReleasePeriod: anchors a coarse date at the end of its period', () =>
   ]) {
     assert.equal(endOfReleasePeriod(input), expected, input);
   }
+});
+
+// lib/streamEvent.mjs: an ISO date would parse as UTC midnight, the day before west of UTC.
+test("endOfReleasePeriod: a game outside Steam's stream date is that local day, shown as it", () => {
+  const { igdbStreamEvent } = require('../lib/streamEvent.mjs');
+  const game = { name: 'G', genres: [], developers: [], publishers: [], platforms: [] };
+  const dateOf = (releaseDate) =>
+    igdbStreamEvent('igdb:1', { game: { ...game, releaseDate }, hltb: null }).meta.releaseDate;
+  for (const [iso, y, m, d] of [
+    ['2024-09-06', 2024, 9, 6],
+    ['2005-03-22', 2005, 3, 22],
+    ['2025-12-31', 2025, 12, 31],
+  ]) {
+    assert.equal(endOfReleasePeriod(dateOf(iso)), day(y, m, d), iso);
+    assert.equal(fmtReleaseDate(dateOf(iso)), fmtLocalDate(new Date(y, m - 1, d)), iso);
+  }
+  assert.equal(dateOf(null), null);
 });
 
 test('endOfReleasePeriod: placeholders have no date, so range filters and date-tree skip them', () => {

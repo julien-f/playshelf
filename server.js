@@ -39,7 +39,14 @@ const {
 } = require('./lib/steam');
 const { getSemaphoreStats } = require('./lib/upstream');
 const { getHLTB } = require('./lib/hltb');
-const { isIgdbConfigured, getIgdbGame, extractIgdbGame, searchIgdb, mergeSearchResults } = require('./lib/igdb');
+const {
+  isIgdbConfigured,
+  getIgdbGame,
+  getIgdbGames,
+  extractIgdbGame,
+  searchIgdb,
+  mergeSearchResults,
+} = require('./lib/igdb');
 const {
   getBundles,
   bundlesCacheKey,
@@ -54,7 +61,7 @@ const {
   extractGameBundles,
 } = require('./lib/itad');
 const { withPickAndMix } = require('./lib/fanatical');
-const { streamEvent } = require('./lib/streamEvent.mjs');
+const { streamEvent, igdbStreamEvent } = require('./lib/streamEvent.mjs');
 const { catalogCacheKey, getGamePass } = require('./lib/gamepass');
 const {
   SESSION_COOKIE,
@@ -1062,9 +1069,10 @@ app.get('/api/game-details/:appid', detailsLimit, async (req, res) => {
 });
 
 // fetchGameDetails' counterpart for a game outside Steam; `game` is null when IGDB failed or doesn't know the id.
-async function fetchIgdbGame(id, { force = false } = {}) {
+// `game`, a promise of it from getIgdbGames' batch, replaces the one-game query; lib/igdb.js logs its failure once.
+async function fetchIgdbGame(id, { force = false, game } = {}) {
   const hltbKey = `igdb:${id}`;
-  const gamePromise = getIgdbGame(id, { force });
+  const gamePromise = game ?? getIgdbGame(id, { force });
   // HLTB is searched by IGDB's name, never the client's; an IGDB failure fails it too.
   const hltbPromise = gamePromise.then((game) => {
     if (game?.name) return getHLTB(hltbKey, game.name, { force });
@@ -1076,7 +1084,7 @@ async function fetchIgdbGame(id, { force = false } = {}) {
     if (err?.isCircuitOpen || err?.isBudgetExhausted) return;
     console.warn(`[igdb-game] ${label} (igdb ${id}):`, err?.message, err?.cause ?? '');
   };
-  if (gameRes.status === 'rejected') logErr('igdb', gameRes.reason);
+  if (gameRes.status === 'rejected' && !game) logErr('igdb', gameRes.reason);
   if (hltbRes.status === 'rejected' && hltbRes.reason !== gameRes.reason) logErr('hltb', hltbRes.reason);
   const failed = Object.entries({ igdb: gameRes, hltb: hltbRes })
     .filter(([, r]) => r.status === 'rejected')
@@ -1243,6 +1251,9 @@ app.get('/api/achievements/:appid', achievementsLimit, async (req, res) => {
 // open at once: otherwise parallel streams of uncached games fill the shared store queue.
 const openStreams = new Map(); // clientKey -> open stream count
 
+// `igdb:N`'s N, else NaN.
+const igdbIdOf = (key) => (typeof key === 'string' ? Number(/^igdb:([1-9]\d*)$/.exec(key)?.[1]) : NaN);
+
 app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
   const { games: gameList } = req.body;
   if (!Array.isArray(gameList) || gameList.length === 0) {
@@ -1252,8 +1263,13 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
     return res.status(400).json({ error: `Too many games — maximum is ${STREAM_MAX_GAMES}` });
   }
 
+  // An appid, or a game outside Steam as `igdb:N`, kept as sent: its event echoes it.
   const validated = [];
   for (const g of gameList) {
+    if (Number.isSafeInteger(igdbIdOf(g?.appid))) {
+      validated.push(g.appid);
+      continue;
+    }
     const appid = Number(g?.appid);
     if (!Number.isInteger(appid) || appid <= 0) {
       return res.status(400).json({ error: 'Invalid appid' });
@@ -1313,23 +1329,47 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
   // STREAM_CONCURRENCY appids are ever in flight for one request, and `closed` is re-checked
   // before each one — so a disconnect stops the work within one appid per worker.
   // Fully cached games first: behind the uncached ones, they'd wait on the upstreams' pace for nothing.
-  const cachedFirst = Map.groupBy(validated, allDetailsCached);
+  const cachedFirst = Map.groupBy(validated, (key) =>
+    typeof key === 'string' ? isCached(key) && isCached(`hltb:${key}`) : allDetailsCached(key),
+  );
   const ordered = [...(cachedFirst.get(true) ?? []), ...(cachedFirst.get(false) ?? [])];
+  // Games outside Steam take one IGDB query per 500, run beside the Steam workers; a failed one fails its rows.
+  const igdbIds = validated.filter((key) => typeof key === 'string').map(igdbIdOf);
+  const igdbConfigured = isIgdbConfigured();
+  const igdbGames = igdbIds.length && igdbConfigured ? getIgdbGames(igdbIds) : null;
   let next = 0;
   // Said once per stream; the workers go on, since cached games still fill in.
   let limitedSent = false;
+  let unavailableSent = false;
+  // A refused client's `limited` goes out once, before the game it came with.
+  const sendLimitedOnce = ({ limited, ...result }) => {
+    if (limited && !limitedSent) {
+      limitedSent = true;
+      send({ limited });
+    }
+    return result;
+  };
+  const fetchOne = async (key) => {
+    if (typeof key === 'number') return streamEvent({ appid: key, ...sendLimitedOnce(await fetchGameDetails(key)) });
+    if (!igdbConfigured) {
+      if (!unavailableSent) {
+        unavailableSent = true;
+        send({ unavailable: IGDB_UNAVAILABLE });
+      }
+      const fetchedAts = { igdb: null, hltb: null };
+      return igdbStreamEvent(key, { game: null, hltb: null, fetchedAt: null, fetchedAts, failed: ['igdb'] });
+    }
+    const id = igdbIdOf(key);
+    const details = await fetchIgdbGame(id, { game: igdbGames.get(id) });
+    return igdbStreamEvent(key, sendLimitedOnce(details));
+  };
   const worker = async () => {
     while (!closed) {
       const i = next++;
       if (i >= ordered.length) return;
       const appid = ordered[i];
       try {
-        const { limited, ...result } = await fetchGameDetails(appid);
-        if (limited && !limitedSent) {
-          limitedSent = true;
-          send({ limited });
-        }
-        send(streamEvent({ appid, ...result }));
+        send(await fetchOne(appid));
       } catch (err) {
         // fetchGameDetails resolves every sub-fetch via Promise.allSettled internally and should
         // never itself reject — this is a defensive backstop, not an expected path, so unlike

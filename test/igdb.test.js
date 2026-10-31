@@ -10,6 +10,7 @@ const {
   isIgdbConfigured,
   searchIgdb,
   getIgdbGame,
+  getIgdbGames,
   extractIgdbGame,
   steamAppidOf,
   normalizeName,
@@ -242,6 +243,7 @@ test('extractIgdbGame: the panel fields, with image URLs and company roles', () 
     cover: 'https://images.igdb.com/igdb/image/upload/t_cover_big/cov.jpg',
     banner: 'https://images.igdb.com/igdb/image/upload/t_1080p/art.jpg',
     bannerIsCover: false,
+    thumb: 'https://images.igdb.com/igdb/image/upload/t_screenshot_med/art.jpg',
     platforms: ['PS5'],
     releaseDate: '2024-09-09',
     developers: ['Team Asobi'],
@@ -288,6 +290,21 @@ test('extractIgdbGame: the banner is landscape art, else the first screenshot, e
   assert.deepEqual(pick({}), { banner: null, bannerIsCover: false, screenshots: [] });
 });
 
+test('extractIgdbGame: the table thumbnail is landscape art, else a screenshot, never the portrait cover', () => {
+  const thumb = (raw) => extractIgdbGame({ id: 1, name: 'G', cover: { image_id: 'cov' }, ...raw }).thumb;
+  const logo = { image_id: 'logo', width: 256, height: 256 };
+  const keyArt = { image_id: 'key', width: 1920, height: 1080 };
+  assert.equal(
+    thumb({ artworks: [logo, keyArt] }),
+    'https://images.igdb.com/igdb/image/upload/t_screenshot_med/key.jpg',
+  );
+  assert.equal(
+    thumb({ artworks: [logo], screenshots: [{ image_id: 'sc1' }] }),
+    'https://images.igdb.com/igdb/image/upload/t_screenshot_med/sc1.jpg',
+  );
+  assert.equal(thumb({}), null);
+});
+
 test('getIgdbGame: one query by id; an unknown id is null, cached for MISS_CACHE_TTL_MS', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
   const { queries } = mockIgdb(t);
@@ -308,6 +325,49 @@ test('getIgdbGame: force skips the cache', async (t) => {
   await getIgdbGame(5);
   await getIgdbGame(5);
   await getIgdbGame(5, { force: true });
+  assert.equal(queries.length, 2);
+});
+
+const settled = async (games) => new Map(await Promise.all([...games].map(async ([id, g]) => [id, await g])));
+
+test('getIgdbGames: one query for the uncached ids, each cached on its own, an unknown one as a miss', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  const { queries } = mockIgdb(t, (_opts, n) => json(n === 1 ? [{ id: 1, name: 'One' }] : [{ id: 2, name: 'Two' }]));
+  await getIgdbGame(1); // cached by the one-game query first, so the batch leaves it out
+  const games = await settled(getIgdbGames([1, 2, 3]));
+  assert.match(queries[1].body, /^fields name, url, .*; where id = \(2,3\); limit 2;$/);
+  assert.deepEqual(
+    [...games].map(([id, g]) => [id, g?.name ?? null]),
+    [
+      [1, 'One'],
+      [2, 'Two'],
+      [3, null],
+    ],
+  );
+  await settled(getIgdbGames([1, 2, 3, 3]));
+  await getIgdbGame(2);
+  assert.equal(queries.length, 2, 'every id answered from cache, the miss too');
+  t.mock.timers.tick(MISS_CACHE_TTL_MS);
+  await settled(getIgdbGames([2, 3]));
+  assert.match(queries[2].body, /where id = \(3\); limit 1;$/);
+});
+
+test('getIgdbGames: 500 ids per query, with an explicit limit (IGDB returns 10 without one)', async (t) => {
+  const { queries } = mockIgdb(t);
+  const ids = Array.from({ length: 501 }, (_, i) => i + 1);
+  await settled(getIgdbGames(ids));
+  assert.deepEqual(
+    queries.map((q) => q.body.match(/limit \d+;$/)[0]),
+    ['limit 500;', 'limit 1;'],
+  );
+  assert.match(queries[1].body, /where id = \(501\);/);
+});
+
+test('getIgdbGames: a failed query rejects and caches nothing', async (t) => {
+  const { queries } = mockIgdb(t, (_opts, n) => (n === 1 ? json({}, 500) : json([{ id: 1, name: 'One' }])));
+  t.mock.method(console, 'warn', () => {});
+  await assert.rejects(getIgdbGames([1]).get(1), /IGDB error 500/);
+  assert.equal((await getIgdbGames([1]).get(1)).name, 'One');
   assert.equal(queries.length, 2);
 });
 

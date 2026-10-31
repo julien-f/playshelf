@@ -41,6 +41,28 @@ test('mockApi: a search merges the IGDB fixtures, the Steam exact name first on 
   assert.deepEqual(await keys('console quest'), ['igdb:9001', 'igdb:9004']);
 });
 
+// As server.js's stream: an `igdb:N` key is echoed, Steam-shaped; unconfigured, it fails and says so once.
+test('mockApi: the details stream answers games outside Steam as the real API does', async () => {
+  const { respond } = await import('../e2e/mockApi.ts');
+  const stream = (states = []) =>
+    respond(
+      'POST',
+      new URL('/api/game-details/stream', 'http://localhost'),
+      '{"games":[{"appid":1145360},{"appid":"igdb:9001"},{"appid":"igdb:1"}]}',
+      new Set(states),
+    )
+      .body.split('\n\n')
+      .filter((c) => c.startsWith('data: '))
+      .map((c) => JSON.parse(c.slice(6)));
+  const byKey = new Map(stream().map((e) => [e.appid, e]));
+  assert.equal(byKey.get('igdb:9001').meta.name, 'Console Quest');
+  assert.equal(byKey.get('igdb:9001').source, 'igdb');
+  assert.equal(byKey.get('igdb:1').meta, null);
+  const unconfigured = stream(['no-igdb']);
+  assert.equal(unconfigured.filter((e) => e.unavailable).length, 1);
+  assert.deepEqual(unconfigured.find((e) => e.appid === 'igdb:9001').failed, ['igdb']);
+});
+
 // As server.js's stream (lib/streamEvent.mjs): media come from /api/game-meta, the banner stays.
 test('mockApi: the details stream leaves out media and keeps the banner, as the real API does', async () => {
   const { respond } = await import('../e2e/mockApi.ts');
