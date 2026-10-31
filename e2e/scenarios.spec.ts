@@ -8428,6 +8428,41 @@ test("F1 edge: a game outside Steam's YouTube video takes the lightbox's Space a
   await expect(lb).toHaveAttribute('open'); // F, ←/→ and Esc are the lightbox's as for any item
 });
 
+test("F1 edge: F puts a game outside Steam's YouTube player itself fullscreen, keeps the keys its own there, and hands them back on leaving", async ({
+  page,
+}) => {
+  await page.clock.install(); // the focus return's polling: a "nothing after" check while fullscreen
+  await page
+    .context()
+    .route('https://www.youtube-nocookie.com/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<button>Play</button>' }),
+    );
+  await page.goto('/game/igdb:9001');
+  const panel = page.locator('#game-panel');
+  await panel.locator('.panel-film-item.is-video').first().click();
+  await panel.locator('.panel-hero-open').click();
+  const lb = page.locator('#screenshot-lightbox');
+  const player = lb.locator('iframe.lb-yt');
+  await expect(player).toHaveAttribute('src', /\/embed\/cqvideo1\?/);
+  const fullscreen = () => page.evaluate(() => document.fullscreenElement?.className ?? null);
+  await page.keyboard.press('f');
+  await expect.poll(fullscreen).toBe('lb-yt');
+  // The whole screen, nothing of ours over it: the room kept for the chrome is gone.
+  const viewport = page.viewportSize()!;
+  expect(await player.boundingBox()).toEqual({ x: 0, y: 0, ...viewport });
+  // YouTube's own keys act there: the frame keeps focus.
+  await expect(player).toBeFocused();
+  await page.clock.runFor(500);
+  await expect(player).toBeFocused();
+  // Leaving (Esc, or YouTube's F) gives the lightbox its keys back.
+  await page.evaluate(() => document.exitFullscreen());
+  await expect.poll(fullscreen).toBe(null);
+  await page.clock.runFor(200);
+  await expect(lb.locator('.lb-surface')).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(player).toHaveAttribute('src', /\/embed\/cqvideo2\?/);
+});
+
 test('F1 edge: a game outside Steam with only its portrait cover shows it whole in the hero', async ({ page }) => {
   await page.goto('/game/igdb:9003');
   const hero = page.locator('#game-panel .panel-hero-img');

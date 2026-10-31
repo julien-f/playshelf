@@ -160,6 +160,14 @@ function lbShowingVideo() {
 let lbYoutubeTimer: ReturnType<typeof setTimeout> | undefined;
 let lbYt: { frame: HTMLIFrameElement; playing: boolean; muted: boolean; heard: boolean } | null = null;
 let lbYtListenTimer: ReturnType<typeof setInterval> | undefined;
+let lbYtFocusTimer: ReturnType<typeof setInterval> | undefined;
+// A click into the player gives its frame the keys, so they come back (not while it's fullscreen: YouTube's then).
+// Polled: on the window's blur, Firefox left the frame focused.
+function reclaimLbFocus() {
+  const frame = lbYt?.frame;
+  if (frame && document.activeElement === frame && fullscreenElement() !== frame)
+    lbSurface(frame.closest<HTMLElement>('#screenshot-lightbox')!).focus();
+}
 function mountLbYoutube(lb: HTMLElement, id: string, title: string) {
   const frame = document.createElement('iframe');
   const muted = lbMutedChoice();
@@ -180,6 +188,8 @@ function mountLbYoutube(lb: HTMLElement, id: string, title: string) {
     lbYtListenTimer = setInterval(listen, 250);
     listen();
   });
+  clearInterval(lbYtFocusTimer);
+  lbYtFocusTimer = setInterval(reclaimLbFocus, 100);
   lb.querySelector('.lb-prev')!.before(frame); // under the chrome
 }
 function sendLbYoutube(func: YoutubeCommand) {
@@ -188,6 +198,7 @@ function sendLbYoutube(func: YoutubeCommand) {
 function unmountLbYoutube() {
   clearTimeout(lbYoutubeTimer);
   clearInterval(lbYtListenTimer);
+  clearInterval(lbYtFocusTimer);
   lbYt = null;
   document.querySelector('#screenshot-lightbox .lb-yt')?.remove();
 }
@@ -267,17 +278,6 @@ export function initLightbox({
     signal: _lbSignal,
   });
   document.addEventListener('pointerdown', () => (lbByKey = false), { capture: true, signal: _lbSignal });
-  // A click into YouTube's player focuses its frame, whose keys never reach this document: focus comes back
-  // (the click still lands), so the lightbox's keys keep acting, on the player too.
-  window.addEventListener(
-    'blur',
-    () =>
-      setTimeout(() => {
-        const frame = document.activeElement;
-        if (frame?.classList.contains('lb-yt')) lbSurface(frame.closest<HTMLElement>('#screenshot-lightbox')!).focus();
-      }),
-    { signal: _lbSignal },
-  );
   window.addEventListener(
     'message',
     (e) => {
@@ -517,8 +517,18 @@ function syncLbFullscreenShown(lb: HTMLElement) {
   lb.querySelector<HTMLElement>('.lb-fullscreen')!.style.display = canElementFullscreen() || native ? '' : 'none';
 }
 
+function fullscreenElement() {
+  return document.fullscreenElement ?? webkitDoc().webkitFullscreenElement ?? null;
+}
 function isFullscreen() {
-  return !!(document.fullscreenElement || webkitDoc().webkitFullscreenElement);
+  return !!fullscreenElement();
+}
+
+function requestFullscreen(el: HTMLElement) {
+  return (
+    el.requestFullscreen?.() ??
+    (el as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen?.()
+  );
 }
 
 function exitFullscreen() {
@@ -540,13 +550,16 @@ function toggleLbFullscreen(lb: HTMLElement) {
   }
   if (isFullscreen()) {
     exitFullscreen();
+  } else if (lbYt) {
+    // YouTube's player itself, filling the screen with nothing of ours over it; its own keys act there.
+    const { frame } = lbYt;
+    requestFullscreen(frame)?.then?.(
+      () => frame.focus(),
+      () => {},
+    );
   } else {
     const wasPlaying = holdLbTrailerForFullscreen();
-    const surface = lbSurface(lb);
-    (
-      surface.requestFullscreen?.() ??
-      (surface as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen?.()
-    )?.then?.(
+    requestFullscreen(lbSurface(lb))?.then?.(
       () => wasPlaying && toggleLbPlay(),
       () => {},
     );

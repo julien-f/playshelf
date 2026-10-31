@@ -406,7 +406,7 @@ Above 768px the shell is locked to the viewport and **`.app-scroll` is the page'
 
 `mediaItems.ts` builds the ordered media list and resolves a shot id to an index; the hero uses `meta.banner` (Steam's `header_image`, resolved server-side) once metadata loads, guessing the conventional CDN path only as a placeholder — that guess 404s for games on newer asset pipelines.
 
-- **A game outside Steam's media**: its banner is landscape art, a screenshot or, last, its portrait cover, which the hero shows whole (`contain`, `.panel-hero-img--contain`; [integrations.md](integrations.md#igdb--games-outside-steam)). Its videos are video items with a `youtube` id (`hls: null`): the hero and filmstrip show them like trailers; the lightbox shows YouTube's player in an iframe (`.lb-yt`) instead of the `<video>`, mounted on that item only and removed on any step or close; Space and M drive it as a trailer, from the player's own state reports ([decisions.md](decisions.md#igdb-videos--youtube-embeds-on-a-click)).
+- **A game outside Steam's media**: its banner is landscape art, a screenshot or, last, its portrait cover, which the hero shows whole (`contain`, `.panel-hero-img--contain`; [integrations.md](integrations.md#igdb--games-outside-steam)). Its videos are video items with a `youtube` id (`hls: null`): the hero and filmstrip show them like trailers; the lightbox shows YouTube's player in an iframe (`.lb-yt`) instead of the `<video>`, mounted on that item only and removed on any step or close; Space and M drive it as a trailer, from the player's own state reports; F puts the iframe itself fullscreen, where YouTube's keys apply until it leaves ([decisions.md](decisions.md#igdb-videos--youtube-embeds-on-a-click)).
 
 ## The presentation window
 

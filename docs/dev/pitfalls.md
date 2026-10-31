@@ -193,3 +193,9 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 - **Symptom**: `pre-commit` fails `format` on lines that look right in the working tree; the staged file (`git show :<file>`) has them inside another function.
 - **Cause**: a patch made with `git diff -U0` and staged with `git apply --cached --unidiff-zero` carries no context, so its line numbers count the hunks left out: it applies at the shifted line.
 - **Fix**: build the staged content from `HEAD` (`git show HEAD:<file>`, edit, then `git update-index --cacheinfo 100644,$(git hash-object -w <copy>),<file>`), or commit the hunks in the order they sit in the file.
+
+## Focus or `blur` behaves impossibly in Playwright's Firefox
+
+- **Symptom**: after a click into an iframe, Playwright's `firefox` fires no `blur`/`focusout` in the parent, and `element.focus()` there can't take focus back (`document.activeElement` stays the `<iframe>`).
+- **Cause**: Playwright's patched Firefox build emulates focus; stock Firefox fires both and refocuses.
+- **Fix**: check focus behaviour on stock Firefox: `firefox.launch({ channel: 'moz-firefox', executablePath: <the system firefox>, headless: true })` (WebDriver BiDi).
