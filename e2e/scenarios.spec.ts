@@ -485,7 +485,7 @@ test("F3 edge: a game's thumbnail falls back to its smaller capsule, then hides"
   await expect(thumb).toBeVisible();
   // The same box either way, so the row doesn't move as the image loads or fails (2px each side clipped off).
   expect(await visibleBox(thumb)).toMatchObject(
-    testInfo.project.name === 'phone' ? { width: 100, height: 40 } : { width: 164, height: 64 },
+    testInfo.project.name === 'phone' ? { width: 64, height: 26 } : { width: 164, height: 64 },
   );
   await expect(row(page, 'Portal 2').locator('img.game-thumb')).toHaveCSS('visibility', 'hidden');
 });
@@ -4105,6 +4105,21 @@ test('B1 edge: a bundle game whose Steam lookup failed says so, rather than read
   await expect(rows(page)).toHaveCount(3);
   await expect(page.getByText("Steam didn't answer for 1 of this bundle's games")).toBeVisible();
   await expect(page.getByRole('button', { name: /1 more in this bundle, not on Steam/ })).toBeVisible();
+});
+
+test("B1 edge: on a phone, a bundle's Best Deal is in view beside the game's name and image", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'phone layout only');
+  await asPlayer(page, ALICE);
+  for (const id of [BUNDLE.id, PICK_BUNDLE.id]) {
+    await page.goto(`/lists/bundle/${id}`);
+    await expect(rows(page).first()).toBeVisible();
+    const head = page.locator('thead th').filter({ hasText: /^Best Deal/ });
+    const box = await visibleBox(head);
+    expect(box.x + box.width, String(id)).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await expect(page.locator('thead th').filter({ hasText: /^Image/ })).toBeVisible(); // kept, only smaller
+  }
 });
 
 test("B1 edge: on a phone, every game's name stays in view while the table scrolls sideways", async ({

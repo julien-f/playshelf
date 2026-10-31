@@ -55,7 +55,6 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 ## Bundles and prices
 
-- **U235 · minor · B1** — on a phone, a bundle's Best Deal column starts past the right edge (Image ~100 px, Name wrapping), so step 4's tier price vs. best deal needs a sideways scroll on every row. Hide Image by default on a phone for bundles, or put Best Deal right after Tier Price within the first screen.
 - **U177 · polish · B1** — shop chips (`.shop-chip`) take a hue hashed from the shop's name, outside the tokens, so a shop can land on amber, which ui-guidelines.md's Colour keeps for warnings and owned games (Humble Bundle does). One neutral chip, or a few token hues that exclude amber.
 - **U193 · minor · B1, B2, S1** — on a `?u=` link to someone else's account whose taste isn't on this device, the Taste fit column shows by default on Wishlist and bundles, all "—", with no note saying why. Hide the column by default there, or say whose taste is missing.
 
