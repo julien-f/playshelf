@@ -11,6 +11,8 @@ const {
   gameSearchEmptyHtml,
   gameSearchMoreHtml,
   shouldShowRecents,
+  platformLine,
+  gameSearchOptionId,
 } = require('../public/gameSearch.ts');
 
 // `initGameSearch` itself (the debounced fetch/keyboard-nav widget) isn't covered here — it
@@ -99,6 +101,25 @@ test('gameSearchResultHtml: renders both markers when both are true', () => {
 
 test('gameSearchResultHtml: no markers when both are false', () => {
   const html = gameSearchResultHtml({ appid: 620, name: 'Portal 2' }, false, { inLibrary: false, onWishlist: false });
+  assert.ok(!html.includes('game-search-badge'));
+});
+
+// ── games outside Steam ──────────────────────────────────────────────────────
+
+test('platformLine: two platforms, then a count of the rest, then the year', () => {
+  const r = { appid: 'igdb:1', name: 'X', platforms: ['PS5', 'Switch', 'XSX', 'PS4', 'XONE', 'NSW2'], year: 2025 };
+  assert.equal(platformLine(r), 'PS5 · Switch +4 · 2025');
+  assert.equal(platformLine({ ...r, platforms: ['PS2'], year: null }), 'PS2');
+  assert.equal(platformLine({ appid: 620, name: 'Portal 2' }), '');
+});
+
+test('gameSearchResultHtml: a game outside Steam gets a selector-safe id, its platform line and no ownership marker', () => {
+  const r = { appid: 'igdb:9001', name: 'Console Quest', platforms: ['PS5'], year: 2024 };
+  const html = gameSearchResultHtml(r, false, { inLibrary: true, onWishlist: true });
+  assert.equal(gameSearchOptionId('igdb:9001'), 'game-search-opt-igdb-9001');
+  assert.ok(html.includes('id="game-search-opt-igdb-9001"'));
+  assert.ok(html.includes('data-appid="igdb:9001"'));
+  assert.ok(html.includes('<span class="game-search-platforms">PS5 · 2024</span>'));
   assert.ok(!html.includes('game-search-badge'));
 });
 

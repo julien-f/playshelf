@@ -337,6 +337,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   1. add the OpenSearch engine (or a Firefox keyword bookmark on `/search?q=%s`)
   2. type `steam half-life`
 - **Done when**: lands on `/search` with the closest match open; the on-page box refines without reopening the panel.
+- **Edges**: a Steam game and one outside Steam sharing the exact name (the Steam one opens).
 
 ### F3 What should I play next?
 
@@ -362,6 +363,17 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   5. Back to where I came from
 - **Done when**: the list is named for the developer or publisher ("Games by X", "Published by X"); ownership and Taste fit show; the ones I don't own open as a shared list I can save; the panel opens in place; Back returns.
 - **Edges**: no game under that exact name; more than Steam's first page (only those are ranked); Steam's store search down; a game with no Steam tags; developer = publisher; a name ending in `.io` or holding a `/`; opened from `/game/:appid`; going from one developer's list to another's; phone width; keyboard only.
+
+### F5 Look up a game that isn't on Steam
+
+- **Who / goal**: someone who also plays on Switch, PS5 or Xbox checks a console game's length and rating.
+- **Steps**:
+  1. nav search (`/`)
+  2. type
+  3. pick a result showing its platforms
+  4. read the panel (platforms, IGDB rating, HLTB, media)
+- **Done when**: the dropdown and the panel show its platforms; HLTB fills in; on a list route the panel opens in place, elsewhere at `/game/igdb:<id>`; the game joins Recently Looked Up ◇.
+- **Edges**: a title also on Steam appears once, as the Steam game; a PC game IGDB doesn't link to Steam shows twice (accepted: no dedup by name, a wrong merge would hide a game); IGDB down (Steam results, a line saying so, Retry); an instance without IGDB (Steam results only, no failure line); ↑/↓ and R across /search's mixed rows, the lightbox open too.
 
 ## Media
 
@@ -420,6 +432,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   2. Copy link to this game
   3. open elsewhere
 - **Done when**: `/game/<appid>` opens for anyone and carries no account.
+- **Edges**: a game outside Steam (`/game/igdb:<id>`).
 
 ### S3 Open a link from a fresh browser
 

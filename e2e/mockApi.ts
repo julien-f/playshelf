@@ -5,7 +5,7 @@
 // States reproduce what the fixtures alone can't (the `mock` cookie under `npm run dev:mock`,
 // `mockApi(page, { states })` in a test):
 //   no-itad        no ITAD_API_KEY: health says so, every ITAD route answers 503 as server.js does
-//   upstream-down  HLTB, ProtonDB, Steam reviews and achievement rarity return nothing; ITAD routes answer 502
+//   upstream-down  HLTB, ProtonDB, Steam reviews, achievement rarity and IGDB return nothing; ITAD routes answer 502
 //   slow           game details stream in one at a time (dev:mock only — page.route can't stream)
 //   store-down     Steam store pages return nothing (genres, release date, platforms…)
 //   stale          libraries and wishlists read as fetched 12 days ago, until a refresh (D1)
@@ -19,12 +19,13 @@
 //   signed-in      signed in with Steam as Alice, whose account already has prefs (fixtures.ts's signedInPrefs)
 //   creator-capped a developer's/publisher's list is Steam's first page of 523 games
 //   tagless        no game has Steam tags
-//   no-igdb        no Twitch credentials: health says so, GET /api/igdb-game answers 503 as server.js does
+//   no-igdb        no Twitch credentials: health says so, GET /api/igdb-game answers 503, search leaves IGDB out
 //   client-limited this client spent its share of the outbound budgets: details say so once, achievements and prices 429
 import type { Page } from '@playwright/test';
 import { PLAYERS, CATALOG, BUNDLE, PICK_BUNDLE, SIGNED_IN, signedInPrefs, game, type Player } from './fixtures.ts';
 import { flattenBundleGames, type Bundle } from '../public/bundleData.ts';
 import { streamEvent } from '../lib/streamEvent.mjs';
+import { mergeSearchResults } from '../lib/searchMerge.mjs';
 
 // Fixed per worker, for dates that need no freshness; a "fetched" stamp takes the answer's own time: a worker outlives a minute.
 const NOW = Date.now();
@@ -208,6 +209,26 @@ const IGDB_GAME = {
 };
 // A game IGDB links to Steam (Portal 2): the panel opens the Steam game instead.
 const IGDB_STEAM_LINKED = { ...IGDB_GAME, id: 9002, name: 'Portal 2', steamAppid: 620, platforms: ['PC'] };
+// Shares its name with the catalog's Steam God of War (the search's exact-name tie).
+const IGDB_GOW_PS2 = {
+  ...IGDB_GAME,
+  id: 9003,
+  name: 'God of War',
+  url: 'https://www.igdb.com/games/god-of-war--1',
+  summary: 'God of War, the 2005 original.',
+  platforms: ['PS2'],
+  releaseDate: '2005-03-22',
+};
+// On more platforms than a search row lists.
+const IGDB_MANY_PLATFORMS = {
+  ...IGDB_GAME,
+  id: 9004,
+  name: 'Console Quest Odyssey',
+  url: 'https://www.igdb.com/games/console-quest-odyssey',
+  platforms: ['PS5', 'Switch', 'XSX', 'PS4', 'XONE', 'NSW2'],
+  releaseDate: '2025-11-14',
+};
+const IGDB_GAMES = [IGDB_GAME, IGDB_STEAM_LINKED, IGDB_GOW_PS2, IGDB_MANY_PLATFORMS];
 const igdbGame = (game: typeof IGDB_GAME) => {
   const now = Date.now();
   return {
@@ -439,7 +460,7 @@ export function respond(
       fetchedAts: { igdb: null, hltb: null },
       failed: ['igdb', 'hltb'],
     });
-  const igdbFixture = [IGDB_GAME, IGDB_STEAM_LINKED].find((g) => String(g.id) === igdbId);
+  const igdbFixture = IGDB_GAMES.find((g) => String(g.id) === igdbId);
   if (igdbId) return igdbFixture ? json(igdbGame(igdbFixture)) : json({ error: 'No such IGDB game' }, 404);
   if (path.startsWith('/api/achievements/'))
     return json(achievements(url.searchParams.get('steamids'), states.has('upstream-down')));
@@ -447,12 +468,22 @@ export function respond(
 
   if (path === '/api/search-games') {
     const q = (url.searchParams.get('q') ?? '').toLowerCase();
-    const results = CATALOG.filter((g) => g.name.toLowerCase().includes(q)).map((g) => ({
+    const steam = CATALOG.filter((g) => g.name.toLowerCase().includes(q)).map((g) => ({
       appid: g.appid,
       name: g.name,
       tinyImage: '',
     }));
-    return json({ results });
+    if (states.has('no-igdb')) return json({ results: steam });
+    if (states.has('upstream-down')) return json({ results: steam, failed: ['igdb'] });
+    const igdb = IGDB_GAMES.filter((g) => g.name.toLowerCase().includes(q)).map((g) => ({
+      id: g.id,
+      name: g.name,
+      tinyImage: g.cover,
+      platforms: g.platforms,
+      year: Number(g.releaseDate.slice(0, 4)),
+      steamAppid: g.steamAppid,
+    }));
+    return json({ results: mergeSearchResults(steam, igdb, q) });
   }
 
   if (path === '/api/creator-games') {

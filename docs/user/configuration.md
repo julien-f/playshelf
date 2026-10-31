@@ -10,6 +10,7 @@ STEAM_API_KEY=your_key_here
 
 - **`STEAM_API_KEY`** — the only required setting. Get one at <https://steamcommunity.com/dev/apikey>. The server exits at startup with a clear message if it's missing.
 - **`ITAD_API_KEY`** — optional, enables bundle browsing, every price column and the PC Game Pass list. Without it those surfaces are hidden, with a line saying why, and the rest of the app runs normally. Get one by registering an app at <https://isthereanydeal.com/apps/my/>.
+- **`TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET`** — optional, both needed to search and open games outside Steam (PlayStation, Switch, Xbox…) through IGDB. Without them, search covers Steam only and the About page says so. Get them by registering an application at <https://dev.twitch.tv/console/apps> (IGDB's [getting started](https://api-docs.igdb.com/#getting-started)).
 - **`HOST`/`PORT`** — where the server binds; `127.0.0.1:3000` by default. `npm run dev` proxies to them too.
 - **`TRUST_PROXY`** — set it (usually `1`, the number of proxy hops) when running behind a reverse proxy, so rate limits apply per visitor and link previews and sign-in use the proxy's `https`. Unset by default.
 - **`DB_FILE`** — path to the SQLite database (`db.sqlite` by default). Set it empty to run entirely in memory.

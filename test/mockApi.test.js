@@ -29,8 +29,16 @@ test('mockApi: igdb:9001 is a game outside Steam with a cover; other IGDB ids ar
   assert.equal(body.game.steamAppid, null);
   assert.ok(body.game.cover);
   assert.equal((await ask('/api/igdb-game/9002')).body.game.steamAppid, 620);
-  assert.equal((await ask('/api/igdb-game/9003')).status, 404);
+  assert.equal((await ask('/api/igdb-game/1')).status, 404);
   assert.equal((await ask('/api/health')).body.igdbConfigured, true);
+});
+
+// As server.js (lib/searchMerge.mjs): IGDB's games merge into Steam's, a Steam-linked one once.
+test('mockApi: a search merges the IGDB fixtures, the Steam exact name first on a tie', async () => {
+  const keys = async (q) => (await ask(`/api/search-games?q=${q}`)).body.results.map((r) => r.appid);
+  assert.deepEqual(await keys('portal'), [620]);
+  assert.deepEqual(await keys('god of war'), [1593500, 'igdb:9003']);
+  assert.deepEqual(await keys('console quest'), ['igdb:9001', 'igdb:9004']);
 });
 
 // As server.js's stream (lib/streamEvent.mjs): media come from /api/game-meta, the banner stays.

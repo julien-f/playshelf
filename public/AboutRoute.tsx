@@ -1,10 +1,16 @@
 // /about — ported verbatim from the legacy about.html (no logic of its own there either, just
 // static content) as part of the SPA route table (see docs/dev/frontend.md).
+import { createResource, Show } from 'solid-js';
 import { useBaseTitle } from './pageTitle.ts';
 import { ListHero } from './ListHero.tsx';
+import { fetchJson } from './utils.ts';
 
 export default function AboutRoute() {
   useBaseTitle(() => 'About');
+  // Unknown (health unreachable) says nothing rather than guess.
+  const [health] = createResource(() =>
+    fetchJson<{ igdbConfigured?: boolean }>('/api/health', undefined, 'Health check failed').catch(() => null),
+  );
 
   return (
     <div class="container">
@@ -41,6 +47,11 @@ export default function AboutRoute() {
           <li>
             <strong>IsThereAnyDeal</strong> — current Steam bundle listings and prices, on the Bundles page. Requires a
             free API key; the page shows a clear message if one isn't configured.
+          </li>
+          <li>
+            <strong>IGDB</strong> (Twitch) — games outside Steam (PlayStation, Switch, Xbox…) in the search box's
+            results, and their details in the side panel. Requires free Twitch API credentials.
+            <Show when={health()?.igdbConfigured === false}> This instance has none, so it searches Steam only.</Show>
           </li>
         </ol>
       </section>

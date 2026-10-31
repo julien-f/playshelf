@@ -14,6 +14,7 @@ const {
   steamAppidOf,
   normalizeName,
   rankIgdbResults,
+  mergeSearchResults,
   _resetIgdb,
 } = require('../lib/igdb');
 const { _reset } = require('../lib/cache');
@@ -278,4 +279,65 @@ test('getIgdbGame: force skips the cache', async (t) => {
   await getIgdbGame(5);
   await getIgdbGame(5, { force: true });
   assert.equal(queries.length, 2);
+});
+
+// ── mergeSearchResults ───────────────────────────────────────────────────────
+
+const igdbHit = (id, name, steamAppid = null, extra = {}) => ({
+  id,
+  name,
+  tinyImage: null,
+  platforms: ['PS5'],
+  year: 2020,
+  steamAppid,
+  ...extra,
+});
+const keysOf = (rows) => rows.map((r) => r.appid);
+
+test('mergeSearchResults: a Steam-linked IGDB hit is that Steam game, listed once', () => {
+  const steam = [{ appid: 620, name: 'Portal 2', tinyImage: 's.jpg' }];
+  const rows = mergeSearchResults(steam, [igdbHit(72, 'Portal 2', 620)], 'portal');
+  assert.deepEqual(rows, steam);
+});
+
+test('mergeSearchResults: a linked game Steam did not return comes as the Steam game, without IGDB platforms or year', () => {
+  const rows = mergeSearchResults([], [igdbHit(1, 'The Last of Us Part II', 2531310, { tinyImage: 'c.jpg' })], 'tlou');
+  assert.deepEqual(rows, [{ appid: 2531310, name: 'The Last of Us Part II', tinyImage: 'c.jpg' }]);
+});
+
+test("mergeSearchResults: exact-name rows first, then Steam's order, then IGDB's other games", () => {
+  const steam = [
+    { appid: 1, name: 'Halo Infinite' },
+    { appid: 2, name: 'Halo: The Master Chief Collection' },
+  ];
+  const rows = mergeSearchResults(steam, [igdbHit(10, 'Halo 3'), igdbHit(11, 'Halo')], 'halo');
+  assert.deepEqual(keysOf(rows), ['igdb:11', 1, 2, 'igdb:10']);
+  assert.deepEqual(rows[0], { appid: 'igdb:11', name: 'Halo', tinyImage: null, platforms: ['PS5'], year: 2020 });
+});
+
+test('mergeSearchResults: "God of War" — the Steam game and the 2005 PS2 one tie on the exact name, Steam first', () => {
+  const steam = [
+    { appid: 2322010, name: 'God of War Ragnarök' },
+    { appid: 1593500, name: 'God of War' },
+  ];
+  const igdb = [
+    igdbHit(1999, 'God of War', null, { platforms: ['PS2'], year: 2005 }),
+    igdbHit(19560, 'God of War', 1593500),
+  ];
+  assert.deepEqual(keysOf(mergeSearchResults(steam, igdb, 'god of war')), [1593500, 'igdb:1999', 2322010]);
+});
+
+test('mergeSearchResults: the exact name matches regardless of accents, case and spacing', () => {
+  const rows = mergeSearchResults(
+    [{ appid: 1, name: 'Pokémon Legends' }],
+    [igdbHit(5, 'Pokémon  Snap')],
+    'pokemon snap',
+  );
+  assert.deepEqual(keysOf(rows), ['igdb:5', 1]);
+});
+
+test('mergeSearchResults: games IGDB adds are capped at 5; two IGDB games sharing a name both stay', () => {
+  const igdb = Array.from({ length: 8 }, (_, i) => igdbHit(i + 1, 'Doom'));
+  const rows = mergeSearchResults([{ appid: 2280, name: 'DOOM' }], igdb, 'doom');
+  assert.deepEqual(keysOf(rows), [2280, 'igdb:1', 'igdb:2', 'igdb:3', 'igdb:4', 'igdb:5']);
 });

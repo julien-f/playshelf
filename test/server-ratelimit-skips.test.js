@@ -11,6 +11,7 @@ process.env.FRIENDS_RATE_LIMIT_MAX = '2';
 process.env.DETAILS_RATE_LIMIT_MAX = '2';
 process.env.ACHIEVEMENTS_RATE_LIMIT_MAX = '2';
 process.env.BUNDLES_RATE_LIMIT_MAX = '2';
+process.env.GAME_SEARCH_RATE_LIMIT_MAX = '2';
 process.env.ITAD_API_KEY = 'test-itad-key';
 process.env.TWITCH_CLIENT_ID = 'test-client';
 process.env.TWITCH_CLIENT_SECRET = 'test-secret';
@@ -48,6 +49,7 @@ function mockUpstreams(t) {
     if (url.includes('/games/bundles/')) return json([]);
     if (url.includes('oauth2/token')) return json({ access_token: 'tok', expires_in: 5_000_000 });
     if (url.includes('api.igdb.com')) return json([{ id: 1, name: 'Some Game' }]);
+    if (url.includes('storesearch')) return json({ items: [] });
     if (url.includes('search/site/init')) return json({ token: 't', hpKey: 'k', hpVal: 'v' });
     if (url.includes('howlongtobeat.com/api/search/site')) return json({ data: [] });
     throw new Error(`Unexpected fetch: ${url}`);
@@ -129,6 +131,21 @@ test('igdbGame limiter: counts a miss of either source and a refresh, never a ca
     hits: { 410: igdbGame(410) },
   });
   assert.equal((await api.get('/api/igdb-game/410?refresh=1')).status, 429);
+});
+
+test('gameSearch limiter: a term counts until both Steam and IGDB have it cached', async (t) => {
+  _reset();
+  const calls = mockUpstreams(t);
+  setCache('search:steam only', []);
+  setCache('search:both', []);
+  setCache('igdb-search:both', []);
+
+  const search = (q) => () => api.get(`/api/search-games?q=${encodeURIComponent(q)}`);
+  await assertMissesCountHitsDont(calls, {
+    misses: { uncached: search('uncached'), 'cached by Steam only': search('steam only') },
+    over: search('another'),
+    hits: { both: search('both') },
+  });
 });
 
 test('news limiter: counts cache misses but never counts cache hits', async (t) => {

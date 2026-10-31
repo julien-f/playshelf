@@ -15,7 +15,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
   lastHour:     { …same shape as sinceRestart… },
   budgets:         { [group]: { hourUsed, hourMax, hourTopClient, dayUsed, dayMax, dayTopClient } },
   circuitBreakers: { 'steam-store' | hltb | protondb | igdb: { blockedUntil, tripCount, consecutive403s } },
-  semaphores:      { store | tag | proton | reviews | hltb | igdb | 'itad-info': { active, queued, maxQueueSeen, rejected } },
+  semaphores:      { store | tag | proton | reviews | hltb | igdb | 'itad-info': { active, queued, maxQueueSeen, rejected, dropped } },
   cacheEntries:    { [group]: count },
   daily:           [{ day, group, label, status, count }] }
 ```
@@ -50,7 +50,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 ### Live snapshots
 
 - `circuitBreakers` (`lib/circuitBreaker.js`; Steam store, HLTB search, ProtonDB, IGDB): `blockedUntil` (0 = closed), `tripCount` (lifetime, tells "once long ago" from "every 20 minutes"), `consecutive403s` (one more trips it).
-- `semaphores` (`lib/upstream.js` `getSemaphoreStats`, one per `createSemaphore`): `active`/`queued` now, `maxQueueSeen` (lifetime high-water mark), `rejected` (calls turned away by the `SEMAPHORE_MAX_QUEUE` valve; should stay 0). High latency with low `queued` = slow upstream; high `queued` = our own concurrency cap.
+- `semaphores` (`lib/upstream.js` `getSemaphoreStats`, one per `createSemaphore`): `active`/`queued` now, `maxQueueSeen` (lifetime high-water mark), `rejected` (calls turned away by the `SEMAPHORE_MAX_QUEUE` valve; should stay 0), `dropped` (queued calls whose caller gave up first: an IGDB search past its 2.5 s or closed, [integrations.md](integrations.md#igdb--games-outside-steam)). High latency with low `queued` = slow upstream; high `queued` = our own concurrency cap.
 - `budgets`: current usage per outbound `group`, every one listed from startup (0 used) so the ceilings show before anything spends against them; see below.
 
 ## Outbound budgets

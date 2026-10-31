@@ -39,7 +39,7 @@ const {
 } = require('./lib/steam');
 const { getSemaphoreStats } = require('./lib/upstream');
 const { getHLTB } = require('./lib/hltb');
-const { isIgdbConfigured, getIgdbGame, extractIgdbGame } = require('./lib/igdb');
+const { isIgdbConfigured, getIgdbGame, extractIgdbGame, searchIgdb, mergeSearchResults } = require('./lib/igdb');
 const {
   getBundles,
   bundlesCacheKey,
@@ -407,7 +407,7 @@ const gameSearchLimit = namedRateLimit('gameSearch', {
   skip: (req) => {
     const term = normalizeSearchTerm(req.query.q);
     if (term.length < 2) return true; // no upstream call happens below this length
-    return isCached(`search:${term}`);
+    return isCached(`search:${term}`) && (!isIgdbConfigured() || isCached(`igdb-search:${term}`));
   },
 });
 
@@ -848,12 +848,38 @@ function fetchGameDetails(appid, { force = false } = {}) {
 // Backs the "look up any game" search box (both pages) — resolves a typed name to a short
 // list of candidate appids, independent of anyone's library/wishlist. See lib/steam.js's
 // searchStoreGames for the upstream endpoint and docs/dev/integrations.md's trust tiers.
+// IGDB gets this long from the request's start; past it, Steam's results go out alone.
+const IGDB_SEARCH_DEADLINE_MS = 2500;
+
+// IGDB's results, or null once it failed or ran out of time. A search still queued for a slot by
+// then, or when the request closes, is dropped; one already sent runs on and gets cached for next time.
+async function searchIgdbWithin(term, res) {
+  const giveUp = new AbortController();
+  const timer = setTimeout(() => giveUp.abort(), IGDB_SEARCH_DEADLINE_MS);
+  const onClose = () => giveUp.abort();
+  res.on('close', onClose);
+  const deadline = new Promise((resolve) => giveUp.signal.addEventListener('abort', () => resolve(null)));
+  try {
+    return await Promise.race([searchIgdb(term, { signal: giveUp.signal }), deadline]);
+  } catch {
+    return null; // lib/igdb.js already logged it, throttled
+  } finally {
+    clearTimeout(timer);
+    res.off('close', onClose);
+  }
+}
+
 app.get('/api/search-games', gameSearchLimit, async (req, res) => {
   const term = normalizeSearchTerm(req.query.q);
   if (term.length < 2) return res.json({ results: [] });
+  // Unconfigured, IGDB is left out entirely: nothing failed.
+  const igdb = isIgdbConfigured() ? searchIgdbWithin(term, res) : Promise.resolve([]);
   try {
-    const results = await searchStoreGames(term);
-    res.json({ results });
+    const [steam, igdbResults] = await Promise.all([searchStoreGames(term), igdb]);
+    res.json({
+      results: mergeSearchResults(steam, igdbResults ?? [], term),
+      ...(igdbResults === null && { failed: ['igdb'] }),
+    });
   } catch (err) {
     sendRouteError(res, 'search-games', err);
   }

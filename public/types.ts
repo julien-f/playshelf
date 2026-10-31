@@ -231,12 +231,12 @@ export interface IgdbDetails {
   hltb: Hltb | null;
 }
 
-// A game outside Steam open in the panel: never a table row, never in prefs (panel.tsx's igdbRow).
+// A game outside Steam open in the panel: never a list's row, never in prefs (panel.tsx's igdbRow).
 export interface IgdbRow {
   readonly appid: IgdbKey;
   readonly name: string;
   readonly loading: boolean;
-  readonly standalone: true;
+  readonly standalone: boolean;
   readonly details: IgdbDetails | null;
   readonly igdb: IgdbLoad | undefined; // undefined while it loads
   readonly mediaFailed?: undefined;

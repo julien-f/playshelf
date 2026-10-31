@@ -172,6 +172,13 @@ A lightbox on another screen, for showing trailers and screenshots to the people
 
 `/search?q=<term>` searches by name, leaving out demos (a game's panel links its own), and opens the closest match in the panel — useful as a browser keyword search. The site publishes an OpenSearch descriptor, so Chrome offers to add it as a search engine on its own (right-click the address bar → manage search engines) — pick it, then type its keyword followed by a game name to jump straight there. Firefox needs a manual bookmark instead: bookmark `https://<your-instance>/search?q=%s`, give it a keyword (e.g. `steam`), then type `steam half-life` in the address bar. The page has its own search box too, for refining or starting a new search without leaving it (both search boxes select their text on focus, and their clear button (x) empties them) — typing there updates the list without reopening the panel until you click a result. The nav bar's own "Look up any game" box also offers a "See all results for…" link into this page once you've typed a query.
 
+### Games outside Steam
+
+- When the instance has [IGDB credentials](configuration.md), both search boxes also list games that aren't on Steam (PlayStation, Switch, Xbox…), with their platforms and year under the name ("PS5 · Switch +4 · 2025"). A game on Steam shows once, as the Steam game.
+- Order: a title matching what you typed exactly comes first (the Steam game first when both have it), then Steam's results, then up to 5 games outside Steam.
+- One opens in the panel like a Steam game: platforms, IGDB rating, How Long To Beat, summary and media; its link is `/game/igdb:<id>`. It doesn't join Recently Looked Up, lists or statuses.
+- If IGDB doesn't answer, the results are Steam's only, with a line saying so and **Retry**.
+
 ## Sharing
 
 - A game's own link (`/game/<appid>`) opens that game for anyone, whether or not they own it.

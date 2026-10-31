@@ -57,7 +57,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 
 **Looking up a game never navigates away from a route with a list context of its own** — the nav-bar search box and a panel's DLC/base-game links open in place (a real row if the appid is loaded, a standalone panel via `?game=` otherwise). `/search` counts as having one (its results). Only Home, `/bundles`, `/about`, the rank screen (`RankRoute`) and the 404 page navigate, to `/game/:appid`. See `AppShell.tsx`'s `openGameGlobally`.
 
-- **A game outside Steam** is keyed `igdb:<id>` (`gameKey.ts`'s `GameKey`) wherever a Steam appid can be: `/game/igdb:9001`, `?game=igdb%3A9001`, `RouteHandlers.openGame`. It opens as a standalone panel and is never a table row, nor stored in prefs (Recently Looked Up, statuses, lists, ranking): on `/game` it opens beside the list without joining it. A link is always an absolute path: a relative `igdb:9001` reads as a URL scheme.
+- **A game outside Steam** is keyed `igdb:<id>` (`gameKey.ts`'s `GameKey`) wherever a Steam appid can be: `/game/igdb:9001`, `?game=igdb%3A9001`, `RouteHandlers.openGame`. It opens as a standalone panel and is never a list's row (only `/search`'s, where ↑/↓, R and the lightbox step across Steam and IGDB rows alike), nor stored in prefs (Recently Looked Up, statuses, lists, ranking): on `/game` it opens beside the list without joining it. A link is always an absolute path: a relative `igdb:9001` reads as a URL scheme.
 - That navigation carries `{ lookup: true }` in its history state, so the panel takes that entry as its own (`overlayHistory.ts`'s `ownPage`): ×, Esc and Back all return to the page the lookup came from in one step, rather than to Recently Looked Up. A shared `/game/:appid` link has no such state and closes to `/game`.
 
 ## Module map
@@ -312,6 +312,9 @@ The "look up any game" box is one nav-bar search in the shell, not one per route
 - Focused while **empty**, it shows recently looked-up games under a heading, with a sticky "See all recently looked up" row (with an arrow) to `/game`. They're `GameSearchResult`-shaped, so roving selection, ownership markers and `onSelect` apply unchanged; the heading and "see all" row are `role="presentation"`.
 - `gameSearch.ts` takes the list and the "see all" destination as options rather than importing `recentGames.ts`.
 - Typing a query gets "See all results for '…'" instead, to `/search?q=…`.
+- Results mix Steam games and games outside Steam (`igdb:` keys, option ids `game-search-opt-igdb-<id>` since a colon breaks a selector), ordered by the server ([integrations.md](integrations.md#igdb--games-outside-steam)). An IGDB row shows its platforms and year on a muted line under the name, two platforms then "+N" (`platformLine`), the name clipping before it; its cover is cropped to a Steam capsule's box; it gets no ✓/☆ and never joins Recently Looked Up (`AppShell.tsx`'s `onSelect`). `/search` renders the same line in its table.
+- IGDB not answering adds "⚠ IGDB didn't answer — Steam results only" with a Retry (a plain button, reached by Tab: the roving selection is for games); an instance without IGDB shows nothing of it.
+- `/search?q=`'s auto-open takes the top row: the server's order already puts a Steam exact match before an IGDB one.
 
 `AccountChip.tsx` says who the app is showing, following a `?u=` link that resolves after mount, with a link icon (named "from a link") when a link's account is showing.
 

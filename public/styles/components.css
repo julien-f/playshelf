@@ -4893,6 +4893,9 @@
   .search-page-status {
     color: var(--muted);
   }
+  .search-page-failed {
+    color: var(--warn);
+  }
   /* SearchClearButton.tsx, inside either search box's right edge. */
   .search-clear {
     position: absolute;
@@ -4963,6 +4966,33 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* A game outside Steam's name over its platforms and year; each clips rather than wraps. */
+  .game-search-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .game-search-text > .game-search-name {
+    flex: none;
+  }
+  .game-search-platforms {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: var(--fs-meta);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .game-search-failed {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--line);
+    color: var(--warn);
+    font-size: var(--fs-meta);
   }
   .game-search-section {
     padding: 8px 10px 4px;

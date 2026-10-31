@@ -381,3 +381,13 @@ test("an IGDB game refused by this client's share reads as failed and limited, n
     [],
   );
 });
+
+test("an IGDB search refused by this client's share reads as failed, not a 429 for the whole search", async (t) => {
+  setup(t);
+  await runAsClient('203.0.113.9', async () => {
+    for (let i = 0; i < 2; i++) await createTrackedFetch('igdb')('spend', 'https://example.com/');
+  });
+  const res = await api.get('/api/search-games?q=refused').set('X-Forwarded-For', '203.0.113.9');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.failed, ['igdb']);
+});

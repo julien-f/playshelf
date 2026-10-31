@@ -248,7 +248,7 @@ test('createSemaphore: rejected counts calls turned away once maxQueue is hit, a
   const p2 = sem(() => Promise.resolve('queued')); // fills the one queue slot
   await new Promise((r) => setImmediate(r));
 
-  assert.deepEqual(sem.getStats(), { active: 1, queued: 1, maxQueueSeen: 1, rejected: 0 });
+  assert.deepEqual(sem.getStats(), { active: 1, queued: 1, maxQueueSeen: 1, rejected: 0, dropped: 0 });
 
   // A 3rd call is turned away outright — the queue is already full.
   await assert.rejects(() => sem(() => Promise.resolve('never runs')), /Too many queued/);
@@ -261,6 +261,31 @@ test('createSemaphore: rejected counts calls turned away once maxQueue is hit, a
   releaseFirst('done');
   assert.equal(await p1, 'done');
   assert.equal(await p2, 'queued');
+});
+
+test('createSemaphore: an aborted signal drops a queued job without running it or taking a slot', async () => {
+  const sem = createSemaphore(1, 0, 'test-drop-sem');
+  let releaseFirst;
+  const first = sem(() => new Promise((r) => (releaseFirst = r)));
+  const giveUp = new AbortController();
+  let ran = false;
+  const dropped = sem(
+    async () => {
+      ran = true;
+    },
+    { signal: giveUp.signal },
+  );
+  giveUp.abort();
+  await assert.rejects(dropped, { name: 'AbortError' });
+  assert.deepEqual(sem.getStats(), { active: 1, queued: 0, maxQueueSeen: 1, rejected: 0, dropped: 1 });
+  await assert.rejects(
+    sem(async () => {}, { signal: giveUp.signal }),
+    { name: 'AbortError' },
+  );
+  assert.equal(sem.getStats().dropped, 2, 'already aborted: never queued');
+  releaseFirst('done');
+  assert.equal(await first, 'done');
+  assert.equal(ran, false);
 });
 
 test('getGameRating: throws when fetch fails', async (t) => {

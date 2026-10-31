@@ -19,7 +19,14 @@ import { renderPanelNav, stepGameList } from './panelNav.ts';
 import { setPanelParam, setSearchQueryParam, parseUrlState } from './urlState.ts';
 import { addRecentGame } from './recentGames.ts';
 import { peekMyOwnershipStatus } from './myOwnership.ts';
-import { GAME_SEARCH_DEBOUNCE_MS, GAME_SEARCH_MIN_CHARS, ownershipMarkersHtml, searchGames } from './gameSearch.ts';
+import {
+  GAME_SEARCH_DEBOUNCE_MS,
+  GAME_SEARCH_MIN_CHARS,
+  IGDB_FAILED_TEXT,
+  ownershipMarkersHtml,
+  platformLine,
+  searchGames,
+} from './gameSearch.ts';
 import type { GameSearchResult } from './gameSearch.ts';
 import type { Game, GameDetailsReply } from './types.ts';
 import { detailsFields, failedLookupFields, fetchJson } from './utils.ts';
@@ -44,8 +51,17 @@ function renderName(_value: unknown, row: GameSearchResult): Node {
   const wrap = document.createElement('span');
   wrap.className = 'game-search-name';
   wrap.appendChild(document.createTextNode(row.name));
-  wrap.insertAdjacentHTML('beforeend', ownershipMarkersHtml(peekMyOwnershipStatus(row.appid)));
-  return wrap;
+  if (!isIgdbKey(row.appid))
+    wrap.insertAdjacentHTML('beforeend', ownershipMarkersHtml(peekMyOwnershipStatus(row.appid)));
+  const platforms = platformLine(row);
+  if (!platforms) return wrap;
+  const text = document.createElement('span');
+  text.className = 'game-search-text';
+  const line = document.createElement('span');
+  line.className = 'game-search-platforms';
+  line.textContent = platforms;
+  text.append(wrap, line);
+  return text;
 }
 
 const SEARCH_COLUMNS: ColumnDef<GameSearchResult>[] = [
@@ -82,6 +98,7 @@ export default function SearchRoute() {
   const [results, setResults] = createSignal<GameSearchResult[]>([]);
   const [searching, setSearching] = createSignal(false);
   const [searchFailed, setSearchFailed] = createSignal(false);
+  const [igdbFailed, setIgdbFailed] = createSignal(false);
 
   // For the keyboard bridges between the search box and the table's first row — see their
   // own onKeyDown handlers below.
@@ -103,32 +120,34 @@ export default function SearchRoute() {
   });
 
   let searchToken = 0;
-  createEffect(
-    on(query, (term) => {
-      const token = ++searchToken;
-      // Same floor as the nav-bar box (gameSearch.ts) — a 1-character query is expensive and
-      // near-meaningless against an unofficial, unpaginated store-search endpoint.
-      if (term.length < GAME_SEARCH_MIN_CHARS) {
+  function runSearch(term: string): void {
+    const token = ++searchToken;
+    // Same floor as the nav-bar box (gameSearch.ts) — a 1-character query is expensive and
+    // near-meaningless against an unofficial, unpaginated store-search endpoint.
+    if (term.length < GAME_SEARCH_MIN_CHARS) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    setSearchFailed(false);
+    searchGames(term)
+      .then((reply) => {
+        if (token !== searchToken) return;
+        setResults(reply.results);
+        setIgdbFailed(reply.igdbFailed);
+      })
+      .catch(() => {
+        if (token !== searchToken) return;
         setResults([]);
-        setSearching(false);
-        return;
-      }
-      setSearching(true);
-      setSearchFailed(false);
-      searchGames(term)
-        .then((list) => {
-          if (token === searchToken) setResults(list);
-        })
-        .catch(() => {
-          if (token !== searchToken) return;
-          setResults([]);
-          setSearchFailed(true);
-        })
-        .finally(() => {
-          if (token === searchToken) setSearching(false);
-        });
-    }),
-  );
+        setIgdbFailed(false);
+        setSearchFailed(true);
+      })
+      .finally(() => {
+        if (token === searchToken) setSearching(false);
+      });
+  }
+  createEffect(on(query, runSearch));
 
   const hasImages = createMemo(() => results().some((r) => r.tinyImage));
   const table = createTableState<GameSearchResult>(results, () => (hasImages() ? SEARCH_COLUMNS : NAME_ONLY_COLUMNS));
@@ -139,15 +158,11 @@ export default function SearchRoute() {
     () => tableContainer,
   );
 
-  // The minimal Game[] shape panelNav.ts's stepGameList/renderPanelNav and panel.tsx's
-  // pickRandomFrom need — unrelated to what backs the visible table (GameSearchResult is enough
-  // for that).
-  function getGameList(): Game[] {
-    return results().map((r) => ({ appid: r.appid, name: r.name, loading: true, details: null }) as Game);
-  }
+  // What panelNav.ts's stepGameList/renderPanelNav and panel.tsx's pickRandomFrom need: the rows, in table order.
+  const getGameList = (): GameSearchResult[] => results();
 
   // `focus: true` moves real DOM focus too, so the row shows its ring while the panel is open.
-  function focusRow(appid: number): void {
+  function focusRow(appid: GameKey): void {
     const row = results().find((r) => r.appid === appid);
     if (row) table.focus.moveTo(row, { focus: true });
   }
@@ -184,17 +199,18 @@ export default function SearchRoute() {
   }
 
   // A game outside Steam: beside the results, its panel loading it.
-  function openIgdb(key: IgdbKey): void {
+  function openIgdb(key: IgdbKey, standalone: boolean): void {
     ++lookupToken;
     setStatusText('');
-    const game = igdbRow(key);
+    const game = igdbRow(key, standalone);
     panelOpen(game);
     setPanelParam(key);
     renderPanelNav({ hasList: true, game, getGameList, onStep: stepGame, onReroll: pickRandomGame });
+    focusRow(key);
   }
-  function openKey(key: GameKey, standalone: boolean): void {
-    if (isIgdbKey(key)) openIgdb(key);
-    else openResult(key, '', null, standalone);
+  function openKey(key: GameKey, standalone = false, name = '', tinyImage: string | null = null): void {
+    if (isIgdbKey(key)) openIgdb(key, standalone);
+    else openResult(key, name, tinyImage, standalone);
   }
 
   // The panel's ↻: forces fresh details onto the open game.
@@ -219,7 +235,7 @@ export default function SearchRoute() {
   function stepGame(dir: 1 | -1): boolean {
     const next = stepGameList(getGameList(), getPanelGame(), dir);
     if (!next) return false;
-    openResult(next.appid, next.name, null);
+    openKey(next.appid, false, next.name);
     return true;
   }
 
@@ -227,9 +243,9 @@ export default function SearchRoute() {
     if (getPanelGame()?.standalone) return false;
     const list = getGameList();
     if (!list.length) return false;
-    const pick = pickRandomFrom(list, RANDOM_QUEUE_KEY, getPanelGame()?.appid ?? 0) as Game | null;
+    const pick = pickRandomFrom(list, RANDOM_QUEUE_KEY, getPanelGame()?.appid ?? 0);
     if (!pick) return false;
-    openResult(pick.appid, pick.name, null);
+    openKey(pick.appid, false, pick.name);
     return true;
   }
 
@@ -245,20 +261,21 @@ export default function SearchRoute() {
   // bookmark's whole point) — never for a later edit to the on-page box, which would otherwise
   // yank the panel open on every pause while the user is still typing/browsing. `?game=` (a
   // reload, or a shared link) reopens that exact game and counts as having already auto-opened;
-  // otherwise the first non-empty result list does, opening its top (closest) match.
+  // otherwise the first non-empty result list does, opening its top (closest) match: an exact name
+  // before the rest, a Steam game's before one outside Steam (lib/searchMerge.mjs).
   let hasAutoOpened = false;
   onMount(() => {
     const restoreAppid = parseUrlState(location.search).game;
     if (restoreAppid) {
       hasAutoOpened = true;
-      openKey(restoreAppid, false);
+      openKey(restoreAppid);
     }
   });
   createEffect(() => {
     const list = results();
     if (hasAutoOpened || !list.length) return;
     hasAutoOpened = true;
-    openResult(list[0].appid, list[0].name, list[0].tinyImage);
+    openKey(list[0].appid, false, list[0].name, list[0].tinyImage);
   });
 
   onMount(() => {
@@ -325,6 +342,14 @@ export default function SearchRoute() {
       <Show when={query()} fallback={<p class="search-page-status">Type a game name to search.</p>}>
         <Show when={query().length >= GAME_SEARCH_MIN_CHARS} fallback={<p class="search-page-status">Keep typing…</p>}>
           <Show when={!searching()} fallback={<p class="search-page-status">Searching…</p>}>
+            <Show when={igdbFailed()}>
+              <p class="search-page-status search-page-failed" role="status">
+                ⚠ {IGDB_FAILED_TEXT}{' '}
+                <button type="button" class="btn" onClick={() => runSearch(query())}>
+                  Retry
+                </button>
+              </p>
+            </Show>
             <Show
               when={results().length}
               fallback={
@@ -361,7 +386,7 @@ export default function SearchRoute() {
                   // toolbar control applies, so none renders.
                   showSearch={false}
                   showColumns={false}
-                  onRowClick={(r) => openResult(r.appid, r.name, r.tinyImage)}
+                  onRowClick={(r) => openKey(r.appid, false, r.name, r.tinyImage)}
                   currentRow={results().find((r) => r.appid === getPanelGame()?.appid) ?? null}
                 />
               </div>

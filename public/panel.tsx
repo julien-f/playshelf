@@ -406,7 +406,8 @@ export function getPanelKey(): GameKey | null {
 }
 
 // A game outside Steam, as the panel opens it: read through the open game's IGDB resource, so it fills in place.
-export function igdbRow(key: IgdbKey): IgdbRow {
+// Standalone unless it's one of /search's rows, which ↑/↓ and R step through.
+export function igdbRow(key: IgdbKey, standalone = true): IgdbRow {
   const load = (): IgdbLoad | undefined => {
     const loaded = panelData.igdb();
     return loaded?.key === key ? loaded.load : undefined; // another game's, kept while this one loads
@@ -417,7 +418,7 @@ export function igdbRow(key: IgdbKey): IgdbRow {
   };
   return {
     appid: key,
-    standalone: true,
+    standalone,
     get name() {
       return ok()?.reply.game.name ?? '';
     },

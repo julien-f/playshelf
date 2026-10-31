@@ -27,6 +27,7 @@ const { _resetIgdb } = require('../lib/igdb');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
 const { SESSION_TTL_MS, MISS_CACHE_TTL_MS } = require('../lib/config');
 const { getMetrics } = require('../lib/metrics');
+const { getSemaphoreStats } = require('../lib/upstream');
 
 const api = supertest(app);
 
@@ -1151,7 +1152,7 @@ for (const comingSoon of [true, false]) {
 
 // ── GET /api/igdb-game/:igdbId ────────────────────────────────────────────────
 
-// Sets the Twitch credentials for one test; `igdb(body)` answers each IGDB query, HLTB knows one game.
+// Sets the Twitch credentials for one test; `igdb(body)` answers each IGDB query, HLTB knows one game, Steam's search one.
 function mockIgdbRoute(t, igdb = () => ({ ok: true, status: 200, json: async () => [] })) {
   _reset();
   _resetAuth();
@@ -1170,6 +1171,12 @@ function mockIgdbRoute(t, igdb = () => ({ ok: true, status: 200, json: async () 
     if (url.includes('oauth2/token'))
       return { ok: true, status: 200, json: async () => ({ access_token: 'tok', expires_in: 5_000_000 }) };
     if (url.includes('api.igdb.com')) return igdb(opts.body);
+    if (url.includes('storesearch'))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ items: [{ id: 400, name: 'Portal', tiny_image: 'p.jpg' }] }),
+      };
     if (url.includes('search/site/init'))
       return { ok: true, status: 200, json: async () => ({ token: 't', hpKey: 'k', hpVal: 'v' }) };
     if (url.includes('api/search/site')) {
@@ -1936,6 +1943,108 @@ test('GET /api/search-games: a request blocked by an open circuit returns 502 wi
     errorsBefore,
     'no new [upstream:...] line for a call blocked by the already-open circuit',
   );
+});
+
+const IGDB_SEARCH_HITS = [
+  { id: 71, name: 'Portal', external_games: [{ external_game_source: 1, uid: '400' }] },
+  {
+    id: 9001,
+    name: 'Portal Knights Pocket',
+    platforms: [{ abbreviation: 'Switch' }],
+    first_release_date: 1_600_000_000,
+  },
+];
+
+const flushIo = async () => {
+  for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+};
+
+test('GET /api/search-games: IGDB hits join Steam results, a Steam-linked one once', async (t) => {
+  mockIgdbRoute(t, igdbReply(IGDB_SEARCH_HITS));
+  const res = await api.get('/api/search-games?q=portal');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, {
+    results: [
+      { appid: 400, name: 'Portal', tinyImage: 'p.jpg' },
+      { appid: 'igdb:9001', name: 'Portal Knights Pocket', tinyImage: null, platforms: ['Switch'], year: 2020 },
+    ],
+  });
+});
+
+test('GET /api/search-games: without Twitch credentials IGDB is left out, not failed', async (t) => {
+  _reset();
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({ items: [{ id: 400, name: 'Portal' }] }),
+  }));
+  t.mock.method(console, 'warn', () => {});
+  const res = await api.get('/api/search-games?q=portal');
+  assert.equal(res.body.failed, undefined);
+  assert.ok(fetchMock.mock.calls.every((c) => !/igdb|twitch/.test(String(c.arguments[0]))));
+});
+
+test('GET /api/search-games: an IGDB failure leaves Steam results, with failed: igdb', async (t) => {
+  mockIgdbRoute(t, () => ({ ok: false, status: 500 }));
+  const res = await api.get('/api/search-games?q=portal');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { results: [{ appid: 400, name: 'Portal', tinyImage: 'p.jpg' }], failed: ['igdb'] });
+});
+
+test('GET /api/search-games: an open IGDB breaker reads as failed, with no IGDB request', async (t) => {
+  const urls = mockIgdbRoute(t, () => ({ ok: false, status: 403 }));
+  await api.get('/api/search-games?q=trip-a');
+  await api.get('/api/search-games?q=trip-b');
+  const sent = urls.filter((u) => u.includes('api.igdb.com')).length;
+  const res = await api.get('/api/search-games?q=trip-c');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.failed, ['igdb']);
+  assert.equal(urls.filter((u) => u.includes('api.igdb.com')).length, sent);
+});
+
+// IGDB queries hang until the returned `release()`, which a test's end calls too, so no slot stays taken.
+function hangIgdb(t) {
+  const waiting = [];
+  const urls = mockIgdbRoute(t, () => new Promise((resolve) => waiting.push(resolve)));
+  const release = () =>
+    waiting.splice(0).forEach((resolve) => resolve({ ok: true, status: 200, json: async () => [] }));
+  t.after(release);
+  return { urls, waiting, release };
+}
+
+test('GET /api/search-games: past its deadline IGDB is dropped and Steam results go out alone', async (t) => {
+  const { waiting } = hangIgdb(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const reply = api.get('/api/search-games?q=portal').then((r) => r);
+  while (!waiting.length) await flushIo();
+  t.mock.timers.tick(2499);
+  await flushIo();
+  t.mock.timers.tick(1);
+  const res = await reply;
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { results: [{ appid: 400, name: 'Portal', tinyImage: 'p.jpg' }], failed: ['igdb'] });
+});
+
+test('GET /api/search-games: a closed request drops its IGDB search still waiting for a slot', async (t) => {
+  const { urls, waiting, release } = hangIgdb(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] }); // no deadline: only the close can drop it
+  const busy = ['busy-a', 'busy-b', 'busy-c', 'busy-d'].map((q) => api.get(`/api/search-games?q=${q}`).then((r) => r));
+  while (waiting.length < 4) await flushIo();
+  const before = getSemaphoreStats().igdb;
+
+  const server = app.listen(0);
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const req = http.get(`http://127.0.0.1:${server.address().port}/api/search-games?q=closed`);
+  req.on('error', () => {});
+  while (getSemaphoreStats().igdb.queued === before.queued) await flushIo();
+  req.destroy();
+  while (getSemaphoreStats().igdb.dropped === before.dropped) await flushIo();
+  assert.equal(getSemaphoreStats().igdb.queued, before.queued);
+
+  release();
+  await Promise.all(busy);
+  await flushIo();
+  assert.equal(urls.filter((u) => u.includes('api.igdb.com')).length, 4, 'the dropped search never went out');
 });
 
 // ── GET /api/achievements/:appid ─────────────────────────────────────────────

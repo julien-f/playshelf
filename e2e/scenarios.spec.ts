@@ -8351,3 +8351,137 @@ test("F1 edge: a game outside Steam says when IGDB didn't answer, or when this i
   await expect(panel.getByText("This instance can't look up games outside Steam.")).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Retry' })).toHaveCount(0);
 });
+
+const navSearch = async (page: Page, term: string) => {
+  await page.keyboard.press('/');
+  await page.keyboard.type(term);
+};
+
+test('F5: look up a game outside Steam from the nav search, in place on a list and at its own address elsewhere', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(6);
+  const before = await prefsBlob(page);
+  await navSearch(page, 'console quest');
+  const option = page.getByRole('option', { name: /^Console Quest PS5 · Switch · 2024/ });
+  await expect(option).toBeVisible();
+  await expect(page.getByRole('option', { name: /Console Quest Odyssey/ })).toContainText('PS5 · Switch +4 · 2025');
+  await option.click();
+  await expect(page).toHaveURL(/\/lists\/owned\?game=igdb%3A9001$/);
+  const panel = page.locator('#game-panel');
+  await expect(page.locator('#panel-title')).toHaveText('Console Quest');
+  await expect(panel.getByText('Not on Steam · PS5 · Switch')).toBeVisible();
+  await expect(panel.getByRole('link', { name: /^IGDB 88/ })).toBeVisible();
+  await expect(panel).toContainText('12h');
+  await expect(panel.locator('.panel-hero-open')).toBeVisible();
+  expect(await prefsBlob(page)).toBe(before);
+
+  await page.goto('/about');
+  await navSearch(page, 'console quest');
+  await expect(option).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/game\/igdb:9001$/);
+  await expect(page.locator('#panel-title')).toHaveText('Console Quest');
+});
+
+test('F5 edge: a title also on Steam appears once, as the Steam game; sharing an exact name, the Steam one comes first', async ({
+  page,
+}) => {
+  await page.goto('/about');
+  await navSearch(page, 'portal 2');
+  await expect(page.getByRole('option', { name: /Portal 2/ })).toHaveCount(1);
+  await expect(page.locator('.game-search-platforms')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await navSearch(page, 'god of war');
+  const options = page.locator('.game-search-result');
+  await expect(options).toHaveCount(2);
+  await expect(options.first()).toHaveAttribute('data-appid', '1593500');
+  await expect(options.last()).toHaveAttribute('id', 'game-search-opt-igdb-9003');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByPlaceholder('Look up any game…')).toHaveAttribute(
+    'aria-activedescendant',
+    'game-search-opt-igdb-9003',
+  );
+});
+
+test('F2 edge: a Steam game and one outside Steam sharing the exact name: the Steam one opens', async ({ page }) => {
+  await page.goto('/search?q=god%20of%20war');
+  await expect(page).toHaveURL(/[?&]game=1593500$/);
+  await expect(page.locator('#panel-title')).toHaveText('God of War');
+  await expect(rows(page)).toHaveCount(2);
+});
+
+test("F5 edge: IGDB down leaves Steam's results, says so, and retries", async ({ page }) => {
+  await mockApi(page, { states: ['upstream-down'] });
+  await page.goto('/about');
+  await navSearch(page, 'god of war');
+  const failed = page.locator('#app-search-results').getByRole('status');
+  await expect(failed).toHaveText(/IGDB didn't answer — Steam results only/);
+  await expect(page.locator('.game-search-result')).toHaveCount(1);
+  await mockApi(page); // registered last, so it answers first
+  await failed.getByRole('button', { name: 'Retry' }).click();
+  await expect(page.locator('.game-search-result')).toHaveCount(2);
+  await expect(failed).toHaveCount(0);
+  await expect(page.getByPlaceholder('Look up any game…')).toBeFocused();
+
+  await mockApi(page, { states: ['upstream-down'] });
+  await page.goto('/search?q=console');
+  await expect(page.getByText('No games found for "console".')).toBeVisible();
+  const line = page.locator('.search-page-failed');
+  await expect(line).toContainText("IGDB didn't answer — Steam results only");
+  await mockApi(page);
+  await line.getByRole('button', { name: 'Retry' }).click();
+  await expect(rows(page)).toHaveCount(2);
+  await expect(line).toHaveCount(0);
+});
+
+test('F5 edge: an instance without IGDB searches Steam only, with no failure line, and About says so', async ({
+  page,
+}) => {
+  await mockApi(page, { states: ['no-igdb'] });
+  await page.goto('/about');
+  await expect(page.getByText('This instance has none, so it searches Steam only.')).toBeVisible();
+  await navSearch(page, 'god of war');
+  await expect(page.locator('.game-search-result')).toHaveCount(1);
+  await expect(page.locator('.game-search-failed')).toHaveCount(0);
+});
+
+test("F5 edge: ↑/↓ and R step across /search's mixed rows, the lightbox open too", async ({ page }) => {
+  await page.goto('/search?q=god%20of%20war');
+  await expect(page).toHaveURL(/[?&]game=1593500$/);
+  const panel = page.locator('#game-panel');
+  await page.keyboard.press('ArrowDown');
+  await expect(page).toHaveURL(/[?&]game=igdb%3A9003$/);
+  await expect(panel.getByText('Not on Steam · PS2')).toBeVisible();
+  await expect(panel.locator('.panel-nav-pos')).toHaveText('2 / 2');
+  await page.keyboard.press('ArrowUp');
+  await expect(page).toHaveURL(/[?&]game=1593500$/);
+  await page.keyboard.press('r');
+  await expect(page).toHaveURL(/[?&]game=igdb%3A9003$/);
+
+  await panel.locator('.panel-hero-open').click();
+  await expect(page.locator('#screenshot-lightbox')).toHaveAttribute('open');
+  await page.keyboard.press('ArrowDown');
+  await expect(page).toHaveURL(/[?&]game=1593500&shot=banner$/);
+  await expect(page.locator('#screenshot-lightbox')).toContainText('game 1 / 2');
+  await page.keyboard.press('ArrowUp');
+  await expect(page).toHaveURL(/[?&]game=igdb%3A9003&shot=/);
+  await expect(page.locator('#screenshot-lightbox')).toContainText('game 2 / 2');
+});
+
+test('S2 edge: a game outside Steam copies its own link', async ({ page }) => {
+  await page.goto('/game/igdb:9001');
+  await page.evaluate(() => {
+    (window as unknown as { copied: string }).copied = '';
+    navigator.clipboard.writeText = async (text) => {
+      (window as unknown as { copied: string }).copied = text;
+    };
+  });
+  await page.getByRole('button', { name: 'Copy link to this game' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Copied to clipboard' })).toHaveCount(1);
+  expect(await page.evaluate(() => (window as unknown as { copied: string }).copied)).toMatch(/\/game\/igdb:9001$/);
+});

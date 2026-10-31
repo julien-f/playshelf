@@ -3,11 +3,21 @@ import { createComponent, createEffect, untrack } from 'solid-js';
 import ArrowRight from 'lucide-solid/icons/arrow-right';
 import { peekMyOwnership, trackMyOwnership } from './myOwnership.ts';
 import type { OwnershipStatus } from './myOwnership.ts';
+import { isIgdbKey, parseGameKey, type GameKey } from './gameKey.ts';
 
+// A Steam game, or (an `igdb:` key) one outside Steam, with its platforms and year.
 export interface GameSearchResult {
-  appid: number;
+  appid: GameKey;
   name: string;
   tinyImage: string | null;
+  platforms?: string[];
+  year?: number | null;
+}
+
+// `igdbFailed`: IGDB didn't answer, so these are Steam's results only; never set on an instance without IGDB.
+export interface GameSearchReply {
+  results: GameSearchResult[];
+  igdbFailed: boolean;
 }
 
 // The nav bar's "look up any game" widget (AppShell), opening the side panel for an arbitrary
@@ -28,11 +38,27 @@ export const GAME_SEARCH_DEBOUNCE_MS = 300;
 export const GAME_SEARCH_MIN_CHARS = 2;
 
 // Throws on a failed request, so callers can tell it from no match.
-export async function searchGames(term: string): Promise<GameSearchResult[]> {
+export async function searchGames(term: string): Promise<GameSearchReply> {
   const url = `/api/search-games?q=${encodeURIComponent(term)}`;
-  const data = await fetchJson<{ results?: GameSearchResult[] }>(url, undefined, 'Search failed');
-  return data.results || [];
+  const data = await fetchJson<{ results?: GameSearchResult[]; failed?: string[] }>(url, undefined, 'Search failed');
+  return { results: data.results || [], igdbFailed: !!data.failed?.includes('igdb') };
 }
+
+export const IGDB_FAILED_TEXT = "IGDB didn't answer — Steam results only";
+
+// Platforms listed on a row before the rest collapse into "+N".
+const PLATFORMS_SHOWN = 2;
+
+// The muted line under a game outside Steam's name: "PS5 · Switch +4 · 2024"; '' for a Steam game.
+export function platformLine(r: GameSearchResult): string {
+  const platforms = r.platforms ?? [];
+  const more = platforms.length - PLATFORMS_SHOWN;
+  const listed = platforms.slice(0, PLATFORMS_SHOWN).join(' · ') + (more > 0 ? ` +${more}` : '');
+  return [listed, r.year].filter(Boolean).join(' · ');
+}
+
+// An element id from a key: `igdb:N` holds a colon, which a CSS selector would read as a pseudo-class.
+export const gameSearchOptionId = (key: GameKey): string => `game-search-opt-${String(key).replace(':', '-')}`;
 
 // Recognizes a bare appid ("1245620") or a Steam store URL containing "/app/<id>" — either
 // way, no name search is needed; the appid alone is enough to open the panel.
@@ -70,12 +96,16 @@ export function gameSearchResultHtml(
   const thumb = r.tinyImage
     ? `<img class="game-search-thumb" src="${esc(r.tinyImage)}" alt="" loading="lazy">`
     : '<span class="game-search-thumb game-search-thumb--empty"></span>';
+  const platforms = platformLine(r);
   return `
-    <button type="button" id="game-search-opt-${esc(r.appid)}" role="option" aria-selected="${active}" tabindex="-1"
+    <button type="button" id="${esc(gameSearchOptionId(r.appid))}" role="option" aria-selected="${active}" tabindex="-1"
       class="game-search-result${active ? ' active' : ''}" data-appid="${esc(r.appid)}" data-name="${esc(r.name)}">
       ${thumb}
-      <span class="game-search-name">${esc(r.name)}</span>
-      ${ownershipMarkersHtml(ownership)}
+      <span class="game-search-text">
+        <span class="game-search-name">${esc(r.name)}</span>
+        ${platforms ? `<span class="game-search-platforms">${esc(platforms)}</span>` : ''}
+      </span>
+      ${isIgdbKey(r.appid) ? '' : ownershipMarkersHtml(ownership)}
     </button>
   `;
 }
@@ -93,6 +123,11 @@ export function gameSearchSectionHtml(label: string): string {
 export function gameSearchEmptyHtml(term: string, failed = false): string {
   const text = failed ? 'Search failed — try again' : `No games match “${term}”`;
   return `<div class="game-search-empty" role="status">${esc(text)}</div>`;
+}
+
+// Under Steam's results when IGDB didn't answer; its Retry is a plain button, reached with Tab or a click.
+export function gameSearchIgdbFailedHtml(): string {
+  return `<div class="game-search-failed" role="status">⚠ ${esc(IGDB_FAILED_TEXT)} <button type="button" class="btn game-search-retry">Retry</button></div>`;
 }
 
 export function gameSearchMoreHtml(label: string, active = false): string {
@@ -133,6 +168,7 @@ export function initGameSearch({
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let lastResults: GameSearchResult[] = [];
   let lastTerm = ''; // the search that produced lastResults, for the "see all results" row's label/target
+  let igdbFailed = false; // lastResults are Steam's only: IGDB didn't answer
   let activeFetch = 0; // guards against a slower earlier request clobbering a faster later one
   let activeIdx = -1; // ArrowUp/ArrowDown highlight; -1 = none yet (Enter falls back to the top match)
   // Whether what's currently in the dropdown is the recents list rather than search matches —
@@ -158,7 +194,10 @@ export function initGameSearch({
   function renderResults() {
     const moreActive = moreRowShown() && activeIdx === lastResults.length;
     const peek = peekMyOwnership();
-    const options = lastResults.map((r, i) => gameSearchResultHtml(r, i === activeIdx, peek.status(r.appid))).join('');
+    const options = lastResults
+      .map((r, i) => gameSearchResultHtml(r, i === activeIdx, isIgdbKey(r.appid) ? null : peek.status(r.appid)))
+      .join('');
+    const failedHtml = igdbFailed && !showingRecents ? gameSearchIgdbFailedHtml() : '';
     const moreHtml = !moreRowShown()
       ? ''
       : gameSearchMoreHtml(
@@ -167,16 +206,20 @@ export function initGameSearch({
         );
     resultsEl.innerHTML = showingRecents
       ? gameSearchSectionHtml('Recently looked up') + options + moreHtml
-      : options + moreHtml;
+      : options + failedHtml + moreHtml;
     resultsEl.querySelector('#game-search-more-opt')?.append(moreArrow);
     if (activeIdx >= 0 && activeIdx < lastResults.length)
-      inputEl.setAttribute('aria-activedescendant', `game-search-opt-${lastResults[activeIdx].appid}`);
+      inputEl.setAttribute('aria-activedescendant', gameSearchOptionId(lastResults[activeIdx].appid));
     else if (moreActive) inputEl.setAttribute('aria-activedescendant', 'game-search-more-opt');
     else inputEl.removeAttribute('aria-activedescendant');
   }
 
-  function showResults(results: GameSearchResult[], { recent = false }: { recent?: boolean } = {}) {
+  function showResults(
+    results: GameSearchResult[],
+    { recent = false, failed = false }: { recent?: boolean; failed?: boolean } = {},
+  ) {
     lastResults = results;
+    igdbFailed = failed;
     activeIdx = -1;
     showingRecents = recent;
     if (!results.length) {
@@ -193,6 +236,7 @@ export function initGameSearch({
     if (debounceTimer != null) clearTimeout(debounceTimer);
     activeFetch++;
     lastResults = [];
+    igdbFailed = false;
     activeIdx = -1;
     showingRecents = false;
     resultsEl.hidden = true;
@@ -224,20 +268,21 @@ export function initGameSearch({
   async function runSearch(term: string) {
     const fetchId = ++activeFetch;
     try {
-      const results = await searchGames(term);
+      const { results, igdbFailed: failed } = await searchGames(term);
       if (fetchId !== activeFetch) return; // a newer keystroke's request already landed
       if (document.activeElement !== inputEl) return; // left the box (Tab, say) before it answered
       lastTerm = term;
-      if (results.length) showResults(results);
-      else showEmpty(term, false);
+      if (results.length) showResults(results, { failed });
+      else showEmpty(term, false, failed);
     } catch {
       if (fetchId === activeFetch && document.activeElement === inputEl) showEmpty(term, true);
     }
   }
 
-  function showEmpty(term: string, failed: boolean) {
+  function showEmpty(term: string, failed: boolean, igdbFailedToo = false) {
     hideResults();
-    resultsEl.innerHTML = gameSearchEmptyHtml(term, failed);
+    lastTerm = term;
+    resultsEl.innerHTML = gameSearchEmptyHtml(term, failed) + (igdbFailedToo ? gameSearchIgdbFailedHtml() : '');
     resultsEl.hidden = false;
   }
 
@@ -339,13 +384,18 @@ export function initGameSearch({
   });
 
   resultsEl.addEventListener('click', (e) => {
+    if ((e.target as Element).closest('.game-search-retry')) {
+      inputEl.focus(); // a search answering a box that lost focus is dropped
+      runSearch(lastTerm);
+      return;
+    }
     if ((e.target as Element).closest('.game-search-more')) {
       activateMore();
       return;
     }
     const btn = (e.target as Element).closest('.game-search-result') as HTMLElement | null;
     if (!btn) return;
-    pick({ appid: Number(btn.dataset.appid), name: btn.dataset.name ?? '', tinyImage: null });
+    pick({ appid: parseGameKey(btn.dataset.appid ?? ''), name: btn.dataset.name ?? '', tinyImage: null });
   });
 
   // Dismiss the dropdown on a click outside the input's wrapper (input, clear button, dropdown).

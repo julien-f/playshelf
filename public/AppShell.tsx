@@ -26,7 +26,7 @@ import { setPanelParam, setLightboxParam, withAccountParam, COMPARE_PATH } from 
 import { overlayClosesPage } from './overlayHistory.ts';
 import { syncAccountOverrideFromUrl } from './accountOverride.ts';
 import type { Game } from './types.ts';
-import type { GameKey } from './gameKey.ts';
+import { isIgdbKey, type GameKey } from './gameKey.ts';
 import { ShortcutsModal } from './ShortcutsModal.tsx';
 import { AccountChip } from './AccountChip.tsx';
 import { PresentationChip } from './PresentationChip.tsx';
@@ -273,7 +273,8 @@ export function AppShell(props: RouteSectionProps): JSX.Element {
       inputEl: searchInputEl,
       resultsEl: document.getElementById('app-search-results') as HTMLElement,
       onSelect: (game) => {
-        addRecentGame(game.appid, game.name, game.tinyImage);
+        // A game outside Steam never reaches stored prefs (gameKey.ts).
+        if (!isIgdbKey(game.appid)) addRecentGame(game.appid, game.name, game.tinyImage);
         openGameGlobally(game.appid);
       },
       // Focusing the empty box shows what was looked up recently, and "see all" opens that same
