@@ -52,6 +52,8 @@ import {
   type DetailSource,
 } from './utils.ts';
 import { convert } from './currency.ts';
+import { isIgdbKey } from './gameKey.ts';
+import { platformLine } from './gameSearch.ts';
 
 // Rows are assembled in the still-untyped library.js/bundles.js from several independent async
 // sources (the game-details stream, price lookups, ...), so `any`-valued access is the honest
@@ -174,6 +176,7 @@ function renderDemoBadge(v: unknown): Node {
 // question is a genuine one). Uncoloured when neither applies (`computeOwnershipStatus` returns
 // `null`/`'Not Owned'`, neither of which has a tier `color`).
 export function renderNameCell(v: unknown, row: Row): Node {
+  if (isIgdbKey(row.appid)) return renderNotOnSteamName(v, row);
   const nameText = fmt.str(v);
   const status = computeOwnershipStatus(row);
   const tier = status ? OWNERSHIP_STATUS_TIERS.find((t) => t.label === status) : null;
@@ -197,6 +200,24 @@ export function renderNameCell(v: unknown, row: Row): Node {
     b.textContent = '☆';
     wrap.appendChild(b);
   }
+  return wrap;
+}
+
+// A game outside Steam: its name over "Not on Steam · PS5 · Switch +4", as in the search dropdown.
+function renderNotOnSteamName(v: unknown, row: Row): Node {
+  const wrap = document.createElement('span');
+  wrap.className = 'game-name-cell';
+  const name = document.createElement('span');
+  name.textContent = fmt.str(v);
+  const line = document.createElement('span');
+  line.className = 'game-name-platforms';
+  line.textContent = [
+    NOT_ON_STEAM,
+    platformLine({ appid: row.appid, name: '', tinyImage: null, platforms: row.platforms }),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  wrap.append(name, line);
   return wrap;
 }
 
@@ -777,12 +798,15 @@ export function tagMatchColumn(selected: () => ReadonlySet<string> | undefined, 
 // there, not just hidden by default the way they are on Wishlist/Bundles.
 // What the user knows each detail source as, for "didn't answer" notes.
 export const SOURCE_NAMES: Record<string, string> = {
-  rating: 'Steam reviews',
-  hltb: 'HowLongToBeat',
-  protondb: 'ProtonDB',
-  meta: 'Steam store',
-  tags: 'Steam tags',
-} satisfies Record<DetailSource, string>;
+  ...({
+    rating: 'Steam reviews',
+    hltb: 'HowLongToBeat',
+    protondb: 'ProtonDB',
+    meta: 'Steam store',
+    tags: 'Steam tags',
+  } satisfies Record<DetailSource, string>),
+  igdb: 'IGDB', // a game outside Steam's store-page fields
+};
 const COLUMN_SOURCE: Record<string, string> = {
   steamdbRating: 'rating',
   score: 'rating',
@@ -805,6 +829,7 @@ const COLUMN_SOURCE: Record<string, string> = {
   achievementCount: 'meta',
   dlcCount: 'meta',
   tags: 'tags',
+  igdbRating: 'igdb',
   steamRegular: 'prices',
   bestDealPrice: 'prices',
   bestDealCut: 'prices',
@@ -815,7 +840,9 @@ const COLUMN_SOURCE: Record<string, string> = {
 };
 // Prices come from the list's own batch, which the panel's ↻ doesn't re-fetch.
 const sourceFailed = (row: Row, source: string) =>
-  source === 'prices' ? !!row.pricesFailed : !!row.failedSources?.includes(source);
+  source === 'prices' ? !!row.pricesFailed : !!row.failedSources?.includes(rowSource(row, source));
+// A game outside Steam's store-page fields come from IGDB.
+const rowSource = (row: Row, source: string) => (source === 'meta' && isIgdbKey(row.appid) ? 'igdb' : source);
 
 // A source that errored shows ⚠ rather than "—", which means it has no data for the game.
 function markFailedSources(columns: ColumnDef<Row>[]): ColumnDef<Row>[] {
@@ -834,7 +861,7 @@ function markFailedSources(columns: ColumnDef<Row>[]): ColumnDef<Row>[] {
         mark.title =
           source === 'prices'
             ? "IsThereAnyDeal didn't answer — refresh prices on the list's Prices tile"
-            : `${SOURCE_NAMES[source]} didn't answer — Refresh details in the game's panel retries`;
+            : `${SOURCE_NAMES[rowSource(row, source)]} didn't answer — Refresh details in the game's panel retries`;
         return mark;
       }
       return col.render ? col.render(v, row) : document.createTextNode(col.format ? col.format(v, row) : String(v));
@@ -842,6 +869,89 @@ function markFailedSources(columns: ColumnDef<Row>[]): ColumnDef<Row>[] {
     return { ...col, render };
   });
 }
+
+// A Steam-only column's value, group and checklist entry for a game outside Steam.
+export const NOT_ON_STEAM = 'Not on Steam';
+const STEAM_ONLY_TITLE = "Steam only — this game isn't on Steam";
+// The columns a game outside Steam has no value for: Steam's own data, or scored from Steam tags.
+export const STEAM_ONLY_KEYS: ReadonlySet<string> = new Set([
+  'steamdbRating',
+  'score',
+  'positivePct',
+  'metacritic',
+  'reviewsTotal',
+  'genres', // IGDB's vocabulary differs; its genres show in the panel
+  'categories',
+  'tags',
+  'languages',
+  'type',
+  'productionTier',
+  'protondb',
+  'hasDemo',
+  'achievementCount',
+  'dlcCount',
+  'ownershipStatus',
+  'tasteFit',
+  SIMILARITY_KEY,
+  TAG_MATCH_KEY,
+]);
+
+function renderNotApplicable(): Node {
+  const mark = document.createElement('span');
+  mark.className = 'cell-na';
+  mark.textContent = 'n/a';
+  mark.title = STEAM_ONLY_TITLE;
+  return mark;
+}
+
+// Pins NOT_ON_STEAM after everything, missing values included, in either direction.
+function notOnSteamLast(col: ColumnDef<Row>): NonNullable<ColumnDef<Row>['compare']> {
+  const compare =
+    col.compare ??
+    ((a: unknown, b: unknown) => {
+      const [x, y] = col.type === 'number' ? [Number(a), Number(b)] : [a, b];
+      return typeof x === 'number' && typeof y === 'number' && !isNaN(x) && !isNaN(y)
+        ? x - y
+        : String(x ?? '').localeCompare(String(y ?? ''));
+    });
+  return (a, b, dir) => {
+    const na = a === NOT_ON_STEAM;
+    const nb = b === NOT_ON_STEAM;
+    if (na || nb) return na === nb ? 0 : (na ? 1 : -1) * (dir === 'desc' ? -1 : 1);
+    return compare(a, b, dir);
+  };
+}
+
+// A game outside Steam reads NOT_ON_STEAM in Steam-only columns, shown as a muted "n/a" ("—" is no data, ⚠ failed):
+// sorted and grouped last, its own checklist entry, and out of any range a filter sets.
+export function markSteamOnly(columns: ColumnDef<Row>[]): ColumnDef<Row>[] {
+  return columns.map((col) => {
+    if (!STEAM_ONLY_KEYS.has(col.key)) return col;
+    const value = col.value ?? ((row: Row) => row[col.key]);
+    const { groupValue, groupFormat } = col;
+    return {
+      ...col,
+      value: (row) => (isIgdbKey(row.appid) ? NOT_ON_STEAM : value(row)),
+      format: (v, row) => (v === NOT_ON_STEAM ? NOT_ON_STEAM : col.format ? col.format(v, row) : String(v ?? '')),
+      render: (v, row) =>
+        v === NOT_ON_STEAM
+          ? renderNotApplicable()
+          : col.render
+            ? col.render(v, row)
+            : document.createTextNode(col.format ? col.format(v, row) : String(v)),
+      compare: notOnSteamLast(col),
+      ...(groupValue && {
+        groupValue: (v: unknown, row: Row) => (v === NOT_ON_STEAM ? NOT_ON_STEAM : groupValue(v, row)),
+        groupFormat: (key: string) => (key === NOT_ON_STEAM ? key : groupFormat ? groupFormat(key) : key),
+      }),
+    };
+  });
+}
+
+// IGDB's platform names, as Steam's Platforms column spells them.
+const STEAM_PLATFORM_NAMES: Record<string, string> = { PC: 'Windows' };
+export const steamPlatformNames = (platforms: readonly string[]): string[] =>
+  platforms.map((p) => STEAM_PLATFORM_NAMES[p] ?? p);
 
 // The four "how good is this game" scores share one bucket scheme and sort best first.
 function scoreColumn(key: string, label: string, format: (v: unknown) => string): ColumnDef<Row> {
@@ -860,6 +970,21 @@ function scoreColumn(key: string, label: string, format: (v: unknown) => string)
     category: 'Scores & Reviews',
   };
 }
+
+// A game outside Steam's critics-and-users score, as the panel's IGDB chip reads it; a Steam game has none.
+export const [IGDB_RATING_COLUMN] = markFailedSources([
+  {
+    ...scoreColumn('igdbRating', 'IGDB Rating', (v) => (v == null ? '—' : `${v}/100`)),
+    value: (row) => row.igdbRating?.score ?? null,
+    render: (v) => {
+      if (v == null) return document.createTextNode('—');
+      const span = document.createElement('span');
+      span.style.color = scoreColor(Number(v));
+      span.textContent = `${v}/100`;
+      return span;
+    },
+  },
+]);
 
 function hltbColumn(key: string, label: string): ColumnDef<Row> {
   return {

@@ -1445,6 +1445,10 @@
   .cell-failed {
     cursor: help;
   }
+  /* A Steam-only column on a game outside Steam: not missing data, nothing to show. */
+  .cell-na {
+    color: var(--muted);
+  }
   .list-status > .list-failed:not(:first-child)::before,
   .list-status > .list-score-note:not(:first-child)::before {
     content: ' · ';
@@ -2301,6 +2305,12 @@
     margin-left: 4px;
     font-size: var(--fs-meta);
     white-space: nowrap;
+  }
+  /* Under a game outside Steam's name: "Not on Steam · PS5 · Switch +4". */
+  .game-name-platforms {
+    display: block;
+    color: var(--muted);
+    font-size: var(--fs-meta);
   }
   .game-search-badge {
     flex-shrink: 0;

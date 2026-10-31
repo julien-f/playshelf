@@ -14,6 +14,7 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 
 - Data that can be stale shows its age where it's read, and the age is the way to refresh it.
 - No data and failed are different: a source that didn't answer says so (⚠, "didn't answer") and offers a retry; "—" means there is nothing to show.
+- Not applicable is a third state: a Steam-only column on a game outside Steam reads a muted lowercase "n/a" (its tooltip says why; hover-only is enough, as the name cell's visible "Not on Steam" line says it), sorts and groups last, and a filter hiding such games says so in the list status.
 - A missing optional key or upstream disables only its feature, and the UI says why.
 - Long work shows progress where the user is looking, with time left; past a minute, why it's slow. A refresh keeps what's on screen until the new data replaces it.
 

@@ -8465,6 +8465,117 @@ test("F1 edge: a game outside Steam says when IGDB didn't answer, or when this i
   await expect(panel.getByRole('button', { name: 'Retry' })).toHaveCount(0);
 });
 
+// Recently Looked Up holding games outside Steam, as a lookup records them.
+const CONSOLE_QUEST = { appid: 'igdb:9001', name: 'Console Quest' };
+const MIXED_RECENTS = [620, CONSOLE_QUEST, 1145360];
+// Each row's game name, without its ✓/☆ or platforms line.
+const names = (page: Page) =>
+  rows(page)
+    .locator('.game-name-cell')
+    .evaluateAll((cells) => cells.map((c) => c.firstChild!.textContent!.trim()));
+
+test("F5 edge: a game outside Steam in Recently Looked Up: n/a in Steam's columns, its IGDB Rating, last whichever way it sorts", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE, { recentGames: MIXED_RECENTS });
+  await page.goto('/game');
+  const quest = row(page, 'Console Quest');
+  await expect(quest).toContainText('Not on Steam · PS5 · Switch');
+  const na = quest.locator('.cell-na');
+  await expect(na.first()).toHaveText('n/a');
+  await expect(na.first()).toHaveAttribute('title', "Steam only — this game isn't on Steam");
+  await expect(quest).toContainText('88/100');
+  await expect(quest).toContainText('2024-09-06');
+  await expect(row(page, 'Portal 2').locator('.cell-na')).toHaveCount(0);
+  await expect(page.getByRole('columnheader', { name: /IGDB Rating/ })).toBeVisible();
+
+  const header = page.getByRole('columnheader', { name: /Weighted Rating/ });
+  await header.getByText('Weighted Rating').click();
+  await expect.poll(() => names(page)).toEqual(['Portal 2', 'Hades', 'Console Quest']);
+  await header.getByText('Weighted Rating').click();
+  await expect.poll(() => names(page)).toEqual(['Hades', 'Portal 2', 'Console Quest']);
+});
+
+test("F5 edge: a game outside Steam whose IGDB didn't answer shows ⚠, apart from n/a; without IGDB the list says so once", async ({
+  page,
+}) => {
+  await mockApi(page, { states: ['upstream-down'] });
+  await asPlayer(page, ALICE, { recentGames: MIXED_RECENTS });
+  await page.goto('/game');
+  const failed = row(page, 'Console Quest').locator('.cell-failed').first();
+  await expect(failed).toHaveText('⚠');
+  await expect(failed).toHaveAttribute('title', /^(IGDB|HowLongToBeat) didn't answer/);
+  await expect(row(page, 'Console Quest').locator('.cell-na').first()).toHaveText('n/a');
+
+  await mockApi(page, { states: ['no-igdb'] });
+  await page.reload();
+  const status = page.locator('.list-status');
+  await expect(status).toContainText("This instance can't look up games outside Steam.");
+  await expect(status).not.toContainText("IGDB didn't answer");
+});
+
+test('F5 edge: a filter that hides games outside Steam says so, naming the Steam-only column', async ({ page }) => {
+  await asPlayer(page, ALICE, { recentGames: MIXED_RECENTS });
+  await page.goto('/game');
+  await expect(rows(page)).toHaveCount(3);
+  const menu = page.getByRole('button', { name: 'Weighted Rating options' });
+  await menu.scrollIntoViewIfNeeded();
+  await menu.click();
+  const dialog = page.getByRole('dialog', { name: 'Weighted Rating options' });
+  await dialog.getByRole('button', { name: 'Filter ▸' }).click();
+  await dialog.getByRole('textbox', { name: 'Weighted Rating Min' }).fill('50');
+  await expect(rows(page)).toHaveCount(2);
+  await expect(page.locator('.list-status')).toContainText('1 game not on Steam hidden: Weighted Rating is Steam-only');
+});
+
+test('L1 edge: Add to list leaves games outside Steam out and says how many; with only them selected it says why', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE, { recentGames: MIXED_RECENTS });
+  await page.goto('/game');
+  await row(page, 'Console Quest').getByRole('checkbox').check();
+  const toolbar = page.locator('.selection-toolbar');
+  const add = toolbar.getByRole('button', { name: 'Add', exact: true });
+  await expect(add).toHaveAttribute('aria-disabled', 'true');
+  await add.focus(); // Playwright won't click an aria-disabled button
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('status').filter({ hasText: 'Lists hold Steam games only' })).toBeVisible();
+
+  await row(page, 'Portal 2').getByRole('checkbox').check();
+  await expect(add).not.toHaveAttribute('aria-disabled');
+  await toolbar.getByRole('combobox').selectOption({ label: 'Create new list…' });
+  await page.getByRole('textbox', { name: 'New list name' }).fill('Mixed');
+  await add.click();
+  const toast = page
+    .getByRole('status')
+    .filter({ hasText: 'Added 1 game to new list "Mixed"; 1 not on Steam left out.' });
+  await expect(toast).toBeVisible();
+  await toast.getByRole('link', { name: 'Open list' }).click();
+  await expect(rows(page)).toHaveCount(1);
+});
+
+test("F5 edge: ↑/↓ and R step across Recently Looked Up's mixed rows, revealing a game outside Steam's row", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE, { recentGames: MIXED_RECENTS });
+  await page.goto('/game/620');
+  const panel = page.locator('#game-panel');
+  await expect(page.locator('#panel-title')).toHaveText('Portal 2');
+  await page.keyboard.press('ArrowDown');
+  await expect(page).toHaveURL(/\/game\/igdb:9001$/);
+  await expect(page.locator('#panel-title')).toHaveText('Console Quest');
+  await expect(panel.getByText('Not on Steam · PS5 · Switch')).toBeVisible();
+  await expect(panel.locator('.panel-nav-pos')).toHaveText('2 / 3');
+  await expect(row(page, 'Console Quest')).toHaveAttribute('aria-current', 'true');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#panel-title')).toHaveText('Hades');
+  await page.keyboard.press('ArrowUp');
+  await expect(page).toHaveURL(/\/game\/igdb:9001$/);
+  await page.keyboard.press('r');
+  await expect(page).not.toHaveURL(/\/game\/igdb:9001$/);
+  await expect(page.locator('#panel-title')).toHaveText(/^(Portal 2|Hades)$/);
+});
+
 const navSearch = async (page: Page, term: string) => {
   await page.keyboard.press('/');
   await page.keyboard.type(term);

@@ -3,7 +3,8 @@ import { game, type Player } from './fixtures.ts';
 
 // Seeds `player` as both my ★ account and the current one, once per tab: later reloads keep
 // whatever the test did since. `withLabel: false` stores it the way an old slot was: id only.
-// `recentGames`: Recently Looked Up's appids, newest first. `updatedAt`: every key's last-write time.
+// `recentGames`: Recently Looked Up's appids, newest first, or a game outside Steam's stored entry.
+// `updatedAt`: every key's last-write time.
 // `otherAccounts`: names of extra known accounts (display only: they resolve to nothing).
 // `listViews`: the listViews.ts pref, saved views per kind. `lists`: the user's lists (listsStore.ts).
 export async function asPlayer(
@@ -11,7 +12,7 @@ export async function asPlayer(
   player: Player,
   {
     withLabel = true,
-    recentGames = [] as number[],
+    recentGames = [] as (number | { appid: string; name: string })[],
     updatedAt = 0,
     otherAccounts = [] as string[],
     listViews = undefined as object | undefined,
@@ -34,7 +35,13 @@ export async function asPlayer(
       ...otherAccounts.map((label, i) => ({ id: `${9000 + i}`, members: [`${9000 + i}`], rawInputs: [label], label })),
     ]),
     ...(recentGames.length
-      ? { recentGames: entry(recentGames.map((appid) => ({ appid, name: game(appid).name, tinyImage: null }))) }
+      ? {
+          recentGames: entry(
+            recentGames.map((g) =>
+              typeof g === 'number' ? { appid: g, name: game(g).name, tinyImage: null } : { ...g, tinyImage: null },
+            ),
+          ),
+        }
       : {}),
     ...(listViews ? { listViews: entry(listViews) } : {}),
     ...(lists ? { lists: entry(lists) } : {}),

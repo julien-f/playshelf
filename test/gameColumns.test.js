@@ -25,6 +25,11 @@ const {
   withMissingGroup,
   tagMatchScore,
   CORE_COLUMNS,
+  IGDB_RATING_COLUMN,
+  NOT_ON_STEAM,
+  markSteamOnly,
+  steamPlatformNames,
+  renderNameCell,
 } = require('../public/gameColumns.ts');
 
 const { fmtLocalDate, fmtReleaseDate } = require('../public/utils.ts');
@@ -260,4 +265,93 @@ test('tagMatchScore: no score without a tag filter or tag weights', () => {
   assert.equal(tagMatchScore({ Action: 1 }, undefined), null);
   assert.equal(tagMatchScore({ Action: 1 }, new Set()), null);
   assert.equal(tagMatchScore(null, new Set(['Action'])), null);
+});
+
+// Enough DOM for a cell's render: elements with text, class, title and children.
+function withDom(fn) {
+  const node = (text = '') => ({
+    textContent: text,
+    className: '',
+    title: '',
+    style: {},
+    children: [],
+    append(...kids) {
+      this.children.push(...kids);
+    },
+    appendChild(kid) {
+      this.children.push(kid);
+    },
+  });
+  globalThis.document = { createElement: () => node(), createTextNode: (text) => node(text) };
+  try {
+    return fn();
+  } finally {
+    delete globalThis.document;
+  }
+}
+
+const IGDB_ROW = { appid: 'igdb:9001', name: 'Console Quest', source: 'igdb', steamdbRating: 0, genres: ['Adventure'] };
+const steamOnly = (key) => markSteamOnly(CORE_COLUMNS).find((c) => c.key === key);
+
+test('markSteamOnly: a game outside Steam reads "Not on Steam" in a Steam-only column, shown as n/a', () => {
+  const col = steamOnly('steamdbRating');
+  assert.equal(col.value(IGDB_ROW), NOT_ON_STEAM);
+  assert.equal(col.value({ appid: 620, steamdbRating: 91 }), 91);
+  assert.equal(col.format(NOT_ON_STEAM), NOT_ON_STEAM, 'its checklist entry and group label');
+  const cell = withDom(() => col.render(col.value(IGDB_ROW), IGDB_ROW));
+  assert.equal(cell.textContent, 'n/a');
+  assert.equal(cell.className, 'cell-na');
+  assert.equal(cell.title, "Steam only — this game isn't on Steam");
+  assert.equal(steamOnly('genres').value(IGDB_ROW), NOT_ON_STEAM, "IGDB's genres aren't Steam's");
+  for (const key of ['hltbAll', 'releaseDate', 'developers', 'platforms'])
+    assert.equal(
+      steamOnly(key),
+      CORE_COLUMNS.find((c) => c.key === key),
+      key,
+    );
+});
+
+test('markSteamOnly: a game outside Steam sorts last both ways, after missing data, and groups last', () => {
+  for (const key of ['steamdbRating', 'reviewsTotal', 'hasDemo', 'genres']) {
+    const { compare } = steamOnly(key);
+    for (const dir of ['asc', 'desc']) {
+      const sign = dir === 'asc' ? 1 : -1;
+      for (const other of [null, 1, true, 'Action'])
+        assert.ok(sign * compare(NOT_ON_STEAM, other, dir) > 0, `${key} ${dir} ${other}`);
+      assert.equal(compare(NOT_ON_STEAM, NOT_ON_STEAM, dir), 0);
+    }
+  }
+  const { compare, groupValue, groupFormat } = steamOnly('steamdbRating');
+  assert.ok(compare(null, 90, 'desc') * -1 > 0, 'missing data still after a score');
+  assert.equal(groupValue(NOT_ON_STEAM, IGDB_ROW), NOT_ON_STEAM);
+  assert.equal(groupFormat(NOT_ON_STEAM), NOT_ON_STEAM);
+  assert.equal(groupFormat(''), '—', 'a Steam game with no rating keeps its own group');
+});
+
+test("A game outside Steam's failed IGDB fields show ⚠ naming IGDB", () => {
+  const row = { ...IGDB_ROW, developers: [], failedSources: ['igdb', 'hltb'] };
+  const col = CORE_COLUMNS.find((c) => c.key === 'developers');
+  const cell = withDom(() => col.render([], row));
+  assert.equal(cell.textContent, '⚠');
+  assert.match(cell.title, /^IGDB didn't answer/);
+  const steam = withDom(() => col.render([], { appid: 620, developers: [], failedSources: ['igdb'] }));
+  assert.notEqual(steam.textContent, '⚠');
+});
+
+test('IGDB Rating: a score out of 100, as the panel reads it; a Steam game has none', () => {
+  const rated = { ...IGDB_ROW, igdbRating: { score: 84, count: 120 } };
+  assert.equal(IGDB_RATING_COLUMN.value(rated), 84);
+  assert.equal(withDom(() => IGDB_RATING_COLUMN.render(84, rated)).textContent, '84/100');
+  assert.equal(IGDB_RATING_COLUMN.value({ appid: 620 }), null);
+  assert.equal(withDom(() => IGDB_RATING_COLUMN.render(null, { appid: 620 })).textContent, '—');
+});
+
+test('A game outside Steam: its platforms in Steam\'s words, under its name with "Not on Steam"', () => {
+  assert.deepEqual(steamPlatformNames(['PC', 'Mac', 'Linux', 'PS5']), ['Windows', 'Mac', 'Linux', 'PS5']);
+  const row = { ...IGDB_ROW, platforms: ['PS5', 'Switch', 'Windows', 'Xbox Series X|S'] };
+  const cell = withDom(() => renderNameCell('Console Quest', row));
+  assert.deepEqual(
+    cell.children.map((c) => c.textContent),
+    ['Console Quest', 'Not on Steam · PS5 · Switch +2'],
+  );
 });

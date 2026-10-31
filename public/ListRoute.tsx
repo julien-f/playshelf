@@ -101,6 +101,10 @@ import {
   compareNumMissingLast,
   OWNERSHIP_STATUS_COLUMN,
   SOURCE_NAMES,
+  IGDB_RATING_COLUMN,
+  markSteamOnly,
+  STEAM_ONLY_KEYS,
+  steamPlatformNames,
 } from './gameColumns.ts';
 import {
   ApiError,
@@ -260,6 +264,7 @@ import type {
   ListRef,
   PanelGame,
   TableGame,
+  IgdbTableRow,
 } from './types.ts';
 import {
   getList,
@@ -534,8 +539,16 @@ const LOOKED_UP_COLUMN: ColumnDef<Record<string, any>> = {
   compare: compareNumMissingLast,
   defaultSortDir: 'asc',
 };
-const LOOKED_UP_COLUMNS = insertColumnsAfter(RECENT_COLUMNS, 'capsule', LOOKED_UP_COLUMN);
-const LOOKED_UP_DEFAULT_VISIBLE = ['lookedUp', ...RECENT_DEFAULT_VISIBLE];
+// Games outside Steam are looked up too: their IGDB Rating sits beside Weighted Rating.
+const LOOKED_UP_COLUMNS = insertColumnsAfter(
+  insertColumnsAfter(RECENT_COLUMNS, 'capsule', LOOKED_UP_COLUMN),
+  'metacritic',
+  IGDB_RATING_COLUMN,
+);
+const LOOKED_UP_DEFAULT_VISIBLE = [
+  'lookedUp',
+  ...RECENT_DEFAULT_VISIBLE.flatMap((key) => (key === 'steamdbRating' ? [key, 'igdbRating'] : [key])),
+];
 const LOOKED_UP_DEFAULT_SORT: SortEntry[] = [{ key: 'lookedUp', dir: 'asc' }];
 // A user list also gets the current account's Played/Last Played (stamped from myOwnership.ts,
 // the same fetch as the ✓/☆ markers) — hidden by default, there to filter/sort on.
@@ -711,6 +724,11 @@ interface DetailsEvent extends GameDetailsReply {
   appid: GameKey; // echoes the request's key: `igdb:N` for a game outside Steam
   done?: boolean;
   limited?: string; // its own event, with no appid: see detailsLimited
+  unavailable?: string; // its own event too: this instance has no IGDB
+  // A game outside Steam's (lib/streamEvent.mjs's igdbStreamEvent).
+  source?: 'igdb';
+  igdbRating?: IgdbTableRow['igdbRating'];
+  steamAppid?: number | null;
 }
 
 const PLAYS_MOSTLY_SHOWN = 6;
@@ -718,7 +736,7 @@ const PLAYER_TAGS_SHOWN = 3;
 const LATELY_SHOWN = 3; // a Players card's Playing lately games
 
 // A score column leads the sort while its source is set; unset, it goes, with its row-hiding range.
-function syncLeadColumn(t: TableState<Game>, key: string, active: boolean): void {
+function syncLeadColumn(t: TableState<TableGame>, key: string, active: boolean): void {
   const sorted = t.sort.entries().some((e) => e.key === key);
   const shown = t.columns.visible().has(key);
   if (active) {
@@ -742,6 +760,30 @@ function applyDetailsEvent(row: TableGame, event: DetailsEvent) {
   row.capsule = event.meta?.capsule ?? null;
   row.thumb = event.meta?.thumb ?? null;
   if (!row.name) row.name = event.meta?.name || row.bundlePackage?.title || '';
+  row.hltbMain = event.hltb?.main ?? null;
+  row.hltbExtra = event.hltb?.extra ?? null;
+  row.hltbCompletionist = event.hltb?.completionist ?? null;
+  row.hltbAll = event.hltb?.all ?? null;
+  row.releaseDate = event.meta?.releaseDate ?? null;
+  row.genres = event.meta?.genres ?? [];
+  row.developers = event.meta?.developers ?? [];
+  row.publishers = event.meta?.publishers ?? [];
+  row.loading = false;
+  row.details = {
+    rating: event.rating,
+    hltb: event.hltb,
+    meta: event.meta,
+    tags: event.tags,
+    tagWeights: event.tagWeights,
+    demo: event.demo,
+    protondb: event.protondb,
+  };
+  if (!isSteamRow(row)) {
+    row.platforms = steamPlatformNames(event.meta?.platforms ?? []);
+    row.igdbRating = event.igdbRating ?? null;
+    row.steamAppid = event.steamAppid ?? null;
+    return; // the rest is Steam's own, which markSteamOnly shows as n/a
+  }
   row.score = event.rating?.score ?? null;
   row.positivePct =
     event.rating?.positive != null && event.rating?.total
@@ -749,16 +791,8 @@ function applyDetailsEvent(row: TableGame, event: DetailsEvent) {
       : null;
   row.steamdbRating = computeSteamdbRating(event.rating?.positive ?? 0, event.rating?.total ?? 0);
   row.reviewsTotal = event.rating?.total ?? null;
-  row.hltbMain = event.hltb?.main ?? null;
-  row.hltbExtra = event.hltb?.extra ?? null;
-  row.hltbCompletionist = event.hltb?.completionist ?? null;
-  row.hltbAll = event.hltb?.all ?? null;
   row.metacritic = event.meta?.metacritic?.score ?? null;
-  row.releaseDate = event.meta?.releaseDate ?? null;
   row.comingSoon = event.meta?.comingSoon ?? false;
-  row.genres = event.meta?.genres ?? [];
-  row.developers = event.meta?.developers ?? [];
-  row.publishers = event.meta?.publishers ?? [];
   row.categories = event.meta?.categories ?? [];
   row.tags = event.tags ?? [];
   row.protondb = protonDbValue(event.protondb?.tier);
@@ -778,16 +812,6 @@ function applyDetailsEvent(row: TableGame, event: DetailsEvent) {
     isDlc: event.meta?.fullgame != null,
     type: event.meta?.type ?? null,
   });
-  row.loading = false;
-  row.details = {
-    rating: event.rating,
-    hltb: event.hltb,
-    meta: event.meta,
-    tags: event.tags,
-    tagWeights: event.tagWeights,
-    demo: event.demo,
-    protondb: event.protondb,
-  };
 }
 
 export default function ListRoute() {
@@ -809,6 +833,8 @@ export default function ListRoute() {
   const [priceStatusText, setPriceStatusText] = createSignal('');
   // The details stream's `{ limited }` message: this client spent its share, said once for the load.
   const [detailsLimited, setDetailsLimited] = createSignal('');
+  // Its `{ unavailable }` message: this instance has no IGDB, said once instead of a failure per game outside Steam.
+  const [detailsUnavailable, setDetailsUnavailable] = createSignal('');
   // kind === 'bundle' only: the currently open bundle's Steam-resolved games, kept at component
   // scope (not load()-local) so the Prices tile's own refresh can re-price exactly what's loaded without
   // re-resolving the bundle. Reset by load() itself on every (re)load.
@@ -945,6 +971,7 @@ export default function ListRoute() {
     if (detailsLimited()) return detailsLimited();
     const counts = new Map<string, number>();
     for (const row of rowsStore) for (const s of row.failedSources ?? []) counts.set(s, (counts.get(s) ?? 0) + 1);
+    if (detailsUnavailable()) counts.delete('igdb');
     // Sources that failed for the same number of games share one phrase.
     const byCount = new Map<number, string[]>();
     for (const s of Object.keys(SOURCE_NAMES)) {
@@ -955,7 +982,8 @@ export default function ListRoute() {
       const who = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
       return `${who} didn't answer for ${n} game${n === 1 ? '' : 's'}`;
     });
-    return parts.length ? `${parts.join(' · ')} — Refresh details in a game's panel retries` : '';
+    const failed = parts.length ? `${parts.join(' · ')} — Refresh details in a game's panel retries` : '';
+    return [detailsUnavailable(), failed].filter(Boolean).join(' · ');
   });
   const rowStore = createRowStore<TableGame>(rowsStore, (idx, updater) => setRowsStore(idx, updater));
   // Games opened as a standalone aside rather than as one of this list's own rows (a nav-bar
@@ -966,7 +994,7 @@ export default function ListRoute() {
   // up by the one appid being opened.
   const [standaloneRows, setStandaloneRows] = createStore<Record<number, Game>>({});
   const loadGuard = createStaleGuard();
-  let table: TableState<Game> | null = null;
+  let table: TableState<TableGame> | null = null;
   let disposeTable: (() => void) | null = null;
   let unsyncView: (() => void) | null = null;
   let tableGrouped = false;
@@ -980,13 +1008,13 @@ export default function ListRoute() {
   }
   const viewTable = { setViewState: applyView, getViewState: () => table?.getViewState() ?? {} };
   // The table whose tag filter the Tag match column scores against; a signal so it re-sorts.
-  const [filterTable, setFilterTable] = createSignal<TableState<Game> | null>(null);
+  const [filterTable, setFilterTable] = createSignal<TableState<TableGame> | null>(null);
   // The game the Similarity column ranks the list against (the panel's Sort list by similarity).
   const [similarTo, setSimilarTo] = createSignal<number | null>(null);
   const similarityScores = createMemo(() => {
     const appid = similarTo();
     if (appid == null) return null;
-    const rows = loadedRows() ?? tableData();
+    const rows = loadedRows() ?? tableData().filter(isSteamRow);
     const target = rows.find((r) => r.appid === appid);
     if (!target) return null;
     const scores = new Map(similarGames(target, rows, Infinity).map((s) => [s.game.appid, s.score]));
@@ -1075,11 +1103,11 @@ export default function ListRoute() {
   function filteredRows(): Game[] | null {
     if (!tableReady() || !table) return null; // `table` isn't a signal; tableReady() is
     const visible = table.processedData();
-    return visible.length < table.data().length ? visible : null;
+    return visible.length < table.data().length ? visible.filter(isSteamRow) : null;
   }
   // What "Rank this list" asks about first: the selection, else the filtered rows (null = all, [] = the filter hides every row).
   function rankThisListFocus(): number[] | null {
-    const selected = selectedRows();
+    const selected = selectedSteamRows();
     if (selected.length) return selected.map((r) => r.appid);
     return filteredRows()?.map((r) => r.appid) ?? null;
   }
@@ -1105,7 +1133,7 @@ export default function ListRoute() {
     openRanking(createList({ kind: 'ranked', source, name }).id);
   }
   function openRanking(listId: string): void {
-    const rankOrder = (table?.processedData() ?? []).map((r) => r.appid);
+    const rankOrder = (table?.processedData() ?? []).filter(isSteamRow).map((r) => r.appid);
     navigate(`/lists/${listId}/rank`, { state: { rankFocus: rankThisListFocus() ?? undefined, rankOrder } });
   }
   // Read when the menu renders; a ranking made here navigates away, so nothing goes stale on screen.
@@ -1185,7 +1213,7 @@ export default function ListRoute() {
     const list = userList();
     const state = ranking();
     if (!list || !state) return;
-    const focus = selectedRows().map((r) => r.appid);
+    const focus = selectedSteamRows().map((r) => r.appid);
     applyRanking(focus.reduce((s, appid) => rerank(s, appid), state));
     table?.selection.clear();
     navigate(`/lists/${list.id}/rank`, { state: { rankFocus: focus, rankOrder: focus } });
@@ -1197,12 +1225,15 @@ export default function ListRoute() {
   }
   // The selected games still to be ranked — what "Compare selected" asks about.
   function selectedUnranked(): number[] {
-    return unrankedOf(selectedRows());
+    return unrankedOf(selectedSteamRows());
   }
   // The unranked games in the table's current sort (filters included — what's left out is asked
   // after, in source order), so whatever the user sorted first gets ranked first.
   function unrankedInTableOrder(): number[] {
-    return (table?.processedData() ?? []).filter((r) => r.rank == null).map((r) => r.appid);
+    return (table?.processedData() ?? [])
+      .filter(isSteamRow)
+      .filter((r) => r.rank == null)
+      .map((r) => r.appid);
   }
   // Handed over as history state rather than in the URL, which a few hundred appids would bloat;
   // it survives a reload of the compare screen and is gone once it's navigated away from.
@@ -1234,7 +1265,7 @@ export default function ListRoute() {
   function handleExcludeSelected(): void {
     const state = ranking();
     if (!state) return;
-    const rows = selectedRows();
+    const rows = selectedSteamRows();
     applyRanking(rows.reduce((s, row) => exclude(s, row.appid), state));
     showSelectionStatus(`Excluded ${rows.length} game${rows.length === 1 ? '' : 's'} from the ranking.`);
     table?.selection.clear();
@@ -1407,7 +1438,11 @@ export default function ListRoute() {
   const [groupCount, setGroupCount] = createSignal(0);
 
   // ── Row-selection-based add/remove-to-list (see this file's own header comment) ────────────
-  const [selectedRows, setSelectedRows] = createSignal<Game[]>([]);
+  const [selectedRows, setSelectedRows] = createSignal<TableGame[]>([]);
+  // What a list or ranking can hold: Recently Looked Up also lists games outside Steam.
+  const selectedSteamRows = () => selectedRows().filter(isSteamRow);
+  const onlyNotOnSteamSelected = () => selectedRows().length > 0 && !selectedSteamRows().length;
+  const LISTS_HOLD_STEAM_GAMES = 'Lists hold Steam games only';
   const [manualLists, setManualLists] = createSignal<GameList[]>(getLists().filter((l) => l.kind === 'manual'));
   const NEW_LIST_OPTION = '__new__';
   const [addTarget, setAddTarget] = createSignal('');
@@ -1436,26 +1471,27 @@ export default function ListRoute() {
   }
 
   async function handleAddSelectedToList(): Promise<void> {
+    if (onlyNotOnSteamSelected()) {
+      showSelectionStatus(LISTS_HOLD_STEAM_GAMES);
+      return;
+    }
     const target = addTarget();
-    const rows = selectedRows();
+    const rows = selectedSteamRows();
     if (!target || rows.length === 0) return;
     const appids = rows.map((r) => r.appid);
+    const leftOut = selectedRows().length - rows.length;
+    const added = (where: string) =>
+      `Added ${appids.length} game${appids.length === 1 ? '' : 's'} to ${where}${leftOut ? `; ${leftOut} not on Steam left out` : ''}.`;
     if (target === NEW_LIST_OPTION) {
       const name = newListName().trim();
       if (!name) return;
       const list = createList({ name, kind: 'manual', appids });
       refreshManualLists();
-      showSelectionStatus(
-        `Added ${appids.length} game${appids.length === 1 ? '' : 's'} to new list "${list.name}".`,
-        list.id,
-      );
+      showSelectionStatus(added(`new list "${list.name}"`), list.id);
     } else {
       const list = getList(target);
       addAppidsToList(target, appids);
-      showSelectionStatus(
-        `Added ${appids.length} game${appids.length === 1 ? '' : 's'} to "${list?.name ?? 'list'}".`,
-        target,
-      );
+      showSelectionStatus(added(`"${list?.name ?? 'list'}"`), target);
     }
     setAddTarget('');
     setNewListName('');
@@ -1485,7 +1521,7 @@ export default function ListRoute() {
   // gets a chance to render it (confirmed live: the message never appeared until this was fixed).
   async function handleRemoveSelectedFromList(): Promise<void> {
     const list = userList();
-    const rows = selectedRows();
+    const rows = selectedSteamRows();
     if (!list || rows.length === 0) return;
     const appids = rows.map((r) => r.appid);
     removeAppidsFromList(list.id, appids);
@@ -1525,14 +1561,13 @@ export default function ListRoute() {
   // must not clobber it.
   let standaloneLookupToken = 0;
 
-  // Steam rows only: the table's columns read Steam fields.
-  const isListed = (r: TableGame): r is Game => !r.loading && isSteamRow(r);
-  function tableData(): Game[] {
+  const isListed = (r: TableGame): boolean => !r.loading;
+  function tableData(): TableGame[] {
     return rowsStore.filter(isListed);
   }
 
   // Reads tableReady so a caller tracking this list (the panel's nav bar) follows a table rebuild.
-  function getGameList(): Game[] {
+  function getGameList(): TableGame[] {
     const t = table;
     return tableReady() && t ? t.processedData() : [];
   }
@@ -1620,7 +1655,7 @@ export default function ListRoute() {
     clearTimeout(loadedRowsTimer);
     // A task of its own, so the stream's last flush paints first; a load started since retakes it.
     loadedRowsTimer = setTimeout(() => {
-      if (!loadedRowsDue) setLoadedRows(unwrap(rowsStore).filter(isListed));
+      if (!loadedRowsDue) setLoadedRows(unwrap(rowsStore).filter((r) => isListed(r) && isSteamRow(r)) as Game[]);
     });
   }
 
@@ -1628,9 +1663,14 @@ export default function ListRoute() {
     renderPanelNavShared({ hasList: !!table, game, getGameList, onStep: stepGame, onReroll: pickRandomGame });
   }
 
-  function openGame(game: PanelGame, { isRandom = false }: { isRandom?: boolean } = {}): void {
+  function openGame(game: PanelGame | Readonly<TableGame>, { isRandom = false }: { isRandom?: boolean } = {}): void {
     if (!isRandom) clearRandomQueue(randomQueueKey());
-    const resolved = isIgdbRow(game) ? game : (rowStore.getRow(game.appid) ?? standaloneRows[game.appid] ?? game);
+    // A table row for a game outside Steam opens as the panel's IGDB view of it, as one of the list.
+    const resolved: PanelGame = isSteamRow(game)
+      ? (rowStore.getRow(game.appid) ?? standaloneRows[game.appid] ?? game)
+      : 'igdb' in game
+        ? game
+        : igdbRow(game.appid, false);
     // No "keep the panel's DLC trail" flag to pass: panel.tsx tracks its own hops now (see
     // `pendingHopAppid` there), which is the only way the `/game/:appid` path — where the open
     // happens a whole route navigation later, from load() — could preserve one at all.
@@ -1640,7 +1680,8 @@ export default function ListRoute() {
     // into view) without stealing real DOM focus from the panel — `@vates/data-table-solid`'s
     // external focus API (>= 0.14), built for exactly this "external nav just changed the current
     // row" case. No-ops harmlessly for a standalone lookup not in `table`'s own data.
-    if (!isIgdbRow(resolved)) table?.focus.moveTo(resolved);
+    const row = rowStore.getRow(resolved.appid);
+    if (row) table?.focus.moveTo(row);
     // 'recent' is the one kind whose address IS the focused game (see this file's own header
     // comment) — a row click/prev-next/random pick here updates the path, not a `?game=` query
     // param, so the address bar always matches whatever the panel is actually showing. This
@@ -1670,7 +1711,7 @@ export default function ListRoute() {
     if (!table || getPanelGame()?.standalone) return false;
     const pick = pickRandomFrom(getGameList(), randomQueueKey(), getPanelGame()?.appid ?? 0);
     if (!pick) return false;
-    openGame(pick as Game, { isRandom: true });
+    openGame(pick, { isRandom: true });
     return true;
   }
 
@@ -1766,7 +1807,7 @@ export default function ListRoute() {
     loadMedia(game.appid, opened);
     for (const dir of [-1, 1] as const) {
       const near = stepGameList(getGameList(), game, dir);
-      if (near) loadMedia(near.appid, false);
+      if (near && isSteamRow(near)) loadMedia(near.appid, false); // a game outside Steam's come with its IGDB reply
     }
   }
   // Keyed on the open game alone (`on` runs the load untracked), so a failed load can't loop.
@@ -1844,16 +1885,16 @@ export default function ListRoute() {
       }
     });
   }
-  // A game outside Steam opens beside the list, never joining it or the stored recents.
   function openOrAddRecentGame(key: GameKey): void {
-    if (isIgdbKey(key)) return openGame(igdbRow(key));
-    const appid = key;
-    const existing = rowStore.getRow(appid);
+    const existing = rowStore.getRow(key);
     if (existing) {
       restampLookedUp();
       openGame(existing);
       return;
     }
+    // A game outside Steam not looked up before opens beside the list, never joining it or the stored recents.
+    if (isIgdbKey(key)) return openGame(igdbRow(key));
+    const appid = key;
     if (!isValidAppid(appid)) return;
     const placeholder: Game = { appid, name: '', loading: true, details: null };
     const rows = [placeholder, ...rowsStore];
@@ -1978,6 +2019,10 @@ export default function ListRoute() {
             if (!loadGuard.isStale(gen)) setDetailsLimited(event.limited);
             continue;
           }
+          if (event.unavailable) {
+            if (!loadGuard.isStale(gen)) setDetailsUnavailable(event.unavailable);
+            continue;
+          }
           unanswered.delete(event.appid);
           detailBatcher.push(event, gen);
           loaded++;
@@ -1989,7 +2034,8 @@ export default function ListRoute() {
     if (loadGuard.isStale(gen)) return;
     // Rows the stream never answered (refused, dropped, cut short) would otherwise stay loading.
     for (const appid of unanswered) {
-      detailBatcher.push({ appid, ...NO_DETAILS, failed: [...DETAIL_SOURCES] }, gen);
+      const failed = isIgdbKey(appid) ? ['igdb', 'hltb'] : [...DETAIL_SOURCES];
+      detailBatcher.push({ appid, ...NO_DETAILS, ...(isIgdbKey(appid) && { source: 'igdb' as const }), failed }, gen);
       loaded++;
     }
     detailBatcher.flushNow();
@@ -2341,6 +2387,7 @@ export default function ListRoute() {
     loadSamples = [];
     slowLoad = false;
     setDetailsLimited('');
+    setDetailsUnavailable('');
     setLoadFraction(null);
     // Prices are re-fetched for whatever this load lists; the previous list's age and error don't apply.
     setPriceFetchedAt(undefined);
@@ -2376,7 +2423,7 @@ export default function ListRoute() {
       setFetchedAt(undefined);
     }
 
-    let initialRows: Game[];
+    let initialRows: TableGame[];
     let tiered = false; // rows carry a bundle source's Tier Price
     const tiers: ReturnType<typeof bundleTierFields> = new Map();
     const collectTiers = (games: ResolvedGame[]) => {
@@ -2616,12 +2663,10 @@ export default function ListRoute() {
       // metadata had streamed in with the real title. The placeholder is presentational only now
       // (panel.tsx's title falls back to it); a still-nameless row is `loading` and filtered out
       // of the table anyway until its details event lands.
-      // A game outside Steam keeps its place in the numbering, not a row: the table's columns read Steam fields.
-      initialRows = recents.flatMap(({ appid, name, tinyImage }, i) =>
-        isIgdbKey(appid)
-          ? []
-          : [{ appid, lookedUp: i + 1, name, capsule: tinyImage || undefined, loading: true, details: null }],
-      );
+      initialRows = recents.map(({ appid, name, tinyImage }, i) => {
+        const row = { lookedUp: i + 1, name, capsule: tinyImage || undefined, loading: true, details: null };
+        return isIgdbKey(appid) ? { ...row, appid, source: 'igdb' as const } : { ...row, appid };
+      });
     } else if (kind === 'creator') {
       const name = creatorName();
       setCreatorResult(null);
@@ -2778,7 +2823,7 @@ export default function ListRoute() {
       const byAppid = new Map(
         pendingGroups.flatMap((g) => g.appids.map((appid) => [appid, membershipKey(g)] as const)),
       );
-      initialRows = initialRows.map((row) => ({ ...row, membership: byAppid.get(row.appid) }));
+      initialRows = initialRows.map((row) => (isSteamRow(row) ? { ...row, membership: byAppid.get(row.appid) } : row));
       setGroupCount(pendingGroups.length);
     }
     if (kept) {
@@ -2808,53 +2853,56 @@ export default function ListRoute() {
       setTasteFitSource(tasteSource);
       const priced = kind === 'user' && pricesShown;
       const sharedPriced = (kind === 'shared' || kind === 'creator' || kind === 'game-pass') && pricesShown;
-      const columns = insertColumnsAfter(
-        isRanked
-          ? priced
-            ? RANKED_PRICED_COLUMNS
-            : RANKED_COLUMNS
-          : kind === 'wishlist'
-            ? pricesShown
-              ? WISHLIST_COLUMNS
-              : WISHLIST_NOPRICE_COLUMNS
-            : kind === 'bundle'
-              ? BUNDLE_COLUMNS
-              : kind === 'user'
-                ? priced
-                  ? tiered
-                    ? USER_TIERED_COLUMNS
-                    : USER_PRICED_COLUMNS
-                  : USER_COLUMNS
-                : kind === 'recent'
-                  ? LOOKED_UP_COLUMNS
-                  : kind === 'compare'
-                    ? insertColumnsAfter(
-                        RECENT_COLUMNS,
-                        'hltbCompletionist',
-                        ...comparePlayers.map(playedByColumn),
-                        ...comparePlayers.map(recentPlayedByColumn),
-                        groupFitColumn(
-                          groupFits,
-                          comparePlayers.map((p) => p.label),
-                        ),
-                      )
-                    : kind === 'shared' || kind === 'creator' || kind === 'game-pass'
-                      ? sharedPriced
-                        ? tiered
-                          ? SHARED_TIERED_COLUMNS
-                          : SHARED_PRICED_COLUMNS
-                        : RECENT_COLUMNS
-                      : OWNED_COLUMNS,
-        'tags',
-        tagMatchColumn(
-          // eslint-disable-next-line solid/reactivity -- read inside the table's own processData memo
-          () => filterTable()?.filter.include().tags,
-          // eslint-disable-next-line solid/reactivity -- same
-          () => filterTable()?.filter.modes().tags === 'and',
+      // Recently Looked Up also lists games outside Steam.
+      const columns = (kind === 'recent' ? markSteamOnly : (cols: ColumnDef<Record<string, any>>[]) => cols)(
+        insertColumnsAfter(
+          isRanked
+            ? priced
+              ? RANKED_PRICED_COLUMNS
+              : RANKED_COLUMNS
+            : kind === 'wishlist'
+              ? pricesShown
+                ? WISHLIST_COLUMNS
+                : WISHLIST_NOPRICE_COLUMNS
+              : kind === 'bundle'
+                ? BUNDLE_COLUMNS
+                : kind === 'user'
+                  ? priced
+                    ? tiered
+                      ? USER_TIERED_COLUMNS
+                      : USER_PRICED_COLUMNS
+                    : USER_COLUMNS
+                  : kind === 'recent'
+                    ? LOOKED_UP_COLUMNS
+                    : kind === 'compare'
+                      ? insertColumnsAfter(
+                          RECENT_COLUMNS,
+                          'hltbCompletionist',
+                          ...comparePlayers.map(playedByColumn),
+                          ...comparePlayers.map(recentPlayedByColumn),
+                          groupFitColumn(
+                            groupFits,
+                            comparePlayers.map((p) => p.label),
+                          ),
+                        )
+                      : kind === 'shared' || kind === 'creator' || kind === 'game-pass'
+                        ? sharedPriced
+                          ? tiered
+                            ? SHARED_TIERED_COLUMNS
+                            : SHARED_PRICED_COLUMNS
+                          : RECENT_COLUMNS
+                        : OWNED_COLUMNS,
+          'tags',
+          tagMatchColumn(
+            // eslint-disable-next-line solid/reactivity -- read inside the table's own processData memo
+            () => filterTable()?.filter.include().tags,
+            // eslint-disable-next-line solid/reactivity -- same
+            () => filterTable()?.filter.modes().tags === 'and',
+          ),
+          similarityColumn(similarityScores),
+          tasteFitColumn(tasteFitSource),
         ),
-        similarityColumn(similarityScores),
-        tasteFitColumn(tasteFitSource),
-      ) as unknown as ColumnDef<Game>[];
+      ) as unknown as ColumnDef<TableGame>[];
       const defaultVisible = isRanked
         ? [...RANKED_DEFAULT_VISIBLE, ...(priced ? PRICED_DEFAULT_VISIBLE : [])]
         : kind === 'wishlist'
@@ -2882,7 +2930,10 @@ export default function ListRoute() {
       const groups = pendingGroups;
       const names = new Map(listSources().map((source) => [source.key, source.desc.label]));
       const allColumns = groups
-        ? [...columns, membershipColumn(groups, [...names.keys()], names, kind === 'compare')]
+        ? [
+            ...columns,
+            membershipColumn(groups, [...names.keys()], names, kind === 'compare') as unknown as ColumnDef<TableGame>,
+          ]
         : columns;
       // Set once the stored view is restored, so restoring a tag filter keeps its saved sort.
       let leadSortArmed = false;
@@ -2890,7 +2941,7 @@ export default function ListRoute() {
       let disposeTableState!: () => void;
       const ts = createRoot((dispose) => {
         disposeTableState = dispose;
-        const state = createTableState<Game>(tableData, allColumns, {
+        const state = createTableState<TableGame>(tableData, allColumns, {
           initialViewState: {
             pageSize: 50,
             visibleCols: defaultVisible,
@@ -2917,7 +2968,7 @@ export default function ListRoute() {
         // currently reading from — disposed alongside the table itself (same createRoot), so a
         // later reload's own fresh table doesn't fight this effect over who last wrote the signal.
         // A bundle's package rows are bought together, so they're selected together too.
-        let prevSelection = new Set<Game>();
+        let prevSelection = new Set<TableGame>();
         createEffect(
           on(state.selection.rows, (rows) => {
             const whole = wholePackages(prevSelection, rows, tableData(), (r) => r.bundlePackage?.gid);
@@ -2939,15 +2990,15 @@ export default function ListRoute() {
       tableGrouped = !!groups;
       const disposeView = render(
         () =>
-          DataTableView<Game>({
+          DataTableView<TableGame>({
             table: ts,
             rowKey: 'appid',
             selectable: true,
             // eslint-disable-next-line solid/reactivity -- runs once per click, inside the view transition's update
             onRowClick: (row, event) => openPanelFromRow(event, () => openGame(rowStore.getRow(row.appid) ?? row)),
             get currentRow() {
-              const appid = getPanelKey();
-              return typeof appid === 'number' ? (rowStore.getRow(appid) ?? null) : null;
+              const key = getPanelKey();
+              return key == null ? null : (rowStore.getRow(key) ?? null);
             },
             // In the toolbar's own line rather than a row above it, so a phone's table starts higher.
             toolbarEnd: viewActions(),
@@ -3103,7 +3154,7 @@ export default function ListRoute() {
     });
   }
   function selectedPickCount(): number {
-    return onePerGid(selectedRows()).length;
+    return onePerGid(selectedSteamRows()).length;
   }
   function pickPlan(): PickPlan | null {
     const picks = bundleMeta()?.picks;
@@ -3140,7 +3191,7 @@ export default function ListRoute() {
     if (!url || !fanaticalNames || !pickPlan()) return null;
     const names: string[] = [];
     const byHand: string[] = [];
-    for (const r of onePerGid(selectedRows())) {
+    for (const r of onePerGid(selectedSteamRows())) {
       const name = fanaticalNames[gidOf(r.appid) ?? ''];
       if (name) names.push(name);
       else byHand.push(r.bundlePackage?.title || r.name);
@@ -3795,6 +3846,29 @@ export default function ListRoute() {
     }
     return notes;
   });
+  // Games outside Steam a filter hid from Recently Looked Up, named by the Steam-only columns filtered on.
+  const notOnSteamHiddenNote = createMemo(() => {
+    const t = filterTable();
+    if (kind !== 'recent' || !t?.filter.activeCount()) return null;
+    const shown = new Set(t.processedData().map((r) => r.appid));
+    const hidden = t.data().filter((r) => !isSteamRow(r) && !shown.has(r.appid)).length;
+    if (!hidden) return null;
+    const { include, exclude, ranges } = t.filter;
+    const filtered = new Set([
+      ...[include(), exclude()].flatMap((sets) =>
+        Object.entries(sets).flatMap(([key, values]) => (values.size ? [key] : [])),
+      ),
+      ...Object.entries(ranges()).flatMap(([key, r]) => (r.min !== '' || r.max !== '' ? [key] : [])),
+    ]);
+    const names = t.columns
+      .list()
+      .filter((c) => STEAM_ONLY_KEYS.has(c.key) && filtered.has(c.key))
+      .map((c) => c.label);
+    const what = `${hidden} game${hidden === 1 ? '' : 's'} not on Steam hidden`;
+    if (!names.length) return what;
+    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+    return `${what}: ${list} ${names.length > 1 ? 'are' : 'is'} Steam-only`;
+  });
   // Owned's profile alone (no other list renders it), once every row's details are in, so it doesn't reshuffle as they stream.
   const profileRows = () => (kind === 'owned' ? loadedRows() : null);
   // Owned learns its account's taste for Taste fit elsewhere.
@@ -4371,6 +4445,7 @@ export default function ListRoute() {
         </Show>
         <Show when={failedSummary()}>{(text) => <span class="list-failed">{text()}</span>}</Show>
         <For each={scoreNotes()}>{(note) => <span class="list-score-note">{note}</span>}</For>
+        <Show when={notOnSteamHiddenNote()}>{(note) => <span class="list-score-note">{note()}</span>}</Show>
         <Show when={bundleFailedCount()}>
           {(n) => (
             <span class="list-failed">Steam didn't answer for {n()} of this bundle's games — reload to retry</span>
@@ -4486,7 +4561,7 @@ export default function ListRoute() {
                   </output>
                   <span class="selection-pick-detail">{pickPlanDetail(plan(), selectedPickCount())}</span>
                 </span>
-                <Show when={sumBestDeals(selectedRows(), plan().currency)}>
+                <Show when={sumBestDeals(selectedSteamRows(), plan().currency)}>
                   {(deals) => (
                     <span
                       class="selection-pick-savings"
@@ -4554,9 +4629,13 @@ export default function ListRoute() {
               }}
             />
           </Show>
+          {/* Pressable with only games outside Steam selected, to say why it adds nothing. */}
           <button
             type="button"
-            disabled={!addTarget() || (addTarget() === NEW_LIST_OPTION && !newListName().trim())}
+            disabled={
+              !onlyNotOnSteamSelected() && (!addTarget() || (addTarget() === NEW_LIST_OPTION && !newListName().trim()))
+            }
+            aria-disabled={onlyNotOnSteamSelected() ? 'true' : undefined}
             onClick={handleAddSelectedToList}
           >
             Add
