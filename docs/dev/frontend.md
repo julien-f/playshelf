@@ -18,23 +18,23 @@ The data model it renders — accounts, lists, combines, the localStorage schema
 
 ## Routes
 
-| Path                      | What it is                                                              |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `/`                       | Home — account picker/header, the folder/list tree, combine setup       |
-| `/lists/owned`            | Owned games for the effective current account                           |
-| `/lists/wishlist`         | That account's wishlist                                                 |
-| `/lists/compare`          | A comparison of several accounts' libraries, named by `?u=`             |
-| `/lists/shared`           | Someone else's dynamic list formula, named by `?f=`                     |
-| `/lists/bundle/:bundleId` | One bundle's games                                                      |
-| `/lists/developer?name=`  | A developer's games on Steam (`/lists/publisher?name=`: a publisher's)  |
-| `/lists/game-pass`        | The Steam games in the region's PC Game Pass catalog                    |
-| `/lists/:listId`          | A user list (manual, dynamic or ranked)                                 |
-| `/lists/:listId/rank`     | A ranked list's one-vs-one compare screen                               |
-| `/bundles`                | Browse/discover bundles — a table of bundles, not of games              |
-| `/game/:appid?`           | "Recently Looked Up", and the canonical link for one game               |
-| `/search`                 | Search-by-URL — matches for `?q=`, opening the closest one in the panel |
-| `/about`                  | Static about page — linked from the footer, not the nav bar             |
-| anything else             | "Page not found", with a link Home (`NotFoundRoute.tsx`)                |
+| Path                      | What it is                                                               |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `/`                       | Home — account picker/header, the folder/list tree, combine setup        |
+| `/lists/owned`            | Owned games for the effective current account                            |
+| `/lists/wishlist`         | That account's wishlist                                                  |
+| `/lists/compare`          | A comparison of several accounts' libraries, named by `?u=`              |
+| `/lists/shared`           | Someone else's dynamic list formula, named by `?f=`                      |
+| `/lists/bundle/:bundleId` | One bundle's games                                                       |
+| `/lists/developer?name=`  | A developer's games on Steam (`/lists/publisher?name=`: a publisher's)   |
+| `/lists/game-pass`        | The Steam games in the region's PC Game Pass catalog                     |
+| `/lists/:listId`          | A user list (manual, dynamic or ranked)                                  |
+| `/lists/:listId/rank`     | A ranked list's one-vs-one compare screen                                |
+| `/bundles`                | Browse/discover bundles — a table of bundles, not of games               |
+| `/game/:appid?`           | "Recently Looked Up", and the canonical link for one game (`igdb:N` too) |
+| `/search`                 | Search-by-URL — matches for `?q=`, opening the closest one in the panel  |
+| `/about`                  | Static about page — linked from the footer, not the nav bar              |
+| anything else             | "Page not found", with a link Home (`NotFoundRoute.tsx`)                 |
 
 - Path for "which list", query params for state within it (`?u=`, `?game=`/`&shot=`, view-sharing params). Except a developer's or publisher's name, in `?name=`: the production SPA fallback 404s on a path ending like a file (`indie.io`), and a `/` in a name doesn't survive a path segment.
 - The fixed `/lists/*` routes are registered before the generic `/lists/:listId` to document intent; `@solidjs/router` ranks by segment specificity, so the order isn't load-bearing.
@@ -57,6 +57,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 
 **Looking up a game never navigates away from a route with a list context of its own** — the nav-bar search box and a panel's DLC/base-game links open in place (a real row if the appid is loaded, a standalone panel via `?game=` otherwise). `/search` counts as having one (its results). Only Home, `/bundles`, `/about`, the rank screen (`RankRoute`) and the 404 page navigate, to `/game/:appid`. See `AppShell.tsx`'s `openGameGlobally`.
 
+- **A game outside Steam** is keyed `igdb:<id>` (`gameKey.ts`'s `GameKey`) wherever a Steam appid can be: `/game/igdb:9001`, `?game=igdb%3A9001`, `RouteHandlers.openGame`. It opens as a standalone panel and is never a table row, nor stored in prefs (Recently Looked Up, statuses, lists, ranking): on `/game` it opens beside the list without joining it. A link is always an absolute path: a relative `igdb:9001` reads as a URL scheme.
 - That navigation carries `{ lookup: true }` in its history state, so the panel takes that entry as its own (`overlayHistory.ts`'s `ownPage`): ×, Esc and Back all return to the page the lookup came from in one step, rather than to Recently Looked Up. A shared `/game/:appid` link has no such state and closes to `/game`.
 
 ## Module map
@@ -123,6 +124,8 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `viewTransition.ts` / `artTint.ts` — the shared-element morphs into the panel and the lightbox; the panel ground's tint from the game's art.
 - `gameSearch.ts` — the combobox/debounce UI for "look up any game" (the shell owns where results go).
 - `urlState.ts` — param parsing, canonical param order, and the `?game=`/`&shot=`/`?u=` writers.
+- `gameKey.ts` — `GameKey` (a Steam appid or `igdb:<id>`), `parseGameKey` for a path segment or `?game=`, `isIgdbRow`.
+- `IgdbPanel.tsx` — the panel's body for a game outside Steam (see the side panel).
 - `prefs.ts` / `StorageFullBanner.tsx` / `prefsPopover.tsx` / `region.ts` / `navPopover.ts` — the localStorage preference blob; the banner when storage refuses a write of it; the Preferences panel's contents; the region preference and its detection; nav popovers' Escape and positioning.
 - `tableViewPrefs.ts` / `tableViewKeys.ts` / `tableViewSync.ts` / `SharedViewBanner.tsx` / `UnsavedViewBanner.tsx` — restore/persist/share/reset a table view; the table-view pref keys; the signed-in Save/Revert baseline; the shared-layout and unsaved-changes banners and the Share/Default view buttons.
 - `listViews.ts` / `ViewTabs.tsx` — Owned/Wishlist's saved views and their templates; the tabs, the active view's ⋯ and the hero's New view menu.
@@ -141,6 +144,7 @@ Four kinds of state, four mechanisms:
 
 - **A game/row's data** lives in a Solid **store** owned by the route that loaded it (`createStore<Game[]>` in `ListRoute.tsx`, reached through `rowStore.ts`). Writes go through `rowStore.mutateRow(appid, fn)` — `produce(fn)`, so the callback gets an assignable draft — and the store notifies per field, so a streamed field patches only the cells and panel lines that read it. `standaloneRows` (a `createStore<Record<number, Game>>` in the same file) does the same for a game opened as a standalone aside (a nav-bar lookup, a DLC/base-game hop).
 - **The side panel's own UI state** (which game is open, hero index, expanded collapsibles, …) is plain signals in `panel.tsx`, set by its own click handlers.
+- **A game outside Steam** (`types.ts`'s `IgdbRow`) is no store row: `panel.tsx`'s `igdbRow(key)` is an object of getters over the panel's `igdb` resource (keyed on the open `igdb:` key, fetched by `panelData.ts`'s `fetchIgdbGame`), shaped like a row (`details.meta` with its cover as `banner`, its screenshots, no trailers; `details.hltb`), so the hero, HLTB, the lightbox and the media list take it unchanged. Its getters read only a reply tagged with their own key.
 - **Everything the panel fetches for itself** (news, achievements, "Owned by", ownership status, price, bundles, DLC) is a `createResource` keyed on the open game, created in one module-level `createRoot` (the panel is a singleton whose data outlives every render). Fetching and session-caching is `panelData.ts`; the resource is only wiring, giving `.loading`, discard of superseded responses and re-rendering for free. `refetch()` is the panel's Refresh details; each fetcher reads `info.refetching` as "force" (bypass both the session cache and the server's TTL).
   - News, achievements, price and bundles wait `PANEL_SETTLE_MS` before an uncached, unforced fetch and drop it if the panel has moved on, so holding ↓ fetches only the game it stops on; a cached value still answers at once, a game come back to within the pause joins its pending load, and ↻ replaces that load rather than racing it.
 
@@ -355,6 +359,11 @@ Above 768px the shell is locked to the viewport and **`.app-scroll` is the page'
   - `panelKeyboard.ts` binds the page shortcuts (Escape, `?`, `/`, hero stepping, random, list stepping) once and blocks them all but `?` while the lightbox is open (Esc there is the dialog's own `cancel`), so ↑/↓/R are bound again inside `lightbox.tsx` (`initLightbox`'s `onGameNav`/`onGameRandom`, re-pointing through `repointLightboxGame`). `gamePosition` only feeds the lightbox's caption.
   - `ListRoute.tsx`'s `openGame` calls `table?.focus.moveTo(resolved)` on every open: `@vates/data-table-solid`'s external focus API (≥ 0.14) expands the row's group, jumps to its page and scrolls it into view without taking DOM focus from the panel. `SearchRoute.tsx` instead moves real DOM focus onto the row (`focusRow`) for a visible ring, which `moveTo` never does.
 - **The DLC trail** — the back button over the name, "⟨game⟩" (named "Back to ⟨game⟩") — is `panelHistory.ts`'s `nextHopHistory` rule (pop rather than push when the target is already on top, so bouncing between a base game and its DLC doesn't grow duplicates); the trail is a signal in `panel.tsx`, preserved across a hop through `/game/:appid` by its `pendingHopAppid` latch.
+- **A game outside Steam** (`igdbRow`, `IgdbPanel.tsx` instead of `PanelRest`): name, release date, a "Not on Steam · PS5 · Switch" line saying why the Steam sections are absent, IGDB's rating and HLTB as glance chips, the summary, genre/developer/publisher pills (never filters: no column describes it), HLTB, and in the links row an IGDB credit, copy link and ↻ (the `igdb` resource's `refetch`). No store, ITAD, More, Present, status or ownership, which all need an appid; every Steam resource is keyed on `openAppid`, null for it.
+  - IGDB failing shows "⚠ IGDB didn't answer" with Retry; an instance without IGDB credentials (the route's 503) says it can't look up games outside Steam, with no retry.
+  - A reply naming a Steam appid (`steamAppid`) opens that Steam game through `onNavigateGame`, which replaces the history entry (`/game/:appid`'s `replace`, or `?game=`'s `replaceState`).
+  - Not presented (`presentHero` and the linked lightbox skip it): `OnAir`, the TV's rejoin and the nav chip all name a Steam appid.
+  - Its `&shot=` waits on its IGDB reply (`ListRoute.tsx`'s effect on the row's `loading`).
 - **Refresh details** refetches every panel resource with `refetching` set (bypass session cache and server TTL).
   - The button shows the details' age as text (`detailsFetchedAt`), visible on touch; only its icon spins.
   - That age is the **oldest** of five separately cached sources (reviews, HLTB, store metadata, tags, ProtonDB — tiers in [data.md](data.md)), so the tooltip breaks it down per source (`detailsFetchedAts`, from `/api/game-details`' `fetchedAts`).
@@ -416,7 +425,7 @@ A second window (`present.html`, its own Vite entry: `PresentationView.tsx`): a 
 
 - `?u=` — **one** slot: which account to show. Parsed and resolved once for the whole app by `AppShell.tsx`, read everywhere via `getEffectiveCurrentAccount()`, forwarded across in-app navigation by `withAccountParam`. Full semantics in [lists-and-accounts.md](lists-and-accounts.md).
 - `?u=` repeated — **several** slots: a comparison, one `u=` per player, comma-joined identifiers within a slot for a Family (the old Comparison page's spelling). Not an account override, so nothing resolves it as one and `withAccountParam` doesn't forward it. `/lists/compare` is its address; `normalizeSlots`/`compareUrl` (`urlState.ts`) write it, canonicalized to server-resolved steam64 ids. `&op=` picks the combine op, omitted for the default.
-- `?game=<appid>` / `&shot=<idx>` — which game the current list has open, and which screenshot; Recently Looked Up writes the game into its path (`/game/<appid>`) instead. Rewritten with `replaceState`; the one entry pushed per open overlay is `overlayHistory.ts`'s. `/game/:appid` is the canonical address for a game; the panel's 🔗 copy-link omits `?u=`, so a shared game link doesn't send recipients into the sender's account.
+- `?game=<appid>` / `&shot=<idx>` — which game the current list has open (`igdb%3A<id>` for a game outside Steam), and which screenshot; Recently Looked Up writes the game into its path (`/game/<appid>`) instead. Rewritten with `replaceState`; the one entry pushed per open overlay is `overlayHistory.ts`'s. `/game/:appid` is the canonical address for a game; the panel's 🔗 copy-link omits `?u=`, so a shared game link doesn't send recipients into the sender's account.
 - `?tv=` — a shared table-view snapshot, consumed once on arrival (see the game table).
 - `?view=<id>` — Owned/Wishlist's saved view; not forwarded by nav links (Owned opens All games), and a deleted one falls back to the whole list with a note.
 - `?q=` — `/search`'s term. Read on mount, written back (`setSearchQueryParam`, `urlState.ts`) as the on-page box is edited, debounced like the nav-bar box. Always `replaceState`.

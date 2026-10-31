@@ -426,11 +426,11 @@ export function postJson<T>(url: string, body: unknown, fallback: string): Promi
 }
 
 // `dt-tr`/`data-row-key` are @vates/data-table-solid's undocumented internals (vatesfr/data-table#24).
-export const gameRowEl = (root: ParentNode | null | undefined, appid: number) =>
+export const gameRowEl = (root: ParentNode | null | undefined, appid: number | string) =>
   root?.querySelector<HTMLElement>(`tr.dt-tr[data-row-key="${appid}"]`) ?? null;
 
 // Focuses a game's table row without letting focus scroll it, then brings it just into view.
-export function focusGameRow(root: ParentNode | null | undefined, appid: number): boolean {
+export function focusGameRow(root: ParentNode | null | undefined, appid: number | string): boolean {
   const row = gameRowEl(root, appid);
   if (!row) return false;
   row.focus({ preventScroll: true });
@@ -461,7 +461,12 @@ export function failedLookupFields(): ReturnType<typeof detailsFields> {
   return detailsFields({ ...NO_DETAILS, failed: [...DETAIL_SOURCES] });
 }
 
-type MediaState = Pick<Game, 'details' | 'failedSources' | 'mediaFailed'>;
+// A Steam row's, or a game outside Steam's (types.ts's IgdbRow).
+type MediaState = {
+  readonly details: { readonly meta: { readonly screenshots?: unknown[] } | null } | null;
+  readonly failedSources?: string[];
+  readonly mediaFailed?: boolean;
+};
 
 // Its media are loading (the details stream leaves them out); a failed load gives up until the game is opened again.
 export function mediaPending(game: MediaState): boolean {

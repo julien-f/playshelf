@@ -28,7 +28,8 @@ test('mockApi: igdb:9001 is a game outside Steam with a cover; other IGDB ids ar
   assert.equal(body.game.id, 9001);
   assert.equal(body.game.steamAppid, null);
   assert.ok(body.game.cover);
-  assert.equal((await ask('/api/igdb-game/9002')).status, 404);
+  assert.equal((await ask('/api/igdb-game/9002')).body.game.steamAppid, 620);
+  assert.equal((await ask('/api/igdb-game/9003')).status, 404);
   assert.equal((await ask('/api/health')).body.igdbConfigured, true);
 });
 

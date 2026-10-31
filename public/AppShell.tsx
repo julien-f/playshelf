@@ -26,6 +26,7 @@ import { setPanelParam, setLightboxParam, withAccountParam, COMPARE_PATH } from 
 import { overlayClosesPage } from './overlayHistory.ts';
 import { syncAccountOverrideFromUrl } from './accountOverride.ts';
 import type { Game } from './types.ts';
+import type { GameKey } from './gameKey.ts';
 import { ShortcutsModal } from './ShortcutsModal.tsx';
 import { AccountChip } from './AccountChip.tsx';
 import { PresentationChip } from './PresentationChip.tsx';
@@ -68,7 +69,7 @@ interface RouteHandlers {
   pickRandom?: () => boolean; // true if it actually picked — same idiom as stepGame below
   stepGame?: (dir: 1 | -1) => boolean;
   gamePosition?: () => { index: number; total: number } | null;
-  openGame?: (appid: number) => boolean;
+  openGame?: (appid: GameKey) => boolean;
   onGameClose?: () => void;
   refreshGame?: (game: Game) => Promise<void>;
   onTagClick?: (dim: string, value: string) => void;
@@ -163,7 +164,7 @@ export function AppShell(props: RouteSectionProps): JSX.Element {
   // game in place, never navigating away from whatever list/page is on screen), or `/game/:appid`
   // (the Recently Looked Up list) as the fallback for a route with no game/list context of its
   // own at all (Home, Bundles browse, About, Rank, 404) — see registerRouteHandlers's own comment above.
-  function openGameGlobally(appid: number): void {
+  function openGameGlobally(appid: GameKey): void {
     if (routeHandlers.openGame?.(appid)) return;
     // withAccountParam: a `?u=` link being explored has to survive this navigation, or looking
     // up a game from Home would silently drop back to the stored account (see urlState.ts).

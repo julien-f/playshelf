@@ -13,6 +13,7 @@ const {
   normalizeSlots,
   compareUrl,
   COMPARE_PATH,
+  urlWithoutPanel,
 } = require('../public/urlState.ts');
 
 // ── parseUrlState — slots ─────────────────────────────────────────────────────
@@ -192,4 +193,18 @@ test("compareUrl: rebuilds the players and op over the kept params, so a shared 
 test('compareUrl: an old comparison link round-trips through parse and rebuild', () => {
   const { slots } = parseUrlState('?u=bob&u=alice');
   assert.equal(compareUrl(slots), `${COMPARE_PATH}?u=alice&u=bob`);
+});
+
+// ── a game outside Steam (`igdb:N`) ─────────────────────────────────────────
+
+test('parseUrlState: ?game= reads a Steam appid or an IGDB key, and nothing else', () => {
+  assert.equal(parseUrlState('?game=440').game, 440);
+  assert.equal(parseUrlState('?game=igdb%3A9001').game, 'igdb:9001');
+  assert.equal(parseUrlState('?game=abc').game, null);
+});
+
+test('urlWithoutPanel: Recently Looked Up drops an IGDB game from its path, as a Steam one', () => {
+  assert.equal(urlWithoutPanel(new URL('http://x/game/igdb:9001?shot=s1')), '/game');
+  assert.equal(urlWithoutPanel(new URL('http://x/game/igdb%3A9001')), '/game');
+  assert.equal(urlWithoutPanel(new URL('http://x/game/620')), '/game');
 });

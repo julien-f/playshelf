@@ -15,7 +15,8 @@ import type { HlsVideo } from './hlsPlayer.ts';
 import { urlWithoutShot } from './urlState.ts';
 import { buildMediaItems, resolveShotIndex, preferredShotIndex, mediaLabel } from './mediaItems.ts';
 import type { MediaItem, ShotKind } from './mediaItems.ts';
-import type { Game, ReadonlyGame } from './types.ts';
+import type { PanelGame } from './types.ts';
+import { isIgdbRow, type GameKey } from './gameKey.ts';
 import { detailsPending, fmtTime, MEDIA_FAILED } from './utils.ts';
 import { loadedWhen, morph } from './viewTransition.ts';
 import { decideSwipeAxis, resolveSwipe, LB_SWIPE_RESISTANCE } from './lightboxSwipe.ts';
@@ -51,7 +52,7 @@ import ZoomIn from 'lucide-solid/icons/zoom-in';
 // so making them signals would add Solid overhead for zero reactive benefit, the same
 // reasoning `panel.tsx`'s own hero zoom-equivalent state would have gotten if this file had
 // any (it doesn't).
-const [lbGame, setLbGame] = createSignal<ReadonlyGame | null>(null);
+const [lbGame, setLbGame] = createSignal<PanelGame | null>(null);
 const [lbIdx, setIdx] = createSignal(0);
 // Derived from the open game on each read, not snapshotted at open time — the same shape, for
 // the same reason, as `PanelHero`'s own `items()` (panel.tsx): a row opened before its media
@@ -69,11 +70,16 @@ const shots = () => {
 const idx = () => Math.max(0, Math.min(lbIdx(), shots().length - 1));
 const gameName = () => lbGame()?.name ?? '';
 // While presenting and not set private, the lightbox steers the TV: the item it rests on is presented
-// (the effect at the foot of this file), and a trailer plays there only.
-const linked = createRoot(() => createMemo(() => lbGame() !== null && !!presented() && !privateMode()));
+// (the effect at the foot of this file), and a trailer plays there only; never a game outside Steam (presentHero).
+const linked = createRoot(() =>
+  createMemo(() => {
+    const g = lbGame();
+    return g !== null && !isIgdbRow(g) && !!presented() && !privateMode();
+  }),
+);
 // The game and item `renderLightbox` last drew, so a render can tell a game step from a media step,
 // and whether that one was the TV's (poster only), so unlinking on it doesn't start it here by itself.
-let lbRenderedAppid: number | undefined;
+let lbRenderedAppid: GameKey | undefined;
 let lbRenderedShotId: string | undefined;
 let lbRenderedOnTv = false;
 // A trailer held unstarted (private, or just unlinked): the first play loads it, from `lbHeldAt`.
@@ -244,7 +250,7 @@ export function isLightboxOpen() {
 export const lightboxOpen = createRoot(() => createMemo(() => lbGame() !== null));
 
 // The open game and the shot on screen — reactive, so the panel's hero can follow it.
-export function lightboxShot(): { appid: number; shotId: string } | null {
+export function lightboxShot(): { appid: GameKey; shotId: string } | null {
   const game = lbGame();
   const shot = shots()[idx()];
   return game && shot ? { appid: game.appid, shotId: shot.shotId } : null;
@@ -266,7 +272,7 @@ function cancelLbTv() {
 function toggleTv() {
   const game = lbGame();
   const shot = shots()[idx()];
-  if (!game || !shot) return;
+  if (!game || isIgdbRow(game) || !shot) return;
   if (linked()) return void setPrivateMode(true);
   // A trailer carries on where it was, as a cast does (the TV takes it even on the item it shows); one
   // never started goes out fresh, by the link itself, and only if the TV isn't showing it already.
@@ -1627,7 +1633,8 @@ function mountLightboxDom(): () => void {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-export function openLightbox(game: Game, idxOrShotId: number | string) {
+export function openLightbox(game: PanelGame, idxOrShotId: number | string) {
+  if (!buildMediaItems(game.appid, game.details?.meta).length) return; // a game outside Steam may have none
   // Only on a real open: this is also how an already-open lightbox is re-pointed at another game
   // (↑/↓ — see AppShell's onGameNav), and capturing focus again there would remember an element
   // inside the lightbox itself, so closing would restore focus to something already hidden.
@@ -1658,7 +1665,7 @@ export function openLightbox(game: Game, idxOrShotId: number | string) {
 }
 
 // The panel hero's picture, clicked, morphs into the lightbox's; the backdrop and the chrome fade in around it.
-export function openLightboxFrom(from: HTMLImageElement, game: Game, idxOrShotId: number) {
+export function openLightboxFrom(from: HTMLImageElement, game: PanelGame, idxOrShotId: number) {
   const lb = document.getElementById('screenshot-lightbox')!;
   const backdrop = lb.querySelector<HTMLElement>('.lb-backdrop')!;
   morph({
@@ -1688,17 +1695,17 @@ export function openLightboxFrom(from: HTMLImageElement, game: Game, idxOrShotId
 // real media rather than on the banner `openLightbox(game, 0)` used to pick (see
 // `preferredShotIndex`).
 // A game paged back to lands on the item the viewer picked there, for the session.
-const lbLastShot = new Map<number, string>();
+const lbLastShot = new Map<GameKey, string>();
 // Whether the item on screen is the viewer's pick (opened on or stepped to), not a game step's landing.
 let lbShotChosen = false;
 
 // Where `appid`'s remembered item sits in `list`, else where a game step lands leaving `leaving`.
-function landingIndex(appid: number, list: MediaItem[], leaving: ShotKind) {
+function landingIndex(appid: GameKey, list: MediaItem[], leaving: ShotKind) {
   const remembered = list.findIndex((s) => s.shotId === lbLastShot.get(appid));
   return remembered >= 0 ? remembered : preferredShotIndex(list, leaving);
 }
 
-export function repointLightboxGame(game: ReadonlyGame) {
+export function repointLightboxGame(game: PanelGame) {
   const left = shots()[idx()];
   const leavingGame = lbGame();
   // A lone banner is no pick: it stands in while the game's media load.
@@ -2129,7 +2136,7 @@ createRoot(() => {
     lbTvSend = () => {
       const g = lbGame();
       const item = shots()[idx()];
-      if (g && item) present(g, item.shotId, undefined, { silent: true });
+      if (g && !isIgdbRow(g) && item) present(g, item.shotId, undefined, { silent: true });
     };
     const settle = on?.appid === game.appid ? LB_SETTLE_MEDIA_MS : LB_SETTLE_GAME_MS;
     const burst = Date.now() < lbTvBurstUntil;

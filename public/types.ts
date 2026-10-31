@@ -1,5 +1,6 @@
 import type { BundlePackage } from './bundleRows.ts';
 import type { ProductionTier } from './utils.ts';
+import type { IgdbKey } from './gameKey.ts';
 
 // Shared frontend types. A row/game object is assembled from several independent async sources
 // (the game-details stream, price lookups, per-list fields), so most fields are optional — but
@@ -189,6 +190,60 @@ export interface DetailsAges {
 // replaced wholesale (see applyDetailsEvent in ListRoute.tsx), so the shallow version covers the
 // writes that actually happen without a hand-rolled DeepReadonly over every nested type.
 export type ReadonlyGame = Readonly<Game>;
+
+// GET /api/igdb-game/:igdbId's `game` (lib/igdb.js's extractIgdbGame).
+export interface IgdbGame {
+  id: number;
+  name: string;
+  url: string | null;
+  summary: string | null;
+  cover: string | null;
+  platforms: string[];
+  releaseDate: string | null;
+  developers: string[];
+  publishers: string[];
+  genres: string[];
+  rating: { score: number; count: number } | null;
+  screenshots: { id: string; thumbnail: string; full: string }[];
+  videos: { id: number; youtubeId: string; name: string | null }[];
+  steamAppid: number | null;
+}
+
+export interface IgdbGameReply {
+  game: IgdbGame | null;
+  hltb: Hltb | null;
+  fetchedAt: number | null;
+  fetchedAts: { igdb: number | null; hltb: number | null };
+  failed?: string[];
+  limited?: string;
+}
+
+// What the panel shows of a game outside Steam: its IGDB record, or why there's none.
+export type IgdbLoad =
+  | { status: 'ok'; reply: IgdbGameReply & { game: IgdbGame }; details: IgdbDetails }
+  | { status: 'failed'; message: string }
+  | { status: 'unavailable' }
+  | { status: 'notFound' };
+
+// `details` the way a Steam row has it, so the hero, the lightbox and HltbSection take either.
+export interface IgdbDetails {
+  meta: { banner: string; screenshots: IgdbGame['screenshots']; movies: [] };
+  hltb: Hltb | null;
+}
+
+// A game outside Steam open in the panel: never a table row, never in prefs (panel.tsx's igdbRow).
+export interface IgdbRow {
+  readonly appid: IgdbKey;
+  readonly name: string;
+  readonly loading: boolean;
+  readonly standalone: true;
+  readonly details: IgdbDetails | null;
+  readonly igdb: IgdbLoad | undefined; // undefined while it loads
+  readonly mediaFailed?: undefined;
+  readonly failedSources?: undefined;
+}
+
+export type PanelGame = ReadonlyGame | IgdbRow;
 
 // A single official news/announcement item (see extractNews in lib/steam.js).
 export interface NewsItem {

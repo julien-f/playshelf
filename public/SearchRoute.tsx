@@ -13,7 +13,8 @@ import type { ColumnDef } from '@vates/data-table-solid';
 import { useBaseTitle } from './pageTitle.ts';
 import { ListHero } from './ListHero.tsx';
 import { registerRouteHandlers } from './AppShell.tsx';
-import { panelOpen, panelClose, isPanelOpen, getPanelGame, pickRandomFrom } from './panel.tsx';
+import { panelOpen, panelClose, isPanelOpen, getPanelGame, igdbRow, pickRandomFrom } from './panel.tsx';
+import { isIgdbKey, type GameKey, type IgdbKey } from './gameKey.ts';
 import { renderPanelNav, stepGameList } from './panelNav.ts';
 import { setPanelParam, setSearchQueryParam, parseUrlState } from './urlState.ts';
 import { addRecentGame } from './recentGames.ts';
@@ -182,6 +183,20 @@ export default function SearchRoute() {
     }
   }
 
+  // A game outside Steam: beside the results, its panel loading it.
+  function openIgdb(key: IgdbKey): void {
+    ++lookupToken;
+    setStatusText('');
+    const game = igdbRow(key);
+    panelOpen(game);
+    setPanelParam(key);
+    renderPanelNav({ hasList: true, game, getGameList, onStep: stepGame, onReroll: pickRandomGame });
+  }
+  function openKey(key: GameKey, standalone: boolean): void {
+    if (isIgdbKey(key)) openIgdb(key);
+    else openResult(key, '', null, standalone);
+  }
+
   // The panel's ↻: forces fresh details onto the open game.
   async function refreshGame(game: Game): Promise<void> {
     const unresolved = !game.details?.meta;
@@ -236,7 +251,7 @@ export default function SearchRoute() {
     const restoreAppid = parseUrlState(location.search).game;
     if (restoreAppid) {
       hasAutoOpened = true;
-      openResult(restoreAppid, '', null);
+      openKey(restoreAppid, false);
     }
   });
   createEffect(() => {
@@ -249,8 +264,8 @@ export default function SearchRoute() {
   onMount(() => {
     const unregister = registerRouteHandlers({
       // A game from the panel (a DLC, a similar game) or the nav box, outside the results: no list nav, as on a list page.
-      openGame: (appid) => {
-        openResult(appid, '', null, !results().some((r) => r.appid === appid));
+      openGame: (key) => {
+        openKey(key, !results().some((r) => r.appid === key));
         return true;
       },
       stepGame,

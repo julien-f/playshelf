@@ -19,6 +19,7 @@
 //   signed-in      signed in with Steam as Alice, whose account already has prefs (fixtures.ts's signedInPrefs)
 //   creator-capped a developer's/publisher's list is Steam's first page of 523 games
 //   tagless        no game has Steam tags
+//   no-igdb        no Twitch credentials: health says so, GET /api/igdb-game answers 503 as server.js does
 //   client-limited this client spent its share of the outbound budgets: details say so once, achievements and prices 429
 import type { Page } from '@playwright/test';
 import { PLAYERS, CATALOG, BUNDLE, PICK_BUNDLE, SIGNED_IN, signedInPrefs, game, type Player } from './fixtures.ts';
@@ -203,12 +204,14 @@ const IGDB_GAME = {
     full: mediaUrl(`Console Quest Screenshot ${id}`, false, 'full'),
   })),
   videos: [],
-  steamAppid: null,
+  steamAppid: null as number | null,
 };
-const igdbGame = () => {
+// A game IGDB links to Steam (Portal 2): the panel opens the Steam game instead.
+const IGDB_STEAM_LINKED = { ...IGDB_GAME, id: 9002, name: 'Portal 2', steamAppid: 620, platforms: ['PC'] };
+const igdbGame = (game: typeof IGDB_GAME) => {
   const now = Date.now();
   return {
-    game: IGDB_GAME,
+    game,
     hltb: { id: 77, main: 9, extra: 13.5, completionist: 20, all: 12 },
     fetchedAt: now,
     fetchedAts: { igdb: now, hltb: now },
@@ -358,7 +361,7 @@ export function respond(
       ok: true,
       configured: true,
       itadConfigured: !states.has('no-itad'),
-      igdbConfigured: true,
+      igdbConfigured: !states.has('no-igdb'),
       cache: { entries: 0 },
     });
   if (path === '/api/me')
@@ -427,7 +430,17 @@ export function respond(
     return states.has('slow-meta') ? { ...answer, delayMs: SLOW_MEDIA_MS } : answer;
   }
   const igdbId = path.match(/^\/api\/igdb-game\/(\d+)$/)?.[1];
-  if (igdbId) return igdbId === String(IGDB_GAME.id) ? json(igdbGame()) : json({ error: 'No such IGDB game' }, 404);
+  if (igdbId && states.has('no-igdb')) return json({ error: 'Games outside Steam are not configured' }, 503);
+  if (igdbId && states.has('upstream-down'))
+    return json({
+      game: null,
+      hltb: null,
+      fetchedAt: null,
+      fetchedAts: { igdb: null, hltb: null },
+      failed: ['igdb', 'hltb'],
+    });
+  const igdbFixture = [IGDB_GAME, IGDB_STEAM_LINKED].find((g) => String(g.id) === igdbId);
+  if (igdbId) return igdbFixture ? json(igdbGame(igdbFixture)) : json({ error: 'No such IGDB game' }, 404);
   if (path.startsWith('/api/achievements/'))
     return json(achievements(url.searchParams.get('steamids'), states.has('upstream-down')));
   if (path.startsWith('/api/game-news/')) return json({ items: [], news: [] });

@@ -41,6 +41,7 @@ import {
   fetchBundles,
   bundlesRefusal,
   fetchDlc,
+  fetchIgdbGame,
   isItadOff,
 } from './panelData.ts';
 import type {
@@ -65,7 +66,9 @@ import { PRICES_UNAVAILABLE } from './priceLoading.ts';
 import { TIER_RANGE_TITLE } from './bundleData.ts';
 import { withAccountParam, urlWithoutPanel } from './urlState.ts';
 import { copyWithFeedback } from './clipboard.ts';
-import type { DetailsAges, GameMeta, PriceFields, ReadonlyGame } from './types.ts';
+import type { DetailsAges, GameMeta, IgdbLoad, IgdbRow, PanelGame, PriceFields, ReadonlyGame } from './types.ts';
+import { isIgdbKey, isIgdbRow, type GameKey, type IgdbKey } from './gameKey.ts';
+import { IgdbPanelRest } from './IgdbPanel.tsx';
 
 import {
   createSignal,
@@ -173,7 +176,7 @@ export interface PanelOptions {
 // `const x = someSignal()` / `const g = props.game.field` capture from quietly reintroducing the
 // same class of bug.
 let panelOptions: PanelOptions;
-const [panelGame, setPanelGame] = createSignal<ReadonlyGame | null>(null);
+const [panelGame, setPanelGame] = createSignal<PanelGame | null>(null);
 const [heroIdx, setHeroIdx] = createSignal(0);
 // The hero's index within a game's `length` media: a stale one from a longer list would overrun it.
 const clampedHeroIdx = (length: number) => Math.max(0, Math.min(heroIdx(), length - 1));
@@ -204,7 +207,7 @@ const [panelHistory, setPanelHistory] = createSignal<PanelHistoryEntry[]>([]);
 // was unreachable.
 let pendingHopAppid: number | null = null;
 
-function panelShuffle(arr: { appid: number }[]) {
+function panelShuffle<T>(arr: T[]): T[] {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -213,15 +216,15 @@ function panelShuffle(arr: { appid: number }[]) {
   return a;
 }
 
-const randomQueues = new Map<string, { appid: number }[]>(); // queueKey → remaining shuffled games
+const randomQueues = new Map<string, { appid: GameKey }[]>(); // queueKey → remaining shuffled games
 
 // Picks the next game from a shuffle bag scoped to queueKey (e.g. a group key,
 // or a fixed constant for a page with only one list) so repeated picks cycle
 // through every item before repeating. The bag is rebuilt when exhausted or
 // when `list` no longer matches what's left in it (e.g. after filtering).
-export function pickRandomFrom(list: { appid: number }[], queueKey: string, currentAppid: number) {
+export function pickRandomFrom<T extends { appid: GameKey }>(list: T[], queueKey: string, currentAppid: GameKey) {
   if (!list.length) return null;
-  let queue = randomQueues.get(queueKey) || [];
+  let queue = (randomQueues.get(queueKey) as T[] | undefined) || [];
   const ids = new Set(list.map((g) => g.appid));
   const queueValid = queue.length > 0 && queue.every((g) => ids.has(g.appid));
   if (!queueValid) {
@@ -398,6 +401,37 @@ export function isPanelOpen() {
 export function getPanelGame() {
   return panelGame();
 }
+export function getPanelKey(): GameKey | null {
+  return panelGame()?.appid ?? null;
+}
+
+// A game outside Steam, as the panel opens it: read through the open game's IGDB resource, so it fills in place.
+export function igdbRow(key: IgdbKey): IgdbRow {
+  const load = (): IgdbLoad | undefined => {
+    const loaded = panelData.igdb();
+    return loaded?.key === key ? loaded.load : undefined; // another game's, kept while this one loads
+  };
+  const ok = () => {
+    const l = load();
+    return l?.status === 'ok' ? l : null;
+  };
+  return {
+    appid: key,
+    standalone: true,
+    get name() {
+      return ok()?.reply.game.name ?? '';
+    },
+    get loading() {
+      return load() === undefined;
+    },
+    get details() {
+      return ok()?.details ?? null;
+    },
+    get igdb() {
+      return load();
+    },
+  };
+}
 
 // Forces a fresh rating/HLTB/store-metadata/tags fetch for the open game, bypassing
 // its cache TTL. The actual fetch + state update is host-specific (app.ts updates its
@@ -408,6 +442,10 @@ async function handlePanelRefresh() {
   if (!game || panelRefreshing()) return;
   setPanelRefreshing(true);
   try {
+    if (isIgdbRow(game)) {
+      await panelData.refetchIgdb();
+      return;
+    }
     // Each `refetch()` re-runs that resource's fetcher with `refetching` set, which is what its
     // fetcher reads as "force" (bypass both this app's session cache and the server's own TTL).
     // A refetch of a resource whose source is currently null — price, for a game its list
@@ -457,11 +495,11 @@ const [revealedAchievements, setRevealedAchievements] = createSignal<Set<string>
 // Defaults to 'all' (map lookup miss) for any appid never touched.
 const [achievementsFilter, setAchievementsFilter] = createSignal<Map<number, string>>(new Map());
 
-function isSectionExpanded(appid: number, section: string) {
+function isSectionExpanded(appid: GameKey, section: string) {
   return expandedSections().has(`${appid}:${section}`);
 }
 
-function toggleSection(appid: number, section: string) {
+function toggleSection(appid: GameKey, section: string) {
   const key = `${appid}:${section}`;
   const wasExpanded = expandedSections().has(key);
   const next = new Set(expandedSections());
@@ -510,7 +548,7 @@ createRoot(() => {
     const g = panelGame();
     const panel = document.getElementById('game-panel');
     panel?.style.removeProperty('--panel-tint');
-    const url = g && (g.thumb || g.capsule);
+    const url = g && !isIgdbRow(g) && (g.thumb || g.capsule);
     if (!panel || !url) return;
     void sampleArtTint(url).then((tint) => {
       if (tint && panelGame() === g) panel.style.setProperty('--panel-tint', tint);
@@ -519,7 +557,15 @@ createRoot(() => {
 });
 
 const panelData = createRoot(() => {
-  const openAppid = createMemo(() => panelGame()?.appid ?? null);
+  // Steam's appid only: a game outside Steam has none of the Steam sections below.
+  const openAppid = createMemo(() => {
+    const key = panelGame()?.appid;
+    return typeof key === 'number' ? key : null;
+  });
+  const openIgdbKey = createMemo(() => {
+    const key = panelGame()?.appid;
+    return isIgdbKey(key) ? key : null;
+  });
   // Shared by the three account-specific resources — achievementsAccountKey is just "sort the
   // member ids and join them", which is as much the right cache key for owners/ownership as it
   // is for achievements.
@@ -531,6 +577,15 @@ const panelData = createRoot(() => {
   // A plain `refetch()` from the refresh button is always a forced one; the source-driven initial
   // load passes `refetching: false`. That's the only distinction any of these fetchers needs.
   const isForced = (info: { refetching: boolean | unknown }) => info.refetching !== false;
+
+  // A game outside Steam: its IGDB record and HLTB in one reply, tagged with its key (igdbRow reads only its own).
+  const [igdb, { refetch: refetchIgdb }] = createResource<{ key: IgdbKey; load: IgdbLoad }, IgdbKey>(
+    openIgdbKey,
+    (key, info) => {
+      const load = fetchIgdbGame(key, { force: isForced(info) });
+      return load instanceof Promise ? load.then((l) => ({ key, load: l })) : { key, load };
+    },
+  );
 
   const [news, { refetch: refetchNews }] = createResource<PanelNews, number>(openAppid, (appid, info) => {
     // A cached value comes back synchronously, so reopening a game paints its real News card
@@ -545,7 +600,7 @@ const panelData = createRoot(() => {
       // change when the *identity* of what's being fetched changes (this appid, this account), and
       // a resource fetcher runs untracked, so reading the game here subscribes to nothing.
       const g = panelGame();
-      if (!g) return null;
+      if (!g || isIgdbRow(g)) return null;
       return fetchAchievements(g.appid, currentMembers(), {
         force: isForced(info),
         settled: () => appidAndAccount() === key,
@@ -579,7 +634,7 @@ const panelData = createRoot(() => {
   // *source*, so a row that gets priced by its list later simply stops being a candidate.
   const priceSource = createMemo(() => {
     const g = panelGame();
-    if (!g || g.bestDealPrice !== undefined) return null;
+    if (!g || isIgdbRow(g) || g.bestDealPrice !== undefined) return null;
     return `${g.appid}:${currentRegion()}`;
   });
 
@@ -605,12 +660,12 @@ const panelData = createRoot(() => {
   // The number shown rides along as an `appid:shown` string, so "Show more" re-runs the fetch.
   const dlcShown = (): number => {
     const g = panelGame();
-    const ids = g?.details?.meta?.dlc;
+    const ids = g && !isIgdbRow(g) ? g.details?.meta?.dlc : undefined;
     if (!g || !ids?.length || !isSectionExpanded(g.appid, 'dlc')) return 0;
     const more = dlcMore();
     return Math.min(ids.length, more?.appid === g.appid ? more.shown : DLC_PAGE);
   };
-  const dlcSource = createMemo(() => (dlcShown() ? `${panelGame()!.appid}:${dlcShown()}` : null));
+  const dlcSource = createMemo(() => (dlcShown() ? `${openAppid()}:${dlcShown()}` : null));
 
   // The in-progress list, streamed in one entry at a time (see fetchDlc's `onPartial`) — a
   // resource is one value per fetch, so the partial state is its own signal alongside it rather
@@ -620,12 +675,15 @@ const panelData = createRoot(() => {
 
   const [dlc] = createResource<PanelDlc, string>(dlcSource, (key) => {
     const [appid, shown] = key.split(':').map(Number);
-    const ids = (panelGame()?.details?.meta?.dlc ?? []).slice(0, shown);
+    const g = panelGame();
+    const ids = (g && !isIgdbRow(g) ? (g.details?.meta?.dlc ?? []) : []).slice(0, shown);
     return fetchDlc(ids, { onPartial: (entries) => setDlcPartial({ appid, entries }) });
   });
   const showMoreDlc = (appid: number) => setDlcMore({ appid, shown: dlcShown() + DLC_PAGE });
 
   return {
+    igdb,
+    refetchIgdb,
     news,
     refetchNews,
     achievements,
@@ -641,6 +699,17 @@ const panelData = createRoot(() => {
     dlcShown,
     showMoreDlc,
   };
+});
+
+// A game outside Steam whose IGDB reply names its Steam appid opens as that Steam game instead.
+createRoot(() => {
+  createEffect(() => {
+    const g = panelGame();
+    const load = g && isIgdbRow(g) ? g.igdb : undefined;
+    if (load?.status !== 'ok' || load.reply.game.steamAppid == null) return;
+    const { steamAppid, name } = load.reply.game;
+    untrack(() => panelOptions.onNavigateGame(steamAppid, name));
+  });
 });
 
 // The price fields backing the Price card: whatever the host route already loaded onto the row
@@ -662,7 +731,7 @@ function panelPriceFields(game: ReadonlyGame): PriceFields | null | undefined {
 // convention as gameSearch.ts's onSelect.
 function navigateToGame(appid: number, name: string) {
   const game = panelGame();
-  if (!game) return;
+  if (!game || isIgdbRow(game)) return;
   // See nextHopHistory (panelHistory.ts) for the push-vs-pop rule.
   setPanelHistory((hist) => nextHopHistory(hist, { appid: game.appid, name: game.name }, appid));
   pendingHopAppid = appid;
@@ -712,13 +781,14 @@ function onTv(shotId: string | undefined): boolean {
 }
 
 // P and the Present button: the hero's current media goes to the presentation window.
+// Not for a game outside Steam: the presentation protocol and the TV's rejoin name a Steam appid.
 export function presentHero(): void {
   const g = panelGame();
   const items = getPanelItems();
-  if (g && items.length) present(g, items[clampedHeroIdx(items.length)].shotId);
+  if (g && !isIgdbRow(g) && items.length) present(g, items[clampedHeroIdx(items.length)].shotId);
 }
 
-export function panelOpen(game: ReadonlyGame) {
+export function panelOpen(game: PanelGame) {
   pinnedSubnavTarget = null; // a jump in the previous game's panel says nothing about this one
   // Every opener (a table row, a search-box pick, prev/next/random, a deep link) starts a fresh
   // browsing trail — except the DLC/base-game hop this panel started itself, which arrives here
@@ -875,8 +945,10 @@ const TAG_KIND_META = {
 };
 
 // A Steam tag's `weights` entry (relative to the game's top tag) shows as a gauge along its pill's bottom edge.
+// `plain`: never filter buttons, for a game no table column describes (one outside Steam).
 function TagCloud(props: {
   groups: { kind: TagKind; dim: string; items?: string[] | null; weights?: Record<string, number | null> | null }[];
+  plain?: boolean;
 }): JSX.Element {
   const present = createMemo(() => props.groups.filter((gr) => gr.items?.length));
   const pills = createMemo(() =>
@@ -901,7 +973,7 @@ function TagCloud(props: {
                 w == null ? null : <span class={`tag-weight tag-weight--${kind}`} style={{ width: `${w * 100}%` }} />;
               return (
                 <Show
-                  when={panelOptions.tagsFilterable()}
+                  when={!props.plain && panelOptions.tagsFilterable()}
                   fallback={
                     <span class="panel-tag" title={title}>
                       {dot}
@@ -1142,7 +1214,7 @@ function GlanceGrid(props: { game: ReadonlyGame }): JSX.Element {
 // it, those two rows read as plain text next to achievements' bold colored percentage,
 // losing the "one visual family" look this whole shape is meant to have.
 function CollapsibleCard(props: {
-  appid: number;
+  appid: GameKey;
   section: string;
   num?: JSX.Element;
   numColor?: string | null;
@@ -1960,11 +2032,15 @@ function HeroMain(props: { items: MediaItem[]; idx: number }): JSX.Element {
   const idx = () => props.idx;
   const current = () => props.items[idx()];
   const name = () => panelGame()?.name ?? '';
-  const isShot = () => idx() > 0;
+  const isShot = () => current().shotId !== 'banner';
   const hasMany = () => props.items.length > 1;
   const src = () => (current().type === 'video' ? current().thumb : current().main);
   // The cover's stand-in is the table's capsule, likely cached: the cover has no smaller version.
-  const standIn = () => (current().shotId === 'banner' ? panelGame()?.thumb || current().thumb : current().thumb);
+  const tableThumb = () => {
+    const g = panelGame();
+    return g && !isIgdbRow(g) ? g.thumb : null;
+  };
+  const standIn = () => (current().shotId === 'banner' ? tableThumb() || current().thumb : current().thumb);
   // Which source has finished, rather than a flag the last load cleared: a browser keeps painting
   // the previous image until the next one has loaded, so on a slow connection the hero showed the
   // last item (or the last game's) under the new one's name. Until `src()` itself is in, the image
@@ -1974,7 +2050,11 @@ function HeroMain(props: { items: MediaItem[]; idx: number }): JSX.Element {
   const loading = () => loadedSrc() !== src() && brokenSrc() !== src();
   const isOnTv = createMemo(() => onTv(current().shotId));
   // While presenting (and not private), the lightbox it opens puts it on the TV and steers it there.
-  const toTv = () => !!presented() && !privateMode();
+  const presentable = () => {
+    const g = panelGame();
+    return !!g && !isIgdbRow(g) && !!presented();
+  };
+  const toTv = () => presentable() && !privateMode();
   // A pointer click on a loaded picture morphs it into the lightbox's; a key or a video opens at once.
   const openCurrent = (e: MouseEvent & { currentTarget: HTMLElement }) => {
     const g = panelGame();
@@ -2001,7 +2081,7 @@ function HeroMain(props: { items: MediaItem[]; idx: number }): JSX.Element {
         onClick={openCurrent}
       >
         {/* Said on the picture, not only in its label: a click presents it, or it's what the TV shows. */}
-        <Show when={presented()}>
+        <Show when={presentable()}>
           <span class="panel-hero-present lb-glass" aria-hidden="true">
             <Show when={isOnTv()} fallback={!privateMode() && <Cast />}>
               <span class="panel-hero-present-dot" />
@@ -2146,12 +2226,12 @@ function PanelHero(): JSX.Element {
 // The HLTB Main/Extra/Completionist breakdown. The glance strip above already carries HLTB's
 // "All PlayStyles" number (see GlanceGrid), so this is the fuller breakdown beneath it, not a
 // second copy of the headline figure.
-const hltbShown = (g: ReadonlyGame) => {
+const hltbShown = (g: PanelGame) => {
   const h = g.details?.hltb;
   return !g.loading && !!h && !!(h.main || h.extra || h.completionist);
 };
 
-function HltbSection(props: { game: ReadonlyGame }): JSX.Element {
+function HltbSection(props: { game: PanelGame }): JSX.Element {
   const h = () => props.game.details?.hltb;
   const present = () => hltbShown(props.game);
   const parts = () => {
@@ -2488,7 +2568,12 @@ const DETAILS_SOURCES: [keyof DetailsAges, string][] = [
   ['protondb', 'ProtonDB'],
 ];
 
-function refreshTitle(game: ReadonlyGame): string {
+function refreshTitle(game: PanelGame): string {
+  if (isIgdbRow(game)) {
+    const ages = game.igdb?.status === 'ok' ? game.igdb.reply.fetchedAts : null;
+    const lines = ages ? [`IGDB: ${fmtAge(ages.igdb)}`, `How Long To Beat: ${fmtAge(ages.hltb)}`, ''] : [];
+    return [...lines, 'Click to re-fetch these.'].join('\n');
+  }
   const ages = game.detailsFetchedAts;
   const lines = ages
     ? DETAILS_SOURCES.filter(([key]) => ages[key] !== undefined).map(([key, label]) => `${label}: ${fmtAge(ages[key])}`)
@@ -2504,8 +2589,13 @@ function refreshTitle(game: ReadonlyGame): string {
   ].join('\n');
 }
 
-function RefreshButton(props: { game: ReadonlyGame }): JSX.Element {
-  const age = () => (props.game.detailsFetchedAt === undefined ? '' : fmtAge(props.game.detailsFetchedAt));
+function RefreshButton(props: { game: PanelGame }): JSX.Element {
+  const fetchedAt = () => {
+    const g = props.game;
+    if (!isIgdbRow(g)) return g.detailsFetchedAt;
+    return g.igdb?.status === 'ok' ? g.igdb.reply.fetchedAt : undefined;
+  };
+  const age = () => (fetchedAt() === undefined ? '' : fmtAge(fetchedAt()));
   return (
     <Show when={!props.game.loading}>
       <button
@@ -2676,6 +2766,88 @@ function PanelSubnav(props: { game: ReadonlyGame }): JSX.Element {
   );
 }
 
+function CopyLinkButton(): JSX.Element {
+  // Shown by the button's flash: created here, where an owner can dispose of it.
+  const copiedIcon = (<Check />) as Node;
+  return (
+    <button
+      type="button"
+      class="panel-icon-link panel-copy-link-btn"
+      title="Copy link to this game"
+      aria-label="Copy link to this game"
+      onClick={(e) => copyPanelLink(e, copiedIcon)}
+    >
+      <Link />
+    </button>
+  );
+}
+
+// A game outside Steam's glance: IGDB's rating, linking to its page, and HLTB.
+function IgdbGlance(props: { game: IgdbRow }): JSX.Element {
+  const game = () => (props.game.igdb?.status === 'ok' ? props.game.igdb.reply.game : null);
+  const hltbSearch = () => `https://howlongtobeat.com/?q=${encodeURIComponent(props.game.name)}`;
+  const hltbChip = () => {
+    const h = props.game.details?.hltb;
+    if (h?.id && h.all)
+      return (
+        <GlanceChip
+          href={`https://howlongtobeat.com/game/${h.id}`}
+          value={`${h.all}h`}
+          label="HLTB"
+          detail="all playstyles"
+        />
+      );
+    if (props.game.igdb?.status === 'ok' && props.game.igdb.reply.failed?.includes('hltb'))
+      return (
+        <GlanceChip
+          href={hltbSearch()}
+          value={<TriangleAlert />}
+          color="var(--warn)"
+          label="HLTB"
+          detail="didn't answer"
+        />
+      );
+    return (
+      <GlanceChip
+        href={h?.id ? `https://howlongtobeat.com/game/${h.id}` : hltbSearch()}
+        value="—"
+        label="HLTB"
+        detail={h?.id ? 'no data' : 'search'}
+      />
+    );
+  };
+  return (
+    <div class="panel-glance panel-glance--two">
+      <Show
+        when={game()?.rating}
+        fallback={<GlanceChip href={safeHref(game()?.url)} value="—" label="IGDB" detail="no rating" />}
+      >
+        {(r) => (
+          <GlanceChip
+            href={safeHref(game()?.url)}
+            value={r().score}
+            color={scoreColor(r().score)}
+            label="IGDB"
+            detail={`${fmtCompactCount(r().count)} ratings`}
+          />
+        )}
+      </Show>
+      {hltbChip()}
+    </div>
+  );
+}
+
+function igdbPills(game: IgdbRow) {
+  const g = game.igdb?.status === 'ok' ? game.igdb.reply.game : null;
+  const devs = g?.developers ?? [];
+  const pubs = g?.publishers ?? [];
+  return [
+    { kind: 'genres' as const, dim: 'genres', items: g?.genres },
+    { kind: 'devpub' as const, dim: 'developers', items: devs },
+    ...(sameNames(devs, pubs) ? [] : [{ kind: 'devpub' as const, dim: 'publishers', items: pubs }]),
+  ];
+}
+
 function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
   // The one deliberate capture of a "reactive variable" in this file: `props.game` is the game
   // *object*, and PanelBody renders this component under a `keyed` <Show>, so a different game
@@ -2702,8 +2874,6 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
   // "← Back" only appears once a DLC hop is actually in progress — a plain table-row click never
   // gets this button, only a game reached by following a DLC link (or by going back through more
   // than one of them) does.
-  // Shown by the copy-link button's flash: created here, where an owner can dispose of it.
-  const copiedIcon = (<Check />) as Node;
 
   const back = () => {
     const hist = panelHistory();
@@ -2783,15 +2953,7 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
             <MoreLinks game={g} />
             <PresentButton />
             <span class="panel-icon-divider" role="separator" aria-hidden="true" />
-            <button
-              type="button"
-              class="panel-icon-link panel-copy-link-btn"
-              title="Copy link to this game"
-              aria-label="Copy link to this game"
-              onClick={(e) => copyPanelLink(e, copiedIcon)}
-            >
-              <Link />
-            </button>
+            <CopyLinkButton />
             <RefreshButton game={g} />
             <OwnershipRow game={g} />
           </div>
@@ -2843,7 +3005,29 @@ function PanelBody(): JSX.Element {
           PanelRest), so data streaming in for the game already on screen patches the one thing it
           changed instead of re-rendering anything. */}
       <Show when={panelGame()} keyed>
-        {(game) => <PanelRest game={game} />}
+        {(game) =>
+          isIgdbRow(game) ? (
+            <IgdbPanelRest
+              game={game}
+              actions={
+                <>
+                  <CopyLinkButton />
+                  <RefreshButton game={game} />
+                </>
+              }
+              glance={<IgdbGlance game={game} />}
+              details={
+                <>
+                  <TagCloud plain groups={igdbPills(game)} />
+                  <HltbSection game={game} />
+                </>
+              }
+              onRetry={() => void panelData.refetchIgdb()}
+            />
+          ) : (
+            <PanelRest game={game} />
+          )
+        }
       </Show>
     </>
   );

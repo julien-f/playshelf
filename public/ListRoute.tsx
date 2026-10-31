@@ -144,12 +144,15 @@ import {
   panelClose,
   isPanelOpen,
   getPanelGame,
+  getPanelKey,
+  igdbRow,
   pickRandomFrom,
   clearRandomQueue,
   clearAllRandomQueues,
   notifyOwnersChanged,
   openPanelFromRow,
 } from './panel.tsx';
+import { isIgdbKey, isIgdbRow, parseGameKey, type GameKey } from './gameKey.ts';
 import {
   setPanelParam,
   withAccountParam,
@@ -247,7 +250,16 @@ import {
 import { encodeListFormula, decodeListFormula, shareListUrl, inMemoryDynamicList } from './listShare.ts';
 import { copyWithFeedback } from './clipboard.ts';
 import { setBaseTitle } from './pageTitle.ts';
-import type { AccountSlot, GameDetailsReply, Game, GameList, GameMeta, CombineOp, ListRef } from './types.ts';
+import type {
+  AccountSlot,
+  GameDetailsReply,
+  Game,
+  GameList,
+  GameMeta,
+  CombineOp,
+  ListRef,
+  PanelGame,
+} from './types.ts';
 import {
   getList,
   getLists,
@@ -1610,13 +1622,13 @@ export default function ListRoute() {
     });
   }
 
-  function renderPanelNav(game: Game): void {
+  function renderPanelNav(game: PanelGame): void {
     renderPanelNavShared({ hasList: !!table, game, getGameList, onStep: stepGame, onReroll: pickRandomGame });
   }
 
-  function openGame(game: Game, { isRandom = false }: { isRandom?: boolean } = {}): void {
+  function openGame(game: PanelGame, { isRandom = false }: { isRandom?: boolean } = {}): void {
     if (!isRandom) clearRandomQueue(randomQueueKey());
-    const resolved = rowStore.getRow(game.appid) ?? standaloneRows[game.appid] ?? game;
+    const resolved = isIgdbRow(game) ? game : (rowStore.getRow(game.appid) ?? standaloneRows[game.appid] ?? game);
     // No "keep the panel's DLC trail" flag to pass: panel.tsx tracks its own hops now (see
     // `pendingHopAppid` there), which is the only way the `/game/:appid` path — where the open
     // happens a whole route navigation later, from load() — could preserve one at all.
@@ -1626,7 +1638,7 @@ export default function ListRoute() {
     // into view) without stealing real DOM focus from the panel — `@vates/data-table-solid`'s
     // external focus API (>= 0.14), built for exactly this "external nav just changed the current
     // row" case. No-ops harmlessly for a standalone lookup not in `table`'s own data.
-    table?.focus.moveTo(resolved);
+    if (!isIgdbRow(resolved)) table?.focus.moveTo(resolved);
     // 'recent' is the one kind whose address IS the focused game (see this file's own header
     // comment) — a row click/prev-next/random pick here updates the path, not a `?game=` query
     // param, so the address bar always matches whatever the panel is actually showing. This
@@ -1704,7 +1716,7 @@ export default function ListRoute() {
   // live URL (setPanelParam) and because a row's screenshots only exist once its media have
   // loaded — so the value is read up front and replayed afterwards, the same shape the
   // deleted pages' own restorePanelFromUrl used.
-  let pendingShot: { appid: number; shot: string } | null = null;
+  let pendingShot: { appid: GameKey; shot: string } | null = null;
   function restorePendingShot(): void {
     if (!pendingShot) return;
     const game = getPanelGame();
@@ -1748,7 +1760,7 @@ export default function ListRoute() {
   // The open game's, then its neighbours' in list order, so ↑/↓ land on their media at once.
   function loadOpenGameMedia(opened = false): void {
     const game = getPanelGame();
-    if (!game) return;
+    if (!game || isIgdbRow(game)) return; // its media come with its IGDB reply
     loadMedia(game.appid, opened);
     for (const dir of [-1, 1] as const) {
       const near = stepGameList(getGameList(), game, dir);
@@ -1760,6 +1772,17 @@ export default function ListRoute() {
     on(
       () => getPanelGame()?.appid,
       () => loadOpenGameMedia(true),
+    ),
+  );
+
+  // A game outside Steam's `&shot=` waits on its IGDB reply, which the panel loads.
+  createEffect(
+    on(
+      () => {
+        const game = getPanelGame();
+        return !!game && isIgdbRow(game) && !game.loading;
+      },
+      (loaded) => loaded && restorePendingShot(),
     ),
   );
 
@@ -1819,7 +1842,10 @@ export default function ListRoute() {
       }
     });
   }
-  function openOrAddRecentGame(appid: number): void {
+  // A game outside Steam opens beside the list, never joining it or the stored recents.
+  function openOrAddRecentGame(key: GameKey): void {
+    if (isIgdbKey(key)) return openGame(igdbRow(key));
+    const appid = key;
     const existing = rowStore.getRow(appid);
     if (existing) {
       restampLookedUp();
@@ -1847,7 +1873,7 @@ export default function ListRoute() {
   // navigating away — every kind can place it somewhere sensible, so this always returns true;
   // the shell's own fallback (navigating to /game/:appid) is only ever reached from a route with
   // no game/list context at all (Home, Bundles browse, About — see AppShell.tsx's own comment).
-  function handleOpenGameRequest(appid: number): boolean {
+  function handleOpenGameRequest(appid: GameKey): boolean {
     // 'recent' is the one kind whose address IS the focused game (/game/:appid, not a query
     // param — see this file's own header comment) — navigating (rather than calling
     // openOrAddRecentGame directly) is what keeps the URL correct; load()'s own fast path below
@@ -1858,9 +1884,12 @@ export default function ListRoute() {
       navigate(withAccountParam(`/game/${appid}`), { replace: true });
       return true;
     }
-    const existing = rowStore.getRow(appid);
-    if (existing) openGame(existing);
-    else openStandaloneInPlace(appid);
+    if (isIgdbKey(appid)) openGame(igdbRow(appid));
+    else {
+      const existing = rowStore.getRow(appid);
+      if (existing) openGame(existing);
+      else openStandaloneInPlace(appid);
+    }
     return true;
   }
 
@@ -2279,9 +2308,9 @@ export default function ListRoute() {
       // *within* this already-loaded list), which re-runs this same effect right after the panel
       // was already opened; without this check that re-entry would call openOrAddRecentGame a
       // second time for a game that's already showing.
-      const focusAppid = params.appid ? Number(params.appid) : null;
-      if (focusAppid != null && getPanelGame()?.appid !== focusAppid) openOrAddRecentGame(focusAppid);
-      else if (focusAppid == null && isPanelOpen()) panelClose();
+      const focusKey = params.appid ? parseGameKey(params.appid) : null;
+      if (focusKey != null && getPanelKey() !== focusKey) openOrAddRecentGame(focusKey);
+      else if (focusKey == null && isPanelOpen()) panelClose();
       return;
     }
     // A comparison rewrites its own URL to server-resolved steam64 ids once it has them (below),
@@ -2917,8 +2946,8 @@ export default function ListRoute() {
             // eslint-disable-next-line solid/reactivity -- runs once per click, inside the view transition's update
             onRowClick: (row, event) => openPanelFromRow(event, () => openGame(rowStore.getRow(row.appid) ?? row)),
             get currentRow() {
-              const appid = getPanelGame()?.appid;
-              return appid == null ? null : (rowStore.getRow(appid) ?? null);
+              const appid = getPanelKey();
+              return typeof appid === 'number' ? (rowStore.getRow(appid) ?? null) : null;
             },
             // In the toolbar's own line rather than a row above it, so a phone's table starts higher.
             toolbarEnd: viewActions(),
@@ -2962,13 +2991,11 @@ export default function ListRoute() {
     // otherwise wipe a value the first pass hasn't replayed yet. Cleared only by the replay.
     const search = new URLSearchParams(routerLocation.search);
     const shotParam = search.get('shot');
-    if (shotParam) pendingShot = { appid: Number(search.get('game') ?? params.appid), shot: shotParam };
+    const gameParam = search.get('game') ?? params.appid;
+    if (shotParam && gameParam) pendingShot = { appid: parseGameKey(gameParam), shot: shotParam };
     if (kind === 'recent') {
-      if (params.appid) openOrAddRecentGame(Number(params.appid));
-    } else {
-      const gameParam = new URLSearchParams(routerLocation.search).get('game');
-      if (gameParam) handleOpenGameRequest(Number(gameParam));
-    }
+      if (params.appid) openOrAddRecentGame(parseGameKey(params.appid));
+    } else if (search.get('game')) handleOpenGameRequest(parseGameKey(search.get('game')!));
 
     // An empty result set was practically unreachable before row-selection-based remove-from-
     // list existed (a bundle already early-returns its own "no games matched" message above;

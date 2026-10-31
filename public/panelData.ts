@@ -29,8 +29,9 @@
 // A factory plus a default instance, same shape (and same testability reasoning) as
 // myOwnership.ts's createMyOwnershipCache.
 import { applyPriceInfo, postPrices } from './priceLoading.ts';
-import { fetchJson, refusalMessage } from './utils.ts';
-import type { Achievements, NewsItem, PriceFields } from './types.ts';
+import { ApiError, fetchJson, refusalMessage } from './utils.ts';
+import { igdbIdOf, type IgdbKey } from './gameKey.ts';
+import type { Achievements, IgdbGameReply, IgdbLoad, NewsItem, PriceFields } from './types.ts';
 import type { PickAndMixTier } from './bundleRows.ts';
 
 // Achievement *progress* is per Steam account: the helpers below take the members of the account
@@ -162,6 +163,7 @@ export function createPanelDataCache() {
   const bundlesRefused = new Map<string, string>();
   const dlcEntries = new Map<number, DlcEntry | null>(); // null: the store has no entry for it
   const bundles = new Map<string, PanelBundles>();
+  const igdb = new Map<IgdbKey, IgdbLoad>(); // only what a reopen shouldn't retry
 
   // Lazily resolved once per session rather than per-call — a plain GET /api/health, cheap to
   // over-share across every game a price is fetched for and every list mounted (ListRoute.tsx).
@@ -356,7 +358,36 @@ export function createPanelDataCache() {
     return entries.length || !failed ? entries : null;
   }
 
+  // A game outside Steam (GET /api/igdb-game/:igdbId), its whole panel in one reply; a failure is retried by ↻.
+  function fetchIgdbGame(key: IgdbKey, { force = false } = {}): IgdbLoad | Promise<IgdbLoad> {
+    const cached = igdb.get(key);
+    if (cached && !force) return cached;
+    const url = `/api/igdb-game/${igdbIdOf(key)}${force ? '?refresh=1' : ''}`;
+    return fetchJson<IgdbGameReply>(url, undefined, "IGDB didn't answer").then(
+      ({ game, ...reply }): IgdbLoad => {
+        if (!game) return { status: 'failed', message: reply.limited ?? "IGDB didn't answer" };
+        const meta = { banner: game.cover ?? '', screenshots: game.screenshots, movies: [] as [] };
+        const load = { status: 'ok' as const, reply: { ...reply, game }, details: { meta, hltb: reply.hltb } };
+        if (!reply.failed) igdb.set(key, load);
+        return load;
+      },
+      (err: unknown): IgdbLoad => {
+        const status = err instanceof ApiError ? err.status : 0;
+        // 503: this instance has no IGDB credentials (server.js's requireIgdb).
+        const load: IgdbLoad =
+          status === 503
+            ? { status: 'unavailable' }
+            : status === 404
+              ? { status: 'notFound' }
+              : { status: 'failed', message: refusalMessage(err) ?? "IGDB didn't answer" };
+        if (load.status !== 'failed') igdb.set(key, load);
+        return load;
+      },
+    );
+  }
+
   return {
+    fetchIgdbGame,
     fetchNews,
     fetchAchievements,
     achievementsRefusal: (appid: number, memberIds: string[]) =>
@@ -372,6 +403,7 @@ export function createPanelDataCache() {
 }
 
 const defaultCache = createPanelDataCache();
+export const fetchIgdbGame = defaultCache.fetchIgdbGame;
 export const fetchNews = defaultCache.fetchNews;
 export const fetchAchievements = defaultCache.fetchAchievements;
 export const achievementsRefusal = defaultCache.achievementsRefusal;

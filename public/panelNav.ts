@@ -8,7 +8,10 @@ import { createComponent, createEffect, createRoot } from 'solid-js';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import ChevronUp from 'lucide-solid/icons/chevron-up';
 import Dices from 'lucide-solid/icons/dices';
-import type { Game } from './types.ts';
+import type { GameKey } from './gameKey.ts';
+
+// What the bar and the steps need of a row: a Steam row, or (on /search) a game outside Steam.
+type NavGame = { readonly appid: GameKey; readonly standalone?: boolean };
 
 let disposeNav: (() => void) | null = null;
 
@@ -21,7 +24,7 @@ export function clearPanelNav(): void {
 
 // Nothing to page through for a standalone lookup, or before ListRoute's table exists (`hasList`).
 // "i / N" tracks `getGameList` reactively; ↑/↓ resolve the list at click time, like the keys.
-export function renderPanelNav({
+export function renderPanelNav<T extends NavGame>({
   hasList,
   game,
   getGameList,
@@ -29,8 +32,8 @@ export function renderPanelNav({
   onReroll,
 }: {
   hasList: boolean;
-  game: Game;
-  getGameList: () => Game[];
+  game: NavGame;
+  getGameList: () => T[];
   onStep: (dir: 1 | -1) => void;
   onReroll: () => void;
 }): void {
@@ -71,7 +74,7 @@ export function renderPanelNav({
 // and the nav-bar buttons above share the exact same "current index, wrap around" arithmetic.
 // Returns null when there's nothing to step to (a standalone lookup, or the current game
 // somehow isn't in the list).
-export function stepGameList(list: Game[], currentGame: Game | null, dir: 1 | -1): Game | null {
+export function stepGameList<T extends NavGame>(list: T[], currentGame: NavGame | null, dir: 1 | -1): T | null {
   if (!currentGame || currentGame.standalone) return null;
   const idx = list.findIndex((g) => g.appid === currentGame.appid);
   if (idx === -1) return null;

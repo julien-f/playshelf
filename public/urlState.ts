@@ -1,3 +1,5 @@
+import { isIgdbKey, parseGameKey, type GameKey } from './gameKey.ts';
+
 // Canonical query-param order shared by every URL-writing function on both pages. Applying
 // this before every pushState/replaceState means the same logical state always serializes to
 // the same URL string regardless of the order its pieces happened to be set/mutated in —
@@ -83,7 +85,7 @@ export function urlWithoutPanel(url: Location | URL = location): string {
   const params = new URLSearchParams(url.search);
   params.delete('game');
   params.delete('shot');
-  return urlWithParams(params, url.pathname.replace(/^\/game\/\d+$/, '/game'));
+  return urlWithParams(params, url.pathname.replace(/^\/game\/(\d+|igdb(:|%3A)\d+)$/i, '/game'));
 }
 
 export function urlWithoutShot(url: Location | URL = location): string {
@@ -104,7 +106,7 @@ export function setSearchQueryParam(term: string): void {
 
 export interface UrlState {
   slots: string[][];
-  game: number | null;
+  game: GameKey | null;
 }
 // One `u=` value per slot, comma-joined identifiers within it (a Steam Family) — see the
 // URL & sharing section in docs/dev/frontend.md. Shared by parseUrlState and parseAccountParam below so the
@@ -121,11 +123,16 @@ function parseSlots(params: URLSearchParams): string[][] {
     .filter((slot) => slot.length > 0);
 }
 
+function gameKeyParam(raw: string | null): GameKey | null {
+  const key = raw ? parseGameKey(raw) : null;
+  return isIgdbKey(key) ? key : key || null;
+}
+
 export function parseUrlState(search: string): UrlState {
   const params = new URLSearchParams(search);
   return {
     slots: parseSlots(params),
-    game: Number(params.get('game')) || null,
+    game: gameKeyParam(params.get('game')),
   };
 }
 

@@ -40,6 +40,7 @@ Every key prefix belongs to a group in `lib/cache.js`'s `GROUPS` (a key matching
 - **A list's Updated tile** (owned, wishlist, and any list built from an account fetch or a developer/publisher at any depth: compare, dynamic, ranked, a shared formula — `ListRoute.tsx`'s `handleRefreshList`) — the same, for _every_ account the list resolves through, and `GET /api/creator-games?refresh=1` for every developer/publisher (`listResolve.ts`'s `createDefaultFetchers({ refresh })`).
 - **The Prices tile's age** (wishlist, bundle, developer/publisher and lists built from them) — re-POSTs the rows on screen to `/api/prices?refresh=1`. One control per list, since prices are fetched as one batch. Forces `itad-price:` only, not the near-permanent gid↔appid mappings.
 - **The panel's ↻** — `GET /api/game-details/:appid?refresh=1` plus news, achievements, the game's bundles and the price (only when the panel priced the game itself; a list-priced game refreshes from the list's Prices tile, which the tooltip says).
+  - For a game outside Steam, `GET /api/igdb-game/:igdbId?refresh=1` alone: its IGDB record and HLTB, with their ages in the tooltip.
 - **The friends list's ↻** (`AccountFriends.tsx`) — `/api/friends` with `refresh: true` (`info.refetching` as force, like the panel's resources).
 - **A developer/publisher list's Updated tile** — `GET /api/creator-games?refresh=1`.
 - **The PC Game Pass list's Updated tile** — `GET /api/game-pass?refresh=1` (forces the catalog and its ITAD lookup, not the gid→appid mappings or product titles).

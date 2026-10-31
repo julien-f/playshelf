@@ -160,3 +160,13 @@ test('mediaLabel: the banner is the cover, and each kind is numbered on its own'
     ['Cover', 'Trailer 1 of 2', 'Trailer 2 of 2', 'Screenshot 1 of 1'],
   );
 });
+
+test('buildMediaItems: a game outside Steam gets no Steam CDN guess, and no Cover without one', () => {
+  assert.deepEqual(buildMediaItems('igdb:9001', null), []);
+  const shots = [{ id: 'abc', thumbnail: 't', full: 'f' }];
+  assert.deepEqual(
+    buildMediaItems('igdb:9001', { banner: '', screenshots: shots, movies: [] }).map((m) => m.shotId),
+    ['sabc'],
+  );
+  assert.equal(buildMediaItems('igdb:9001', { banner: 'c.jpg', screenshots: shots, movies: [] })[0].main, 'c.jpg');
+});

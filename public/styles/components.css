@@ -2089,7 +2089,8 @@
     background: var(--line);
     color: var(--text);
   }
-  .panel-refresh-btn {
+  .panel-refresh-btn,
+  .panel-igdb-credit {
     padding: 0 8px;
   }
   .panel-refresh-age {
@@ -2401,6 +2402,9 @@
   .panel-no-data a {
     color: var(--text-body);
   }
+  .panel-igdb-status {
+    padding-block: 16px;
+  }
 
   /* Try the free demo: a plain .btn, the accent being kept for state and a view's primary action. */
   .panel-demo-banner {
@@ -2428,6 +2432,12 @@
   @media (min-width: 1400px) {
     .panel-glance {
       grid-template-columns: repeat(4, 1fr);
+    }
+  }
+  /* A game outside Steam: IGDB's rating and HLTB only. */
+  @media (min-width: 1400px) {
+    .panel-glance--two {
+      grid-template-columns: repeat(2, 1fr);
     }
   }
   .panel-glance-chip {

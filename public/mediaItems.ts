@@ -1,4 +1,5 @@
 import type { GameMeta } from './types.ts';
+import { isIgdbKey, type GameKey } from './gameKey.ts';
 
 export interface MediaItem {
   type: 'image' | 'video';
@@ -8,10 +9,12 @@ export interface MediaItem {
   shotId: string;
   name?: string | null; // a trailer's, as Steam titles it
 }
-export function buildMediaItems(
-  appid: number | string,
-  details: Pick<GameMeta, 'banner' | 'movies' | 'screenshots'> | null | undefined,
-): MediaItem[] {
+// A Steam game's meta, or a game outside Steam's (its cover as `banner`, IGDB's string screenshot ids).
+export type MediaMeta = Pick<GameMeta, 'banner' | 'movies'> & {
+  screenshots?: { id: number | string; thumbnail: string; full: string }[];
+};
+
+export function buildMediaItems(appid: GameKey, details: MediaMeta | null | undefined): MediaItem[] {
   // `details.banner` (see extractAppDetails in lib/steam.js) is Steam's own header image
   // for this specific game, resolved once store metadata has loaded — before that (the
   // game is still `loading`, so `details` itself is absent), guess the conventional CDN
@@ -20,11 +23,13 @@ export function buildMediaItems(
   // whether the real header image happens to exist at that path) used to mean a game
   // without one showed a permanently broken hero image no matter how many times the panel
   // was reopened, since the guessed URL never changes.
-  const bannerUrl = details?.banner || `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/header.jpg`;
+  // A game outside Steam has no CDN path to guess: without a cover, no Cover item.
+  const bannerUrl =
+    details?.banner || (isIgdbKey(appid) ? '' : `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/header.jpg`);
   const movies = details?.movies || [];
   const screenshots = details?.screenshots || [];
   return [
-    { type: 'image', main: bannerUrl, thumb: bannerUrl, shotId: 'banner' },
+    ...(bannerUrl ? [{ type: 'image' as const, main: bannerUrl, thumb: bannerUrl, shotId: 'banner' }] : []),
     ...movies.map((m) => ({
       type: 'video' as const,
       hls: m.hls,

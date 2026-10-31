@@ -8263,3 +8263,91 @@ test('B5 edge: without an IsThereAnyDeal key, PC Game Pass says why it is unavai
     "PC Game Pass isn't available on this instance: it isn't connected to IsThereAnyDeal.",
   );
 });
+
+// A client-side navigation, as an in-app link makes it: the route's loaded state stays.
+async function followLink(page: Page, href: string): Promise<void> {
+  await page.evaluate((to) => {
+    const a = Object.assign(document.createElement('a'), { href: to, textContent: 'go' });
+    document.querySelector('main')!.append(a);
+    a.click();
+    a.remove();
+  }, href);
+}
+const prefsBlob = (page: Page) => page.evaluate(() => localStorage.getItem('steam.isonoe.net:prefs'));
+
+test('F1 edge: a link to a game outside Steam opens it in the panel, and leaves prefs and Recently Looked Up alone', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE, { recentGames: [620] });
+  await page.goto('/game');
+  await expect(row(page, 'Portal 2')).toBeVisible();
+  const before = await prefsBlob(page);
+  await page.goto('/game/igdb:9001');
+  const panel = page.locator('#game-panel');
+  await expect(page.locator('#panel-title')).toHaveText('Console Quest');
+  await expect(panel.getByText('Not on Steam · PS5 · Switch')).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'IGDB ↗' })).toHaveAttribute('href', /igdb\.com\/games\/console-quest/);
+  await expect(panel.getByRole('link', { name: /^IGDB 88/ })).toBeVisible();
+  for (const name of ['Steam Store', 'IsThereAnyDeal', 'Present on second screen', 'Status'])
+    await expect(panel.getByLabel(name, { exact: true })).toHaveCount(0);
+  await expect(rows(page)).toHaveCount(1); // not joined to the list
+  await page.keyboard.press('p'); // Present: a game outside Steam isn't presented
+  await expect(page.locator('.present-chip')).toHaveCount(0);
+  await panel.locator('.panel-hero-open').click();
+  await expect(page.locator('#screenshot-lightbox')).toHaveAttribute('open');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#screenshot-lightbox')).not.toHaveAttribute('open');
+  await page.locator('#panel-close').click();
+  await expect(page).toHaveURL(/\/game$/);
+  expect(await prefsBlob(page)).toBe(before);
+});
+
+test('F1 edge: a game outside Steam opens within a loaded Recently Looked Up, and its &shot= link opens that screenshot', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE, { recentGames: [620] });
+  await page.goto('/game/620');
+  await expect(page.locator('#panel-title')).toHaveText('Portal 2');
+  await followLink(page, '/game/igdb:9001');
+  await expect(page.locator('#panel-title')).toHaveText('Console Quest');
+  await expect(page).toHaveURL(/\/game\/igdb:9001$/);
+  await expect(rows(page)).toHaveCount(1);
+  await page.goto('/game/igdb:9001?shot=scq2');
+  await expect(page.locator('#screenshot-lightbox')).toHaveAttribute('open');
+  await expect(page.locator('#screenshot-lightbox .lb-img')).toHaveAttribute('src', /Console%20Quest%20Screenshot%202/);
+});
+
+test('F1 edge: a list reloaded with a game outside Steam open reopens it', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=igdb%3A9001');
+  await expect(page.locator('#panel-title')).toHaveText('Console Quest');
+  await page.reload();
+  await expect(page.locator('#panel-title')).toHaveText('Console Quest');
+  await expect(page).toHaveURL(/[?&]game=igdb%3A9001/);
+});
+
+test('F1 edge: a game IGDB links to Steam opens as the Steam game, in place of the link in history', async ({
+  page,
+}) => {
+  await page.goto('/game');
+  await expect(page.getByText('No games in this list.')).toBeVisible();
+  await followLink(page, '/game/igdb:9002');
+  await expect(page).toHaveURL(/\/game\/620$/);
+  await expect(page.locator('#panel-title')).toHaveText('Portal 2');
+  await page.goBack();
+  await expect(page).toHaveURL(/\/game$/);
+});
+
+test("F1 edge: a game outside Steam says when IGDB didn't answer, or when this instance has no IGDB", async ({
+  page,
+}) => {
+  await mockApi(page, { states: ['upstream-down'] });
+  await page.goto('/game/igdb:9001');
+  const panel = page.locator('#game-panel');
+  await expect(panel.getByText("⚠ IGDB didn't answer")).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Retry' })).toBeVisible();
+  await mockApi(page, { states: ['no-igdb'] });
+  await page.reload();
+  await expect(panel.getByText("This instance can't look up games outside Steam.")).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Retry' })).toHaveCount(0);
+});
