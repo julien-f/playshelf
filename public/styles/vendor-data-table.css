@@ -180,7 +180,8 @@ html:root {
     padding: 0 8px;
   }
   /* Group's and Sort's ×: the active bar right under them clears each one, and a default grouping
-     (a bundle's tiers) would otherwise push Share view off Columns/Group/Sort's line. */
+     (a bundle's tiers) would otherwise push Share view off Columns/Group/Sort's line.
+     Matched by aria-label until @vates/data-table > 0.21.0 ships .dt-btn-clear--groups/--sorts (its 4641deb). */
   .dt-toolbar-actions .dt-btn-clear:is([aria-label='Clear groups'], [aria-label='Clear sorts']) {
     display: none;
   }
