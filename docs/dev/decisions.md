@@ -45,6 +45,14 @@ It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vector
 - Firefox for Android's own player then picks the quality, and stays low: 480p for a whole 60 s trailer on a Galaxy S10 over Wi-Fi, never climbing (2026-10-31). hls.js reached 1080p from the start on the same phone, landscape lock intact.
 - Kept native anyway: no visible difference on a phone screen, about 4× the data (Steam's 1080p variant is 5.8 Mbit/s vs. 1.4 for 480p, and hls.js buffered up to 140 s ahead vs. ~10 s), hls.js's ~130 KB gzipped on the first trailer, and the fullscreen orientation workaround (`holdLbTrailerForFullscreen`, [lightbox.tsx](../../public/lightbox.tsx)) tested only with native playback across a step.
 
+## IGDB videos — YouTube embeds, on a click
+
+- IGDB gives a game outside Steam's videos as YouTube ids only: no stream to hand `playHls`, so the lightbox embeds YouTube's player (`mountLbYoutube`, [lightbox.tsx](../../public/lightbox.tsx)).
+- `youtube-nocookie.com`: YouTube sets no cookies before the viewer plays a video, unlike `youtube.com`'s embed.
+- Mounted only once the viewer opens or steps onto the video in the lightbox (after a burst of steps settles), and removed on leaving it, which also stops it: browsing a game sends nothing to YouTube's player, only fetching thumbnails from `i.ytimg.com`.
+- A distinct kind (`movies[].youtube`, `hls: null`): Steam's HLS path and the presentation window stay untouched; such a game is never presented anyway.
+- A click into the player would give its frame the keyboard, so focus is taken back at once (the click still lands): ←/→ and Esc keep acting, the player is driven by pointer only.
+
 ## Linting: Babel, not typescript-eslint
 
 - `eslint.config.mjs` parses with `@babel/eslint-parser`: TypeScript 7 (`tsgo`) ships no JavaScript compiler API, so `@typescript-eslint/parser` can't run here, and its peer range refuses `typescript@7`. None of the Solid rules are type-aware, so a syntax-only parser loses nothing.

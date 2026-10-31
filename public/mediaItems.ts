@@ -8,11 +8,18 @@ export interface MediaItem {
   thumb: string;
   shotId: string;
   name?: string | null; // a trailer's, as Steam titles it
+  youtube?: string; // a game outside Steam's video: the lightbox embeds YouTube's player
+  contain?: boolean; // a portrait cover standing in for the banner: shown whole, not cropped
 }
-// A Steam game's meta, or a game outside Steam's (its cover as `banner`, IGDB's string screenshot ids).
+// A Steam game's meta, or a game outside Steam's (IGDB's banner pick, string screenshot ids, YouTube videos).
 export type MediaMeta = Pick<GameMeta, 'banner' | 'movies'> & {
+  bannerIsCover?: boolean;
   screenshots?: { id: number | string; thumbnail: string; full: string }[];
 };
+
+// youtube-nocookie: no cookies until the viewer plays it (docs/dev/decisions.md).
+export const youtubeEmbedUrl = (id: string) =>
+  `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1`;
 
 export function buildMediaItems(appid: GameKey, details: MediaMeta | null | undefined): MediaItem[] {
   // `details.banner` (see extractAppDetails in lib/steam.js) is Steam's own header image
@@ -23,19 +30,30 @@ export function buildMediaItems(appid: GameKey, details: MediaMeta | null | unde
   // whether the real header image happens to exist at that path) used to mean a game
   // without one showed a permanently broken hero image no matter how many times the panel
   // was reopened, since the guessed URL never changes.
-  // A game outside Steam has no CDN path to guess: without a cover, no Cover item.
+  // A game outside Steam has no CDN path to guess: without a banner, no Cover item.
   const bannerUrl =
     details?.banner || (isIgdbKey(appid) ? '' : `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/header.jpg`);
   const movies = details?.movies || [];
   const screenshots = details?.screenshots || [];
   return [
-    ...(bannerUrl ? [{ type: 'image' as const, main: bannerUrl, thumb: bannerUrl, shotId: 'banner' }] : []),
+    ...(bannerUrl
+      ? [
+          {
+            type: 'image' as const,
+            main: bannerUrl,
+            thumb: bannerUrl,
+            shotId: 'banner',
+            ...(details?.bannerIsCover && { contain: true }),
+          },
+        ]
+      : []),
     ...movies.map((m) => ({
       type: 'video' as const,
       hls: m.hls,
       thumb: m.thumbnail,
       shotId: `v${m.id}`,
       name: m.name,
+      ...(m.youtube && { youtube: m.youtube }),
     })),
     ...screenshots.map((s) => ({ type: 'image' as const, main: s.full, thumb: s.thumbnail, shotId: `s${s.id}` })),
   ];

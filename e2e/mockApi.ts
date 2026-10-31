@@ -193,6 +193,8 @@ const IGDB_GAME = {
   url: 'https://www.igdb.com/games/console-quest',
   summary: 'Console Quest, a fixture game on consoles only.',
   cover: mediaUrl('Console Quest Cover', false),
+  banner: mediaUrl('Console Quest Artwork', false),
+  bannerIsCover: false,
   platforms: ['PS5', 'Switch'],
   releaseDate: '2024-09-06',
   developers: ['Console Studio'],
@@ -204,7 +206,13 @@ const IGDB_GAME = {
     thumbnail: mediaUrl(`Console Quest Screenshot ${id}`, false, 'thumb'),
     full: mediaUrl(`Console Quest Screenshot ${id}`, false, 'full'),
   })),
-  videos: [],
+  // YouTube's player loads only in the lightbox, which e2e routes to a stub (no YouTube traffic).
+  videos: [1, 2].map((id) => ({
+    id,
+    youtubeId: `cqvideo${id}`,
+    name: `Console Quest Video ${id}`,
+    thumbnail: mediaUrl(`Console Quest Video ${id}`, false),
+  })),
   steamAppid: null as number | null,
 };
 // A game IGDB links to Steam (Portal 2): the panel opens the Steam game instead.
@@ -216,6 +224,11 @@ const IGDB_GOW_PS2 = {
   name: 'God of War',
   url: 'https://www.igdb.com/games/god-of-war--1',
   summary: 'God of War, the 2005 original.',
+  // No artwork or screenshot: its portrait cover is the banner.
+  banner: IGDB_GAME.cover,
+  bannerIsCover: true,
+  screenshots: [],
+  videos: [],
   platforms: ['PS2'],
   releaseDate: '2005-03-22',
 };

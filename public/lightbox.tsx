@@ -13,7 +13,7 @@ import {
 } from './presentation.ts';
 import type { HlsVideo } from './hlsPlayer.ts';
 import { urlWithoutShot } from './urlState.ts';
-import { buildMediaItems, resolveShotIndex, preferredShotIndex, mediaLabel } from './mediaItems.ts';
+import { buildMediaItems, resolveShotIndex, preferredShotIndex, mediaLabel, youtubeEmbedUrl } from './mediaItems.ts';
 import type { MediaItem, ShotKind } from './mediaItems.ts';
 import type { PanelGame } from './types.ts';
 import { isIgdbRow, type GameKey } from './gameKey.ts';
@@ -147,6 +147,21 @@ function detachLbVideo() {
 function lbShowingVideo() {
   return lbVideoEl.isConnected;
 }
+// A game outside Steam's video: YouTube's player, in the DOM only while it's the item shown, so leaving stops it.
+let lbYoutubeTimer: ReturnType<typeof setTimeout> | undefined;
+function mountLbYoutube(lb: HTMLElement, id: string, title: string) {
+  const frame = document.createElement('iframe');
+  frame.className = 'lb-yt';
+  frame.src = youtubeEmbedUrl(id);
+  frame.title = title;
+  frame.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture';
+  frame.allowFullscreen = true;
+  lb.querySelector('.lb-prev')!.before(frame); // under the chrome
+}
+function unmountLbYoutube() {
+  clearTimeout(lbYoutubeTimer);
+  document.querySelector('#screenshot-lightbox .lb-yt')?.remove();
+}
 function lbShowingImage() {
   const img = document.querySelector<HTMLElement>('#screenshot-lightbox .lb-img');
   return !!img && img.style.display !== 'none';
@@ -223,6 +238,17 @@ export function initLightbox({
     signal: _lbSignal,
   });
   document.addEventListener('pointerdown', () => (lbByKey = false), { capture: true, signal: _lbSignal });
+  // A click into YouTube's player focuses its frame, whose keys never reach this document: focus comes back
+  // (the click still lands), so ←/→ and Esc keep acting; the player itself is driven by pointer.
+  window.addEventListener(
+    'blur',
+    () =>
+      setTimeout(() => {
+        const frame = document.activeElement;
+        if (frame?.classList.contains('lb-yt')) lbSurface(frame.closest<HTMLElement>('#screenshot-lightbox')!).focus();
+      }),
+    { signal: _lbSignal },
+  );
   document.addEventListener('fullscreenchange', syncLightboxFullscreenBtn, { signal: _lbSignal });
   document.addEventListener('webkitfullscreenchange', syncLightboxFullscreenBtn, { signal: _lbSignal });
   document.addEventListener('fullscreenchange', lockLbLandscape, { signal: _lbSignal });
@@ -1765,6 +1791,7 @@ function closeLightboxNow() {
   const lb = document.getElementById('screenshot-lightbox') as HTMLDialogElement;
   stopHls(lbVideoEl);
   detachLbVideo();
+  unmountLbYoutube();
   lb.close();
   setLbLoading(lb, false);
   lb.classList.remove(
@@ -1952,7 +1979,7 @@ function renderLightbox() {
   if (dir !== 0) lbStepBurstUntil = Date.now() + LB_SETTLE_MEDIA_MS;
   // Private, or unlinked on what the TV played: no sound starting here by itself.
   const held = untrack(privateMode) || (sameItem && lbRenderedOnTv);
-  lbHeld = shot.type === 'video' && !onTv && (held || settling);
+  lbHeld = shot.type === 'video' && !shot.youtube && !onTv && (held || settling);
   lbHeldAt = lbHeld && sameItem && lbRenderedOnTv ? lbTvTime() : 0;
   lbRenderedAppid = appid;
   lbRenderedShotId = shot.shotId;
@@ -1967,6 +1994,7 @@ function renderLightbox() {
   if (lbHeldStart) lbVideoEl.removeEventListener('loadedmetadata', lbHeldStart);
   lbHeldStart = null;
   hideLbError();
+  unmountLbYoutube();
   // Invalidate any image preload still in flight from a previous render — see lbImgToken decl.
   lbImgToken++;
   // Untracked, and this is load-bearing: `_getGamePosition` reaches the route's list, which on
@@ -1978,7 +2006,27 @@ function renderLightbox() {
   const pos = untrack(() => _getGamePosition());
   const label =
     `${name ? name + ' — ' : ''}${pos ? `game ${pos.index + 1} of ${pos.total} — ` : ''}` + mediaLabel(list, i);
-  if (shot.type === 'video' && !onTv) {
+  if (shot.youtube) {
+    // Its poster while a burst of steps settles, so passing through doesn't load the player.
+    stopHls(vid);
+    detachLbVideo();
+    lb.classList.remove('lb--unstarted', 'lb--automuted', 'lb--ended', 'lb--buffering');
+    syncLbPaused();
+    vc.style.display = 'none';
+    setLbLoading(lb, false);
+    img.alt = label;
+    img.style.opacity = '1';
+    img.src = shot.thumb;
+    img.style.display = 'block';
+    const id = shot.youtube;
+    const mount = () => {
+      img.style.display = 'none';
+      mountLbYoutube(lb, id, shot.name ? `${label}: ${shot.name}` : label);
+    };
+    if (settling) lbYoutubeTimer = setTimeout(mount, LB_SETTLE_MEDIA_MS);
+    else mount();
+    schedHideLbChrome();
+  } else if (shot.type === 'video' && !onTv) {
     img.style.display = 'none';
     setLbLoading(lb, false);
     attachLbVideo();

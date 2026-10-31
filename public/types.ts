@@ -40,7 +40,13 @@ export interface GameMeta {
   banner: string;
   // Both absent until loaded: the details stream leaves them out (an opened game fills them, ListRoute.tsx).
   // `name`: absent from details cached before it was kept.
-  movies?: { id: number; name?: string | null; thumbnail: string; hls: string | null }[];
+  movies?: {
+    id: number;
+    name?: string | null;
+    thumbnail: string;
+    hls: string | null;
+    youtube?: string; // a game outside Steam's video (IGDB has only YouTube ids), embedded instead of HLS
+  }[];
   screenshots?: { id: number; thumbnail: string; full: string }[];
   dlc: number[];
   fullgame: { appid: number; name: string | null } | null;
@@ -198,6 +204,8 @@ export interface IgdbGame {
   url: string | null;
   summary: string | null;
   cover: string | null;
+  banner: string | null; // landscape art, else a screenshot, else the cover
+  bannerIsCover: boolean;
   platforms: string[];
   releaseDate: string | null;
   developers: string[];
@@ -205,7 +213,7 @@ export interface IgdbGame {
   genres: string[];
   rating: { score: number; count: number } | null;
   screenshots: { id: string; thumbnail: string; full: string }[];
-  videos: { id: number; youtubeId: string; name: string | null }[];
+  videos: { id: number; youtubeId: string; name: string | null; thumbnail: string }[];
   steamAppid: number | null;
 }
 
@@ -227,7 +235,12 @@ export type IgdbLoad =
 
 // `details` the way a Steam row has it, so the hero, the lightbox and HltbSection take either.
 export interface IgdbDetails {
-  meta: { banner: string; screenshots: IgdbGame['screenshots']; movies: [] };
+  meta: {
+    banner: string;
+    bannerIsCover: boolean;
+    screenshots: IgdbGame['screenshots'];
+    movies: NonNullable<GameMeta['movies']>;
+  };
   hltb: Hltb | null;
 }
 

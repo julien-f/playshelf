@@ -1286,6 +1286,9 @@ test('GET /game/igdb:<id>: the preview names, describes and shows a cached game,
   setCache('igdb:9002', { ...ASTRO_BOT, id: 9002, screenshots: [] });
   const coverOnly = await api.get('/game/igdb:9002');
   assert.match(coverOnly.text, /<meta property="og:image" content="[^"]+\/t_cover_big\/cov\.jpg" \/>/);
+  setCache('igdb:9004', { ...ASTRO_BOT, id: 9004, artworks: [{ image_id: 'art', width: 1920, height: 1080 }] });
+  const keyArt = await api.get('/game/igdb:9004');
+  assert.match(keyArt.text, /<meta property="og:image" content="[^"]+\/t_1080p\/art\.jpg" \/>/);
   const uncached = await api.get('/game/igdb:9003');
   assert.match(uncached.text, /<meta property="og:title" content="Playshelf" \/>/);
   assert.equal(fetchMock.mock.callCount(), 0);

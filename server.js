@@ -1491,7 +1491,7 @@ app.get(/^\/(?!api\/)(?!.*\.[a-zA-Z0-9]+$).*/, async (req, res) => {
     return sendAppShell(req, res, {
       title: game?.name || undefined,
       description: game?.summary || undefined,
-      image: game?.screenshots[0]?.full || game?.cover || undefined,
+      image: game?.banner || undefined,
     });
   }
   const game = appid && getCached(`meta:${appid}`, { record: false });

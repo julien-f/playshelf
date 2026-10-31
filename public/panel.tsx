@@ -2091,7 +2091,7 @@ function HeroMain(props: { items: MediaItem[]; idx: number }): JSX.Element {
           </span>
         </Show>
         <img
-          class={`panel-hero-img${loading() ? ' loading' : ''}${brokenSrc() === src() ? ' panel-hero-img--broken' : ''}${isShot() ? ' panel-hero-img--shot' : ''}`}
+          class={`panel-hero-img${loading() ? ' loading' : ''}${brokenSrc() === src() ? ' panel-hero-img--broken' : ''}${isShot() ? ' panel-hero-img--shot' : ''}${current().contain ? ' panel-hero-img--contain' : ''}`}
           src={src()}
           alt={name()}
           onLoad={(e) => setLoadedSrc(e.currentTarget.getAttribute('src') ?? undefined)}

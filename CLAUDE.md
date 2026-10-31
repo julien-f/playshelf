@@ -23,7 +23,7 @@ Working conventions for this repo. Documentation lives in `docs/` — keep it th
 - [docs/dev/improvements.md](docs/dev/improvements.md) — UX backlog from design reviews, keyed to scenarios
 - [docs/dev/code-backlog.md](docs/dev/code-backlog.md) — code backlog from `code-audit` runs (simplify, security, perf, reliability, compliance, tests)
 - [docs/dev/setup-backlog.md](docs/dev/setup-backlog.md) — `setup-review` proposals: changes applied and the measure each must move, open ones, declined ones with the reason
-- [docs/dev/decisions.md](docs/dev/decisions.md) — Weighted Rating vs. Wilson score, the Production Tier heuristic, player likeness as a count, native trailer playback, linting with Babel
+- [docs/dev/decisions.md](docs/dev/decisions.md) — Weighted Rating vs. Wilson score, the Production Tier heuristic, player likeness as a count, native trailer playback, YouTube embeds for IGDB videos, linting with Babel
 - [docs/dev/testing.md](docs/dev/testing.md) — unit and e2e tests, the mocked server, the real dev server's prefs seed/restore, the git hooks
 - [docs/dev/pitfalls.md](docs/dev/pitfalls.md) — surprising behaviors, misleading errors and their fixes; check it when something fails or behaves unexpectedly
 - [docs/images/](docs/images) — the screenshots the docs embed; shooting them is the `screenshots` skill

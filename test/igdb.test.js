@@ -224,6 +224,7 @@ test('extractIgdbGame: the panel fields, with image URLs and company roles', () 
     platforms: [{ abbreviation: 'PS5' }],
     cover: { image_id: 'cov' },
     screenshots: [{ image_id: 'sc1' }],
+    artworks: [{ image_id: 'art', width: 1920, height: 1080 }],
     videos: [{ id: 5, video_id: 'yt123', name: 'Trailer' }],
     genres: [{ name: 'Platform' }],
     involved_companies: [
@@ -239,6 +240,8 @@ test('extractIgdbGame: the panel fields, with image URLs and company roles', () 
     url: 'https://www.igdb.com/games/astro-bot',
     summary: 'A platformer.',
     cover: 'https://images.igdb.com/igdb/image/upload/t_cover_big/cov.jpg',
+    banner: 'https://images.igdb.com/igdb/image/upload/t_1080p/art.jpg',
+    bannerIsCover: false,
     platforms: ['PS5'],
     releaseDate: '2024-09-09',
     developers: ['Team Asobi'],
@@ -252,10 +255,37 @@ test('extractIgdbGame: the panel fields, with image URLs and company roles', () 
         full: 'https://images.igdb.com/igdb/image/upload/t_1080p/sc1.jpg',
       },
     ],
-    videos: [{ id: 5, youtubeId: 'yt123', name: 'Trailer' }],
+    videos: [{ id: 5, youtubeId: 'yt123', name: 'Trailer', thumbnail: 'https://i.ytimg.com/vi/yt123/hqdefault.jpg' }],
     steamAppid: null,
   });
   assert.equal(extractIgdbGame({ id: 1, name: 'Unrated' }).rating, null);
+});
+
+test('extractIgdbGame: the banner is landscape art, else the first screenshot, else the cover', () => {
+  const url = (size, id) => `https://images.igdb.com/igdb/image/upload/t_${size}/${id}.jpg`;
+  const pick = (raw) => {
+    const { banner, bannerIsCover, screenshots } = extractIgdbGame({ id: 1, name: 'G', ...raw });
+    return { banner, bannerIsCover, screenshots: screenshots.map((s) => s.id) };
+  };
+  const cover = { image_id: 'cov' };
+  const screenshots = [{ image_id: 'sc1' }, { image_id: 'sc2' }];
+  const logo = { image_id: 'logo', width: 256, height: 256 };
+  const ultraWide = { image_id: 'wide', width: 3840, height: 1240 };
+  const keyArt = { image_id: 'key', width: 3840, height: 2160 };
+  // A logo and an ultra-wide strip are skipped for the first artwork within 1.3–2.
+  assert.deepEqual(pick({ cover, screenshots, artworks: [logo, ultraWide, keyArt] }), {
+    banner: url('1080p', 'key'),
+    bannerIsCover: false,
+    screenshots: ['sc1', 'sc2'],
+  });
+  // No landscape artwork (or a record cached before artworks were requested): the first screenshot, listed once.
+  assert.deepEqual(pick({ cover, screenshots, artworks: [logo, ultraWide] }), {
+    banner: url('1080p', 'sc1'),
+    bannerIsCover: false,
+    screenshots: ['sc2'],
+  });
+  assert.deepEqual(pick({ cover }), { banner: url('cover_big', 'cov'), bannerIsCover: true, screenshots: [] });
+  assert.deepEqual(pick({}), { banner: null, bannerIsCover: false, screenshots: [] });
 });
 
 test('getIgdbGame: one query by id; an unknown id is null, cached for MISS_CACHE_TTL_MS', async (t) => {

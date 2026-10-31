@@ -1886,6 +1886,10 @@
   .panel-hero-main--loading[style*='background-image']::after {
     content: none;
   }
+  /* A portrait cover standing in for the banner (a game outside Steam): whole, not cropped. */
+  .panel-hero-img--contain {
+    object-fit: contain;
+  }
   .panel-hero-img--broken {
     background: var(--surface-2);
   }
@@ -3107,6 +3111,14 @@
     display: block;
     cursor: pointer;
     transition: scale var(--dur-2) var(--ease-out);
+  }
+  /* A game outside Steam's video (YouTube's player): 16:9, clear of the toolbar above and below. */
+  .lb-yt {
+    position: relative;
+    width: min(100dvw, (100dvh - 144px) * 16 / 9);
+    aspect-ratio: 16 / 9;
+    border: 0;
+    display: block;
   }
   /* Behind the opaque lightbox, the panel follows each step unseen: not styled or laid out until it closes. */
   body.lb-open #game-panel {

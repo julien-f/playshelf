@@ -8317,6 +8317,60 @@ test('F1 edge: a game outside Steam opens within a loaded Recently Looked Up, an
   await expect(page.locator('#screenshot-lightbox .lb-img')).toHaveAttribute('src', /Console%20Quest%20Screenshot%202/);
 });
 
+test("F1 edge: a game outside Steam leads with its landscape art, and plays a YouTube video in the lightbox only while it's shown", async ({
+  page,
+}) => {
+  // YouTube's player, stubbed (mockApi aborts every other outside request).
+  await page
+    .context()
+    .route('https://www.youtube-nocookie.com/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<button>Play</button>' }),
+    );
+  const youtube: string[] = [];
+  page.on('request', (req) => req.url().includes('youtube') && youtube.push(req.url()));
+  await page.goto('/game/igdb:9001');
+  const panel = page.locator('#game-panel');
+  await expect(panel.locator('.panel-hero-img')).toHaveAttribute('src', /Console%20Quest%20Artwork/);
+  await expect(panel.locator('.panel-hero-img')).not.toHaveClass(/panel-hero-img--contain/);
+  const videos = panel.locator('.panel-film-item.is-video');
+  await expect(videos).toHaveCount(2);
+  await expect(videos.first().locator('img')).toHaveAttribute('src', /Console%20Quest%20Video%201/);
+  await videos.first().click();
+  await expect(panel.locator('.panel-hero-main')).toHaveClass(/is-video/);
+  expect(youtube).toEqual([]); // nothing from YouTube's player before the click
+
+  await panel.locator('.panel-hero-open').click();
+  const lb = page.locator('#screenshot-lightbox');
+  const player = lb.locator('iframe.lb-yt');
+  await expect(player).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/cqvideo1?autoplay=1');
+  await expect(player).toHaveAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
+  await expect(player).toHaveAttribute('title', /Trailer 1 of 2: Console Quest Video 1$/);
+  // A click into the player hands focus back, so ←/→ still step; leaving the video removes its player.
+  await lb.frameLocator('iframe.lb-yt').getByRole('button', { name: 'Play' }).click();
+  await expect(lb.locator('.lb-surface')).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(player).toHaveAttribute('src', /\/embed\/cqvideo2\?/);
+  await expect(player).toHaveCount(1);
+  await page.keyboard.press('ArrowRight');
+  await expect(lb.locator('.lb-img')).toHaveAttribute('src', /Console%20Quest%20Screenshot%201/);
+  await expect(player).toHaveCount(0);
+  await page.keyboard.press('ArrowLeft');
+  await expect(player).toHaveAttribute('src', /\/embed\/cqvideo2\?/);
+  // Esc too, after a click into the player; closing removes it.
+  await lb.frameLocator('iframe.lb-yt').getByRole('button', { name: 'Play' }).click();
+  await expect(lb.locator('.lb-surface')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(lb).not.toHaveAttribute('open');
+  await expect(player).toHaveCount(0);
+});
+
+test('F1 edge: a game outside Steam with only its portrait cover shows it whole in the hero', async ({ page }) => {
+  await page.goto('/game/igdb:9003');
+  const hero = page.locator('#game-panel .panel-hero-img');
+  await expect(hero).toHaveAttribute('src', /Console%20Quest%20Cover/);
+  await expect(hero).toHaveClass(/panel-hero-img--contain/);
+});
+
 test('F1 edge: a list reloaded with a game outside Steam open reopens it', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=igdb%3A9001');

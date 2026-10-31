@@ -31,6 +31,7 @@ Every upstream this app talks to, and what is undocumented about each. Cache tie
 - [Fanatical — pick-and-mix tier prices](#fanatical--pick-and-mix-tier-prices)
 - [Xbox PC Game Pass — catalog feed](#xbox-pc-game-pass--catalog-feed)
 - [IGDB — games outside Steam](#igdb--games-outside-steam)
+- [YouTube — IGDB's videos](#youtube--igdbs-videos)
 
 ## HLTB — no npm package
 
@@ -245,10 +246,19 @@ Bundle games carry only an ITAD id (uuid), slug and title. `resolveSteamAppIds` 
 - **Auth**: an app token from `POST https://id.twitch.tv/oauth2/token` (`client_id`, `client_secret`, `grant_type=client_credentials`, form-encoded in the body so the secret stays out of URLs and logs) → `access_token`, `expires_in`. Held in memory, fetched once for concurrent callers, renewed a day before it expires. A 401 drops it (unless another query already renewed it) and retries once.
 - **Queries**: `POST https://api.igdb.com/v4/games` with `Client-ID` and `Authorization: Bearer <token>`, an APIcalypse body.
   - Search (`searchIgdb`): `search "<term>"` (`\` and `"` escaped), `where version_parent = null & game_type = (0,8,9,10,11); limit 20;` — main games, remakes, remasters, expanded games and ports; editions (`version_parent`), DLC, mods, updates and bundles otherwise crowd out the game itself. Ranked exact title first (accent-, case- and spacing-insensitive), then `total_rating_count`.
-  - One game (`getIgdbGame`): one query by id expanding platforms, cover, screenshots, videos, genres and involved companies.
+  - One game (`getIgdbGame`): one query by id expanding platforms, cover, screenshots, artworks (with their size), videos, genres and involved companies.
 - **Limits** (documented): 4 requests per second, 8 open at once; a 429 when exceeded.
 - **Steam link** (`steamAppidOf`): an `external_games` entry with `external_game_source = 1` is the Steam appid; else a remaster's or port's (IGDB lists a console original apart from its PC version: The Last of Us Part II → 2531310).
 - **Rating**: `total_rating` (critics and users, 0–100) with `total_rating_count`; `aggregated_rating` is critics only and often missing.
 - **Images**: `https://images.igdb.com/igdb/image/upload/t_<size>/<image_id>.jpg` — `t_cover_small` (search), `t_cover_big`, `t_screenshot_big`, `t_1080p`. An image removed from IGDB stays served for 30 days.
+- **Banner** (`extractIgdbGame`'s `banner`, the panel's hero and `/game/igdb:N`'s `og:image`): the first artwork with a width/height ratio within 1.3–2 (artworks also hold square logos and ultra-wide strips), else the first screenshot (then left out of the screenshots), else the portrait cover, shown whole (`bannerIsCover`). A record cached before artworks were requested has none: it shows its first screenshot until ↻ or the meta TTL refetches it.
+- **Videos**: YouTube ids only (`videos.video_id`), see [YouTube](#youtube--igdbs-videos).
 - **Caching**: `igdb:<id>` (the raw record, meta tier) and `igdb-search:<term>` (search tier), [data.md](data.md). The Twitch Developer Services Agreement limits storing data to 24 hours without written authorization; IGDB's FAQ gives it: "Am I allowed to store/cache the data locally? Yes. In fact, we prefer if you store and serve the data to your end users." (<https://api-docs.igdb.com/>), which the owner takes as that authorization.
 - **Field names**: a rename of `game_type` or `external_game_source` would silently empty the filters or the Steam link, so `test/igdb.test.js` asserts the query text.
+
+## YouTube — IGDB's videos
+
+A third party the **browser** talks to, never the server: a game outside Steam's videos (IGDB gives only YouTube ids).
+
+- **Thumbnails**: `https://i.ytimg.com/vi/<id>/hqdefault.jpg` (built in `extractIgdbGame`), loaded by the panel's filmstrip like any image.
+- **Player**: `https://www.youtube-nocookie.com/embed/<id>?autoplay=1` in an iframe, created only when the viewer shows that video in the lightbox and removed when they leave it; nothing loads from the player's domain before. Why: [decisions.md](decisions.md#igdb-videos--youtube-embeds-on-a-click).

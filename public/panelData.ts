@@ -366,7 +366,18 @@ export function createPanelDataCache() {
     return fetchJson<IgdbGameReply>(url, undefined, "IGDB didn't answer").then(
       ({ game, ...reply }): IgdbLoad => {
         if (!game) return { status: 'failed', message: reply.limited ?? "IGDB didn't answer" };
-        const meta = { banner: game.cover ?? '', screenshots: game.screenshots, movies: [] as [] };
+        const meta = {
+          banner: game.banner ?? '',
+          bannerIsCover: game.bannerIsCover,
+          screenshots: game.screenshots,
+          movies: game.videos.map((v) => ({
+            id: v.id,
+            name: v.name,
+            thumbnail: v.thumbnail,
+            hls: null,
+            youtube: v.youtubeId,
+          })),
+        };
         const load = { status: 'ok' as const, reply: { ...reply, game }, details: { meta, hltb: reply.hltb } };
         if (!reply.failed) igdb.set(key, load);
         return load;
