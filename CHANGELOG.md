@@ -33,6 +33,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Game lists load with less data and server work: the details stream is compressed in larger pieces
 - Bundles: the page names how a bundle is priced; a tiered one is grouped by tier and says what the tier for your new games saves; pick & mix ones list wishlisted games first, owned ones last and out of the saving
 - Requires Node.js 22.15 or later.
+- On a phone, game thumbnails are smaller so a bundle's Best Deal stays in view
+- Taste fit stays hidden until the account's taste is known on this device, instead of a column of dashes
 
 ### Fixed
 

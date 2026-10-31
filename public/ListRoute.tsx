@@ -2891,7 +2891,7 @@ export default function ListRoute() {
         similarityColumn(similarityScores),
         tasteFitColumn(tasteFitSource),
       ) as unknown as ColumnDef<Game>[];
-      const defaultVisible = isRanked
+      const kindDefaultVisible = isRanked
         ? [...RANKED_DEFAULT_VISIBLE, ...(priced ? PRICED_DEFAULT_VISIBLE : [])]
         : kind === 'wishlist'
           ? WISHLIST_DEFAULT_VISIBLE.filter((key) => pricesShown || !PRICE_KEYS.has(key))
@@ -2910,6 +2910,8 @@ export default function ListRoute() {
                     : kind === 'creator' || kind === 'game-pass'
                       ? [...RECENT_DEFAULT_VISIBLE, TASTE_FIT_KEY]
                       : OWNED_DEFAULT_VISIBLE;
+      // A Taste fit with no taste on this device would be a column of "—": hidden until there is one.
+      const defaultVisible = kindDefaultVisible.filter((key) => key !== TASTE_FIT_KEY || !!tasteSource.taste);
       const sort = isRanked
         ? RANKED_DEFAULT_SORT
         : kind === 'bundle'

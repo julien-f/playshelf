@@ -485,7 +485,7 @@ test("F3 edge: a game's thumbnail falls back to its smaller capsule, then hides"
   await expect(thumb).toBeVisible();
   // The same box either way, so the row doesn't move as the image loads or fails (2px each side clipped off).
   expect(await visibleBox(thumb)).toMatchObject(
-    testInfo.project.name === 'phone' ? { width: 100, height: 40 } : { width: 164, height: 64 },
+    testInfo.project.name === 'phone' ? { width: 64, height: 26 } : { width: 164, height: 64 },
   );
   await expect(row(page, 'Portal 2').locator('img.game-thumb')).toHaveCSS('visibility', 'hidden');
 });
@@ -889,12 +889,15 @@ test("B2 edge: Taste fit scores the wishlist by the account's taste, once Owned 
   });
   const note = page.locator('.list-score-note');
   await page.goto('/lists/wishlist');
-  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
-  await expect(note).toHaveText("Taste fit needs Alice's Owned list opened on this device");
+  await expect(rows(page).first()).toBeVisible();
+  // No taste on this device yet: no column of "—", and no note about it.
+  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toHaveCount(0);
+  await expect(note).toHaveCount(0);
 
   await page.goto('/lists/owned');
   await expect(page.locator('.profile')).toBeVisible();
   await page.goto('/lists/wishlist');
+  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
   await expect(note).toHaveText(/^Taste fit: Alice's taste as of \d{4}-\d{2}-\d{2}$/);
   await expect(
     rows(page)
@@ -924,7 +927,7 @@ test('B2 edge: Taste fit says an opened Owned has too few games played, and stay
   // Someone else's wishlist from a link: nothing for the viewer to open about the sender.
   await page.goto('/lists/wishlist?u=bob');
   await expect(rows(page)).toHaveCount(BOB.wishlist!.length);
-  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toHaveCount(0);
   await expect(note).toHaveCount(0);
 
   // Once the viewer has opened that account's Owned here, its taste is on this device.
@@ -967,6 +970,15 @@ test("B2 edge: a link to my own ★ account still says to open its Owned, whoeve
   });
   await page.goto('/lists/wishlist?u=alice');
   await expect(rows(page)).toHaveCount(ALICE.wishlist!.length);
+  // Hidden with no taste here; shown from Columns, it says what to open.
+  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Columns', exact: true }).click();
+  await page
+    .locator('.dt-dd')
+    .getByRole('button', { name: /^Classification/ })
+    .click();
+  await page.locator('.dt-dd').getByRole('button', { name: 'Taste fit' }).click();
+  await page.keyboard.press('Escape');
   await expect(page.locator('.list-score-note')).toHaveText("Taste fit needs Alice's Owned list opened on this device");
 });
 
@@ -4105,6 +4117,21 @@ test('B1 edge: a bundle game whose Steam lookup failed says so, rather than read
   await expect(rows(page)).toHaveCount(3);
   await expect(page.getByText("Steam didn't answer for 1 of this bundle's games")).toBeVisible();
   await expect(page.getByRole('button', { name: /1 more in this bundle, not on Steam/ })).toBeVisible();
+});
+
+test("B1 edge: on a phone, a bundle's Best Deal is in view beside the game's name and image", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'phone layout only');
+  await asPlayer(page, ALICE);
+  for (const id of [BUNDLE.id, PICK_BUNDLE.id]) {
+    await page.goto(`/lists/bundle/${id}`);
+    await expect(rows(page).first()).toBeVisible();
+    const head = page.locator('thead th').filter({ hasText: /^Best Deal/ });
+    const box = await visibleBox(head);
+    expect(box.x + box.width, String(id)).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await expect(page.locator('thead th').filter({ hasText: /^Image/ })).toBeVisible(); // kept, only smaller
+  }
 });
 
 test("B1 edge: on a phone, every game's name stays in view while the table scrolls sideways", async ({

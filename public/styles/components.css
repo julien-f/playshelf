@@ -1368,10 +1368,11 @@
     clip-path: inset(2px round var(--radius-1));
     background: var(--surface);
   }
+  /* Small enough on a phone that Best Deal, past Name, stays in view at 390 px. */
   @media (max-width: 600px) {
     .game-thumb {
-      width: 100px;
-      height: 40px;
+      width: 64px;
+      height: 26px;
     }
   }
 
