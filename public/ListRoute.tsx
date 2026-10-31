@@ -2413,6 +2413,7 @@ export default function ListRoute() {
     }
     bundleLeftOut = new Map();
     gamePassLeftOut = undefined;
+    recentLeftOut = undefined;
     creatorCapped = new Map();
     // Every kind that has one re-reports it during this load; a kind that doesn't (manual list,
     // recents) must not keep showing the previous list's. A refresh keeps both until replaced, so
@@ -2596,6 +2597,7 @@ export default function ListRoute() {
           onFetchedAt,
           onBundleLeftOut: noteLeftOut,
           onGamePassLeftOut: (n) => (gamePassLeftOut = n),
+          onRecentLeftOut: (n) => (recentLeftOut = n),
           onCreatorCapped: noteCapped,
           onBundleGames: (_bundleId, _bundle, games) => {
             if (!loadGuard.isStale(gen)) collectTiers(games);
@@ -2638,6 +2640,7 @@ export default function ListRoute() {
             onFetchedAt,
             onBundleLeftOut: noteLeftOut,
             onGamePassLeftOut: (n) => (gamePassLeftOut = n),
+            onRecentLeftOut: (n) => (recentLeftOut = n),
             onCreatorCapped: noteCapped,
             onBundleGames: (bundleId, bundle, games) => {
               if (loadGuard.isStale(gen)) return;
@@ -3430,9 +3433,12 @@ export default function ListRoute() {
   }
   // Per load: PC Game Pass's games with no Steam listing (createDefaultFetchers' onGamePassLeftOut).
   let gamePassLeftOut: number | undefined;
+  // Per load: Recently Looked Up's games outside Steam (createDefaultFetchers' onRecentLeftOut).
+  let recentLeftOut: number | undefined;
   function leftOutOf(list: GameList, i: number): number | undefined {
     const ref = listDeps(list)[i];
     if (ref?.kind === 'game-pass') return gamePassLeftOut;
+    if (ref?.kind === 'recent-games') return recentLeftOut;
     return ref?.kind === 'bundle' && ref.bundleId ? bundleLeftOut.get(ref.bundleId) : undefined;
   }
   // Per load: each capped developer/publisher source's total on Steam (createDefaultFetchers' onCreatorCapped).
@@ -3467,7 +3473,10 @@ export default function ListRoute() {
                   <span class="list-formula-count">{source.count}</span>
                   <Show when={source.leftOut}>
                     {(n) => (
-                      <span class="list-formula-leftout" title="Games in this bundle with no Steam listing">
+                      <span
+                        class="list-formula-leftout"
+                        title="Games here with no Steam listing: lists hold Steam games only"
+                      >
                         ({n()} not on Steam, left out)
                       </span>
                     )}

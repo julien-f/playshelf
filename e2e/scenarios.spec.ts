@@ -8576,6 +8576,30 @@ test("F5 edge: ↑/↓ and R step across Recently Looked Up's mixed rows, reveal
   await expect(page.locator('#panel-title')).toHaveText(/^(Portal 2|Hades)$/);
 });
 
+test('L2 edge: a list built from Recently Looked Up leaves its games outside Steam out, and says how many', async ({
+  page,
+}) => {
+  const lists = [
+    {
+      id: 'looked',
+      parentId: null,
+      order: 0,
+      createdAt: 0,
+      updatedAt: 0,
+      name: 'Looked at',
+      kind: 'dynamic',
+      op: 'union',
+      sources: [{ kind: 'recent-games' }],
+    },
+  ];
+  await asPlayer(page, ALICE, { recentGames: MIXED_RECENTS, lists });
+  await page.goto('/lists/looked');
+  await expect(rows(page)).toHaveCount(2);
+  const leftOut = page.locator('.list-formula-leftout');
+  await expect(leftOut).toHaveText('(1 not on Steam, left out)');
+  await expect(leftOut).toHaveAttribute('title', 'Games here with no Steam listing: lists hold Steam games only');
+});
+
 const navSearch = async (page: Page, term: string) => {
   await page.keyboard.press('/');
   await page.keyboard.type(term);

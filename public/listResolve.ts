@@ -198,6 +198,7 @@ export interface DefaultFetchersOptions {
   onBundleGames?: BundleGamesCallback; // a freshly fetched bundle's games, for their tier prices
   onCreatorCapped?: (role: CreatorRole, name: string, total: number) => void; // only Steam's first page
   onGamePassLeftOut?: (notOnSteam: number) => void; // PC Game Pass games with no Steam listing
+  onRecentLeftOut?: (notOnSteam: number) => void; // games outside Steam looked up recently
 }
 export type BundleGamesCallback = (bundleId: string, bundle: Bundle, resolved: ResolvedGame[]) => void;
 
@@ -214,6 +215,7 @@ export function createDefaultFetchers({
   onBundleGames,
   onCreatorCapped,
   onGamePassLeftOut,
+  onRecentLeftOut,
 }: DefaultFetchersOptions = {}): ListResolveFetchers {
   return {
     accountOwned: async (accountId) => {
@@ -238,7 +240,12 @@ export function createDefaultFetchers({
         onBundleGames,
       ),
     // Lists hold Steam games only.
-    recentGames: async () => new Set(loadRecentGames().flatMap((g) => (typeof g.appid === 'number' ? [g.appid] : []))),
+    recentGames: async () => {
+      const keys = loadRecentGames().map((g) => g.appid);
+      const appids = keys.filter((key) => typeof key === 'number');
+      onRecentLeftOut?.(keys.length - appids.length);
+      return new Set(appids);
+    },
     creator: async (role, name) => {
       let result;
       try {

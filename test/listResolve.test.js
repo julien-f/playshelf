@@ -327,3 +327,18 @@ test('resolveListWithSources: a developer source is keyed by its name', async ()
   const { sources } = await resolveListWithSources(list, makeFetchers({ creator: async () => set(1, 2) }));
   assert.deepEqual(sources, [{ key: 'developer:A', count: 2 }]);
 });
+
+// Recently Looked Up holds games outside Steam too; a list built from it can hold only its Steam ones.
+test('createDefaultFetchers: recent games leave games outside Steam out, and say how many', async () => {
+  const store = new Map();
+  global.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+  const recentGames = [620, 'igdb:9001', 105600, 'igdb:9004'].map((appid) => ({ appid, name: '', tinyImage: null }));
+  store.set('steam.isonoe.net:prefs', JSON.stringify({ recentGames }));
+  for (const m of ['prefs', 'recentGames', 'listResolve']) delete require.cache[require.resolve(`../public/${m}.ts`)];
+  const { createDefaultFetchers } = require('../public/listResolve.ts');
+  let leftOut;
+  const fetchers = createDefaultFetchers({ onRecentLeftOut: (n) => (leftOut = n) });
+  assert.deepEqual(await fetchers.recentGames(), set(620, 105600));
+  assert.equal(leftOut, 2);
+  delete global.localStorage;
+});
