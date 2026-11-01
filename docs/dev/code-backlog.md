@@ -66,6 +66,8 @@ Baseline for these items (2026-10-28, a 1196-game account, warm cache, real dev 
 
 ## Compliance
 
+- **C270 · minor · S** — the site has no privacy page, though Valve's API terms ask for a privacy policy on non-public end-user data and for telling users what Steam data is stored ([steamcommunity.com/dev/apiterms](https://steamcommunity.com/dev/apiterms)); `AboutRoute.tsx` only disclaims affiliation. Add one: what is cached and for how long ([data.md](data.md)), the synced prefs, and that chat apps keep their own copy of a link preview.
+- **C271 · minor · S** — no `robots.txt`, so a crawler that runs JavaScript and follows links can open `?u=` pages and drive Steam requests through the app. `Disallow: /lists/`, after checking that WhatsApp's and Slack's preview fetchers ignore it.
 - **C221 · minor · S** — `getProtonDbStatus` is called for every appid (`server.js:737`), DLC, soundtracks and hardware included; the cache holds `null` for all 49 such rows, so ~2% of calls to an undocumented upstream are certain misses. Chain it off the meta lookup like HLTB and skip non-played types — once confirmed ProtonDB never has reports for them (inferred from the cache), recorded in integrations.md.
 - **C40 · minor · S** — players `GetPlayerSummaries` omits are never cached (`lib/steam.js` `fetchPlayerBatch`), so a deleted or invalid account in a friends list is re-requested on every load. Cache the omission briefly once it's confirmed Steam omits only ids that really don't exist (not transiently); record that in integrations.md.
 
