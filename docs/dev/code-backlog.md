@@ -80,6 +80,5 @@ Baseline for these items (2026-10-28, a 1196-game account, warm cache, real dev 
 
 ## Docs
 
-- **C282 · minor · S** — `docs/user/configuration.md:25` says every screen with cached data offers its age as a refresh; a single bundle only states its age and game search results show none. Qualify it.
 - **C283 · minor · S** — `docs/dev/pitfalls.md:31` points to `node scripts/session-end.js` for a port held by another checkout, but it lists only servers started through `mock-server.js`/`dev-server.js` (pid files), not a hand-started `npm run dev`. Say so and name `ss -ltnp 'sport = :3000'`.
 - **C284 · minor · S** — `docs/dev/ui-guidelines.md:78` names `CollapsibleCard` as the one layout-property animation, but the lightbox's seek line `.lb-vc-scrub` transitions `height` too (`styles/components.css`). Name it as a second exception, or grow it with `scale`.

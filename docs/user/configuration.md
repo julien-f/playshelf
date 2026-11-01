@@ -22,7 +22,7 @@ Everything else in `default.env` is a limit or a lifetime with a sensible defaul
   - A cold library costs about one call per game not yet cached to each service (Steam store, Steam reviews…), so a client's share covers about `OUTBOUND_HOURLY_MAX × OUTBOUND_CLIENT_SHARE_PERCENT ÷ 100` such games an hour.
   - Behind a reverse proxy without `TRUST_PROXY`, every visitor is the proxy's address: they all share one client's share.
 - **Upstream pacing** (`STORE_MIN_INTERVAL_MS`, `UPSTREAM_MIN_INTERVAL_MS`) — the pause before a request slot is reused: Steam's store, then HLTB, ProtonDB, Steam reviews and Steam's store browse API. Leave them: lowering them raises traffic to undocumented endpoints.
-- **Cache lifetimes** (`*_CACHE_TTL_MINUTES`) — how long each kind of upstream data is kept. They're generous on purpose; every screen that shows cached data says how old it is, and the age itself is the button that fetches fresh.
+- **Cache lifetimes** (`*_CACHE_TTL_MINUTES`) — how long each kind of upstream data is kept. They're generous on purpose; the lists, prices and the game panel say how old their data is, and the age itself is the button that fetches fresh (a single bundle's page only states it).
 - **Session lifetime** (`SESSION_TTL_DAYS`) — how long "Sign in with Steam" lasts before signing in again.
 
 `npm run cache:clear` empties every cache table without deleting the database.
