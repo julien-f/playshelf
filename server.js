@@ -1505,6 +1505,11 @@ async function bundlePreview(id) {
 // The page's card for chat apps' link previews; {} is the site's card. Cache only: a preview
 // mustn't cost an upstream request (integrations.md's trust tiers).
 async function linkPreview(req) {
+  // Not req.query: Express 5 makes a repeated param an array.
+  const query = new URL(req.url, 'http://x').searchParams;
+  // A list opened on a game: that game is what the page shows first.
+  const openGame = Number(query.get('game'));
+  if (req.path.startsWith('/lists/') && Number.isInteger(openGame) && openGame > 0) return gamePreview(openGame);
   const bundleId = /^\/lists\/bundle\/(\d+)\/?$/.exec(req.path)?.[1];
   if (bundleId) return bundlePreview(Number(bundleId));
   const appid = /^\/game\/(\d+)\/?$/.exec(req.path)?.[1];

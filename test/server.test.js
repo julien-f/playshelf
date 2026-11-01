@@ -296,6 +296,21 @@ test("GET /lists/bundle/:id: a pick-and-mix bundle's preview takes Fanatical's e
   assert.equal(fetchMock.mock.callCount(), 0);
 });
 
+test('GET /lists/*?game=: a list opened on a cached game previews that game, before the list itself', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
+  _reset();
+  setCache('meta:620', { name: 'Portal 2', header_image: 'https://cdn.example/620.jpg', short_description: 'Think' });
+  for (const route of ['/lists/owned?u=76561197960287930&game=620', '/lists/bundle/42?game=620&game=1']) {
+    const res = await api.get(route);
+    assert.match(res.text, /<meta property="og:title" content="Portal 2" \/>/, route);
+  }
+  for (const route of ['/lists/owned?game=-1', '/lists/owned?game=abc', '/about?game=620']) {
+    const res = await api.get(route);
+    assert.match(res.text, /<meta property="og:title" content="Playshelf" \/>/, route);
+  }
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
 test('index.html links the SVG favicon, and raster icons, which link previews fall back to', () => {
   // The source, not the served shell: that one is a possibly stale dist/ build when one exists.
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
