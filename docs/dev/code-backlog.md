@@ -32,6 +32,7 @@ Last audited: simplify 2026-10-11 · correctness 2026-10-11 · security 2026-10-
 - **C222 · minor · S** — `trackedFetch` (`lib/metrics.js`) counts a call in the lifetime `requests` when it starts but adds its latency and status when it ends, so `sinceRestart`'s `avgLatencyMs` reads low during a burst of slow calls (HLTB), and `requests` exceeds its status counts plus network errors, unlike `lastHour`, which counts on completion. Count completed calls the same way in both.
 - **C201 · minor · S** — the Demo column's filter list labels both values "Demo": the checklist formats the stringified raw value, and `format` (`public/gameColumns.ts:1145`) treats the truthy string `'false'` as a demo. Compare against `'true'` there, or give the column a `value` getter returning its label.
 - **C236 · minor · S** — the tag-name map (`fetchTagNameMap`, `lib/steam.js`) is kept for the meta TTL (365 days), so tags Steam adds meanwhile are dropped by `resolveSteamTags` for up to a year. Refetch on a cooldown when a browse item has an unknown tagid.
+- **C273 · minor · S** — list labels (`createDefaultNaming`) and the Taste fit source are read when `ListRoute` loads, so an account renamed meanwhile shows its new persona only on the next load.
 
 ## Security
 
@@ -54,6 +55,7 @@ Baseline for these items (2026-10-28, a 1196-game account, warm cache, real dev 
 - **C229 · minor · M** — a lightbox game step still costs layout and script on a phone: a held ↓ over 40 steps at CPU ×4 drops ~8 frames (median, dev build, 390×844), the panel behind it unrendered. Left: `syncLbZoomBtn`'s `offsetWidth` read right after each render (`lightbox.tsx`), and the art tint's image load and `getImageData` per game (`panel.tsx`, keep the tint unchanged on close rather than re-setting it). Measure with a trace split before changing either.
 - **C232 · cleanup · S** — `/favicon.svg` is re-requested on every lightbox step (39 times in a 1.5 s held key, headless Chromium), served with max-age 0 by `express.static` (`server.js:251`); cause of the re-checks inferred (each `replaceState`). Give it a max-age.
 - **C249 · minor · M** — tags are fetched with one `IStoreBrowseService/GetItems` call per game (`fetchStoreBrowseItem`, `lib/steam.js`), though it takes many ids (`dropDemos` sends 10): a cold 1196-game load spends 1196 untrusted-tier calls where ~24 would do. Batch uncached appids over a short window into one call, one `browse:` row each. Assumes ~50 ids per call works (seen with 10): confirm and record in integrations.md.
+- **C272 · minor · S** — a row opened before its list's price batch lands prices itself in the panel: `priceSource` (`public/panel.tsx`) is still the appid then, so the panel's request duplicates the batch's (both cached server-side).
 
 ## Reliability
 

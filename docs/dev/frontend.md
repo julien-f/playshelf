@@ -11,7 +11,6 @@ The data model it renders — accounts, lists, combines, the localStorage schema
 - [Global search and the account chip](#global-search-and-the-account-chip)
 - [URL & sharing](#url--sharing)
 - [Preferences](#preferences)
-- [Known gaps](#known-gaps)
 
 ## Routes
 
@@ -209,13 +208,3 @@ Region is the only user-facing preference, in the nav bar's Preferences popover 
 - `detectCountry` tries the OS timezone (`Intl.DateTimeFormat().resolvedOptions().timeZone`, via a curated map including Eurozone→`DE`) before `navigator.language` — language is a UI preference and often stays "en-US" anywhere (e.g. `LANG=en_US.UTF-8` in `Europe/Paris`).
 - The Eurozone label leads with "Europe", not "Germany" — `DE` is only the code Steam/ITAD key Eurozone pricing off.
 - Region is not a URL param: it describes the viewer, so a shared link shouldn't override the recipient's preference.
-
-## Known gaps
-
-- **A row opened before its list's price batch lands self-prices in the panel** — `priceSource` (`panel.tsx`) is still the appid then, so the panel's request duplicates the batch's (both server-cached).
-- **Folder/list tree polish** — delete on Home uses a plain `window.confirm`; moving is a "Move to…" select in each row's ⋯ menu (`folderPaths`, leaving out a folder's own subtree), with no drag-and-drop, and there's no trash/restore UI for soft-deleted lists.
-- **Per-account playtime in `group-by-membership` lists** — on a comparison, the "Owned by" card lists every owning player with their playtime (`createDefaultFetchers`' `onOwners`, served to the panel through the route's `getOwners`) and the table has one Played column per player; a saved dynamic list grouped by membership still shows only the current account's members, with no per-player columns.
-- **`/bundles`' clock doesn't tick.** Its countdowns and buckets (`renderEnds`'s "⏳ in 6h", the Age/Ends in columns, the hero's New and Ending soon counts) are computed when the table processes its rows, not on a timer. A proper fix re-runs the whole sort/filter/render pass on a timer; ticking only the hero counts would make them disagree with the rows.
-- **What a load snapshots doesn't follow the account live** — list labels (`createDefaultNaming`) and the Taste fit source are read when `ListRoute` loads, so a renamed persona shows on the next load.
-- **`?game=` restore-on-reload is `ListRoute` and `SearchRoute` only** — Home/`/bundles`/`/about` register no route handler with the shell and `RankRoute` registers only `refreshGame`, so `/?game=440` doesn't reopen. Rarely reachable: a lookup from those routes goes to `/game/:appid`.
-- **No cross-tab sync** — see [lists-and-accounts.md](lists-and-accounts.md).

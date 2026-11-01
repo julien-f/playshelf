@@ -101,7 +101,7 @@ GameList { ...above..., parentId: string | null, order }
 ```
 
 - Flat arrays keyed by `parentId`: rename and move are single-item mutations. Folders and lists share one `order` numbering per `parentId`, so they interleave; a moved or new item goes last (`nextOrder`).
-- Create and rename use one inline name field in the tree (Enter or leaving it saves, Esc or an empty name cancels; clearing a dynamic or ranked list's name hands it back to its default label), delete `window.confirm`; moving is a "Move to…" select in each row's ⋯ menu (`folderPaths`, leaving out a folder's own subtree, which `isDescendantFolder` also refuses). No drag-and-drop, multi-select or trash view: [frontend.md](frontend.md#known-gaps).
+- Create and rename use one inline name field in the tree (Enter or leaving it saves, Esc or an empty name cancels; clearing a dynamic or ranked list's name hands it back to its default label), delete `window.confirm`; moving is a "Move to…" select in each row's ⋯ menu (`folderPaths`, leaving out a folder's own subtree, which `isDescendantFolder` also refuses). No drag-and-drop, multi-select or trash view (U236).
 - Deleting a non-empty folder asks whether to delete everything inside or move its contents up (`deleteFolder`'s `'delete'`/`'promote'`); delete applies [Soft-delete](#soft-delete) to each list inside.
 
 ### Soft-delete
