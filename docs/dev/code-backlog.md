@@ -80,4 +80,4 @@ Baseline for these items (2026-10-28, a 1196-game account, warm cache, real dev 
 
 ## Docs
 
-- **C284 · minor · S** — `docs/dev/ui-guidelines.md:78` names `CollapsibleCard` as the one layout-property animation, but the lightbox's seek line `.lb-vc-scrub` transitions `height` too (`styles/components.css`). Name it as a second exception, or grow it with `scale`.
+None open.
