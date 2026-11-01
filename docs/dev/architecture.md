@@ -1,14 +1,14 @@
 # Architecture
 
-An Express backend (`server.js` + `lib/*`, plain CommonJS JavaScript) serving a Solid.js single-page app (`public/*`, TypeScript, bundled by Vite). The backend is a caching proxy over Steam/HLTB/IsThereAnyDeal/ProtonDB/Fanatical; accounts, lists and preferences live in the browser's `localStorage`, and the server stores them only for a signed-in user who syncs (`users`, `sessions`, `user_prefs` — [data.md](data.md)).
+An Express backend (`server.js` + `lib/*`, plain CommonJS JavaScript but for `lib/streamEvent.mjs`) serving a Solid.js single-page app (`public/*`, TypeScript, bundled by Vite). The backend is a caching proxy over Steam/HLTB/IsThereAnyDeal/ProtonDB/Fanatical and the Xbox PC Game Pass catalog; accounts, lists and preferences live in the browser's `localStorage`, and the server stores them only for a signed-in user who syncs (`users`, `sessions`, `user_prefs` — [data.md](data.md)).
 
 Setup and dev commands are in [README.md](../../README.md), along with the index of the other docs; tests and hooks in [testing.md](testing.md).
 
 ## Build and serving
 
 - `npm run build` (`vite build`) bundles `public/`'s two HTML entries into `dist/` (gitignored): `index.html`, the SPA, and `present.html`, the presentation window's own page (served as a static file, none of the SPA in it). `server.js` serves `dist/` when `dist/index.html` exists, else `public/` raw — which browsers can't run (TypeScript), so a fresh clone needs a build before `npm start`.
-- In dev, Vite (`npm run dev:frontend`, `root: 'public'`) serves the sources and proxies `/api` to Express on `:3000`. Its port is pinned (`server.port`/`strictPort`): a different port is a different origin, so a fallback port would reset localStorage, cookies and sign-in.
-- `publicDir: '../static'`: `static/` holds the files copied into `dist/` as-is (the link-preview image and PNG icons); `public/` is source, so it can't be Vite's default `publicDir`.
+- In dev, Vite (`npm run dev:frontend`, `root: 'public'`) serves the sources and proxies `/api` and `/auth/` (Steam sign-in, the browser's Host kept) to Express (`PORT`, `default.env`). Its port is pinned (`server.port`/`strictPort`): a different port is a different origin, so a fallback port would reset localStorage, cookies and sign-in.
+- `publicDir: '../static'`: `static/` holds the files copied into `dist/` as-is (the link-preview image and the icons); `public/` is source, so it can't be Vite's default `publicDir`.
 - **Behind the live reverse proxy** (Caddy): it gzips HTML, JS and JSON, and sets HSTS, `nosniff`, `X-Frame-Options: SAMEORIGIN` and `Referrer-Policy: same-origin` (checked 2026-10-31). `server.js` does neither, except the details stream's own gzip, so a bare `npm start` serves uncompressed.
 - **SPA fallback**: routes are real paths (`/lists/owned`, `/game/440`), so `server.js` ends with a catch-all (`app.get(/^\/(?!api\/)(?!.*\.[a-zA-Z0-9]+$).*/)`) sending `index.html` after the API routes and static files, with Open Graph tags injected for chat link previews (crawlers don't run the SPA); `linkPreview` picks each page's card from the cache alone, never fetching: a game (`/game/<appid>`, or any list's `?game=`), a bundle (`findCachedBundle`, any region), Owned/Wishlist/Compare from cached Steam names (`peekSteamId`, `player:`), developer/publisher and a few fixed pages from the URL; anything else gets the site card. Vite's dev server does the fallback by itself, without the tags.
 
@@ -24,6 +24,7 @@ Setup and dev commands are in [README.md](../../README.md), along with the index
 - **`lib/itad.js`** — IsThereAnyDeal calls (`getShopId`, `getBundles`, `resolveSteamAppIds`, prices) behind bundle browsing and every price column.
 - **`lib/fanatical.js`** — Fanatical's storefront feed, for pick-and-mix tier prices ([integrations.md](integrations.md#fanatical--pick-and-mix-tier-prices)).
 - **`lib/gamepass.js`** — the PC Game Pass catalog as Steam appids ([integrations.md](integrations.md#xbox-pc-game-pass--catalog-feed)).
+- **`lib/streamEvent.mjs`** — one game's details-stream event, without screenshots and trailers; an ES module so `e2e/mockApi.ts` shares it.
 - **`lib/upstream.js`** — `createSemaphore` (concurrency cap + per-slot pacing, registered for `GET /api/metrics`) and `upstreamError`, shared by the upstream clients.
 - **`lib/circuitBreaker.js`** — one 403-storm breaker per blocking-prone upstream (Steam store, HLTB, ProtonDB).
 - **`lib/metrics.js`** — `createTrackedFetch`, outbound budgets and the counters behind `GET /api/metrics` ([observability.md](observability.md)).
@@ -34,7 +35,7 @@ The dedup map, semaphores, breakers and metrics are process-local: correct for t
 ## Tooling
 
 - **`tsconfig.json`** — `strict`, `noUnusedLocals` (dead imports fail the typecheck), `noEmit`, `moduleResolution: bundler`, `verbatimModuleSyntax` (type-only imports use `import type`), over `public/**/*.ts`; `paths: {"/*": ["./public/*"]}` maps the browser-style absolute imports (`'/utils.ts'`) onto the source tree. `tsconfig.e2e.json` extends it over `e2e/`. The compiler is TypeScript 7 (`tsgo`).
-- **`eslint.config.mjs`** — `eslint-plugin-solid`'s `flat/typescript` rules only, parsed by `@babel/eslint-parser` ([decisions.md](decisions.md#linting-babel-not-typescript-eslint)). `solid/reactivity` is the rule that matters ([frontend.md](frontend.md#reactivity)). `.mjs` because `package.json` has no `"type": "module"`.
+- **`eslint.config.mjs`** — `eslint-plugin-solid`'s `flat/typescript` rules, plus `no-restricted-imports` banning `lucide-solid`'s barrel imports ([ui-guidelines.md](ui-guidelines.md#icons)), parsed by `@babel/eslint-parser` ([decisions.md](decisions.md#linting-babel-not-typescript-eslint)). `solid/reactivity` is the rule that matters ([frontend.md](frontend.md#reactivity)). `.mjs` because `package.json` has no `"type": "module"`.
 - **Prettier** (`.prettierrc.json`) formats the whole tree.
 
 ## API routes

@@ -29,7 +29,7 @@ Every key prefix belongs to a group in `lib/cache.js`'s `GROUPS` (a key matching
 
 **Confirmed absences get a short expiry** (`setCache(key, value, { ttlMs })`, the `expires` column), so a miss neither costs an upstream call per request nor outlives its truth by months:
 
-- `MISS_CACHE_TTL_MINUTES`: no store page (`getAppDetails`), no Steam listing (`resolveSteamAppIds`/`resolveItadIds`), no achievement schema or rarity (a 403 on both, typical of an unreleased game), an HLTB lookup skipped by design (a non-played type, or no name — cached so ↻ can date it and the details limiter counts it as cached).
+- `MISS_CACHE_TTL_MINUTES`: no store page (`getAppDetails`), no Steam listing (`resolveSteamAppIds`/`resolveItadIds`), no achievement schema or rarity (a 403 on both, typical of an unreleased game), an HLTB lookup skipped by design (a non-played type, or no name — cached so ↻ can date it and the details limiter counts it as cached), an empty developer or publisher list, a Steam package or bundle with no contents, a Game Pass product with no Microsoft Store title, and store search results kept unfiltered when the demo filter failed.
 - `RESOLVE_MISS_CACHE_TTL_MINUTES`: `resolveSteamId`'s "no such account" (a typo being retried, a custom URL about to be registered). Stored as `null`; re-throws the original client error.
 - An unreleased game (`coming_soon`) gets the miss expiry for its store page and any empty rating, ProtonDB or HLTB result (`capExpiry`, from `fetchGameDetails`); a released game's empty results keep their tier.
 
