@@ -4,7 +4,14 @@ process.env.DB_FILE = '';
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { pickAndMixSlug, parsePickAndMix, matchPickAndMix, getPickAndMix, withPickAndMix } = require('../lib/fanatical');
+const {
+  pickAndMixSlug,
+  parsePickAndMix,
+  matchPickAndMix,
+  getPickAndMix,
+  withPickAndMix,
+  withCachedPickAndMix,
+} = require('../lib/fanatical');
 const { _reset, setCache } = require('../lib/cache');
 
 const ITAD_URL =
@@ -14,6 +21,9 @@ const FEED = {
   pickandmix: [
     {
       slug: 'build-your-own-killer-bundle',
+      type: 'bundle',
+      valid_from: '2026-09-07T13:00:00.000Z',
+      valid_until: '2026-11-13T23:59:00.000Z',
       tiers: [
         { quantity: 6, price: { USD: 699, CAD: 1789.9999999999998 } },
         { quantity: 1, price: { USD: 149, CAD: 250 } },
@@ -26,6 +36,7 @@ const FEED = {
 
 const fanaticalBundle = (over = {}) => ({
   id: 1,
+  expiry: '2026-11-01T00:58:54+01:00',
   page: { name: 'Fanatical' },
   url: ITAD_URL,
   tiers: [{ price: null, games: [] }],
@@ -48,9 +59,17 @@ test('parsePickAndMix: major units, rounded, quantity-ascending, empty bundles d
         { quantity: 6, prices: { USD: 6.99, CAD: 17.9 } },
       ],
       products: [{ name: 'Rain World', slug: 'rain-world' }],
+      type: 'bundle',
+      validFrom: '2026-09-07T13:00:00.000Z',
+      validUntil: '2026-11-13T23:59:00.000Z',
     },
   });
   assert.deepEqual(parsePickAndMix(null), {});
+  // Dates and type are optional: a missing or malformed one is null, not a reason to drop the tiers.
+  const [entry] = Object.values(
+    parsePickAndMix({ pickandmix: [{ slug: 's', valid_until: 'soon', tiers: [{ quantity: 1, price: { USD: 1 } }] }] }),
+  );
+  assert.deepEqual([entry.type, entry.validFrom, entry.validUntil], [null, null, null]);
 });
 
 test('matchPickAndMix: by slug, title, subtitled title or base title; the rest left out', () => {
@@ -117,6 +136,8 @@ test('withPickAndMix: enriches only null-price Fanatical bundles, one cached fet
   const [a, b, c] = await withPickAndMix([fanaticalBundle(), priced, humble]);
   assert.equal(a.pickAndMix.length, 2);
   assert.equal(a.pickAndMixNames, undefined);
+  // Fanatical's own end date replaces ITAD's, which runs early (integrations.md).
+  assert.equal(a.expiry, '2026-11-13T23:59:00.000Z');
   assert.equal(b, priced);
   assert.equal(c, humble);
   const games = [{ id: 'g1', slug: 'rain-world', title: 'Rain World' }];
@@ -150,7 +171,7 @@ test('getPickAndMix: re-fetches for an unknown slug once the map is old, keeping
   _reset();
   t.mock.method(console, 'warn', () => {});
   const old = { known: { tiers: [{ quantity: 1, prices: { USD: 1 } }], products: [] } };
-  setCache('fanatical-pnm:v2', old);
+  setCache('fanatical-pnm:v3', old);
   const later = Date.now() + 2 * 60 * 60 * 1000;
   t.mock.method(Date, 'now', () => later);
   let calls = 0;
@@ -162,4 +183,21 @@ test('getPickAndMix: re-fetches for an unknown slug once the map is old, keeping
   assert.equal(calls, 0);
   assert.deepEqual(await getPickAndMix(['new-one']), old);
   assert.equal(calls, 1);
+});
+
+test("withPickAndMix: ITAD's end date stays when the feed has none", async (t) => {
+  _reset();
+  const feed = { pickandmix: [{ ...FEED.pickandmix[0], valid_until: undefined }] };
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => feed }));
+  const [b] = await withPickAndMix([fanaticalBundle()]);
+  assert.equal(b.expiry, '2026-11-01T00:58:54+01:00');
+});
+
+test("withCachedPickAndMix: Fanatical's end date from the cached feed only, never fetching", async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => assert.fail('should not fetch'));
+  const bundle = fanaticalBundle();
+  assert.equal(withCachedPickAndMix(bundle), bundle);
+  setCache('fanatical-pnm:v3', parsePickAndMix(FEED));
+  assert.equal(withCachedPickAndMix(bundle).expiry, '2026-11-13T23:59:00.000Z');
 });

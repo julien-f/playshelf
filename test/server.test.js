@@ -273,6 +273,29 @@ test('GET /lists/bundle/:id: the preview names and describes a cached bundle of 
   assert.equal(fetchMock.mock.callCount(), 0);
 });
 
+test("GET /lists/bundle/:id: a pick-and-mix bundle's preview takes Fanatical's end date from the cached feed", async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
+  const bundle = {
+    id: 45,
+    title: 'Build Your Own Killer Bundle',
+    page: { name: 'Fanatical' },
+    url: 'https://www.fanatical.com/en/pick-and-mix/byo-killer',
+    expiry: '2001-01-02T12:00:00Z',
+    counts: { games: 30 },
+    tiers: [{ price: null, games: [] }],
+  };
+  _reset([
+    [`itad-bundles:US:-publish:true:0:50`, { value: [bundle], ts: Date.now() }],
+    [
+      'fanatical-pnm:v3',
+      { value: { 'byo-killer': { tiers: [], products: [], validUntil: '2099-11-13T23:59:00.000Z' } }, ts: Date.now() },
+    ],
+  ]);
+  const res = await api.get('/lists/bundle/45');
+  assert.match(res.text, /<meta property="og:description" content="30 games · Fanatical · ends Nov 13, 2099" \/>/);
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
 test('index.html links the SVG favicon, and raster icons, which link previews fall back to', () => {
   // The source, not the served shell: that one is a possibly stale dist/ build when one exists.
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');

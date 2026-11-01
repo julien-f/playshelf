@@ -70,7 +70,7 @@ const {
   gameBundlesCacheKey,
   extractGameBundles,
 } = require('./lib/itad');
-const { withPickAndMix } = require('./lib/fanatical');
+const { withPickAndMix, withCachedPickAndMix } = require('./lib/fanatical');
 const { streamEvent } = require('./lib/streamEvent.mjs');
 const { catalogCacheKey, getGamePass, isGamePassCached } = require('./lib/gamepass');
 const {
@@ -1460,8 +1460,9 @@ async function sendAppShell(
 // so the cover is the first game banner wide enough for a card. Shapes checked: a bad field
 // degrades to the site's card rather than failing the page load.
 async function bundlePreview(id) {
-  const bundle = await findCachedBundle(id, REGION_CODES);
-  if (typeof bundle?.title !== 'string') return {};
+  const cached = await findCachedBundle(id, REGION_CODES);
+  if (typeof cached?.title !== 'string') return {};
+  const bundle = withCachedPickAndMix(cached);
   const games = Number.isInteger(bundle.counts?.games) ? bundle.counts.games : undefined;
   const expiry = typeof bundle.expiry === 'string' && new Date(bundle.expiry);
   const ends =
