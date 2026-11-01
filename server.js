@@ -1561,6 +1561,22 @@ function comparePreview(query) {
   };
 }
 
+// public/creatorData.ts's creatorTitle wording.
+function creatorPreview(query, role) {
+  const name = query.get('name')?.trim();
+  if (!name) return {};
+  const by = role === 'developer' ? 'by' : 'published by';
+  return {
+    title: capTitle(role === 'developer' ? `Games by ${name}` : `Published by ${name}`),
+    description: `Every Steam game ${by} ${capTitle(name)}, with ratings, completion times and current prices.`,
+  };
+}
+
+const FIXED_PREVIEWS = {
+  '/lists/game-pass': { title: 'Steam games in PC Game Pass' },
+  '/bundles': { title: 'Current game bundles' },
+};
+
 // The page's card for chat apps' link previews; {} is the site's card. Cache only: a preview
 // mustn't cost an upstream request (integrations.md's trust tiers).
 async function linkPreview(req) {
@@ -1576,7 +1592,9 @@ async function linkPreview(req) {
   if (req.path === '/lists/owned') return accountListPreview(query, 'owned');
   if (req.path === '/lists/wishlist') return accountListPreview(query, 'wishlist');
   if (req.path === '/lists/compare') return comparePreview(query);
-  return {};
+  if (req.path === '/lists/developer') return creatorPreview(query, 'developer');
+  if (req.path === '/lists/publisher') return creatorPreview(query, 'publisher');
+  return FIXED_PREVIEWS[req.path] ?? {};
 }
 
 // SPA fallback: any GET that isn't an /api/* call and doesn't look like a static-asset request

@@ -377,6 +377,25 @@ test('GET /lists/compare?u=&u=: names every cached player, as the page does', as
   assert.equal(fetchMock.mock.callCount(), 0);
 });
 
+test('GET /lists/developer|publisher?name= and fixed pages: titled from the URL alone', async () => {
+  const dev = await api.get('/lists/developer?name=Valve%20%26%20co');
+  assert.match(dev.text, /<meta property="og:title" content="Games by Valve &amp; co" \/>/);
+  assert.match(
+    dev.text,
+    /<meta property="og:description" content="Every Steam game by Valve &amp; co, with [^"]+" \/>/,
+  );
+  const pub = await api.get('/lists/publisher?name=Devolver&name=Other');
+  assert.match(pub.text, /<meta property="og:title" content="Published by Devolver" \/>/);
+  const long = await api.get(`/lists/developer?name=${'x'.repeat(300)}`);
+  assert.match(long.text, /<meta property="og:title" content="Games by x{90}…" \/>/);
+  const empty = await api.get('/lists/developer?name=%20');
+  assert.match(empty.text, /<meta property="og:title" content="Playshelf" \/>/);
+  const gamePass = await api.get('/lists/game-pass');
+  assert.match(gamePass.text, /<meta property="og:title" content="Steam games in PC Game Pass" \/>/);
+  const bundles = await api.get('/bundles');
+  assert.match(bundles.text, /<meta property="og:title" content="Current game bundles" \/>/);
+});
+
 test('index.html links the SVG favicon, and raster icons, which link previews fall back to', () => {
   // The source, not the served shell: that one is a possibly stale dist/ build when one exists.
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
