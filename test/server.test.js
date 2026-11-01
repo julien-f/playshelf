@@ -311,6 +311,72 @@ test('GET /lists/*?game=: a list opened on a cached game previews that game, bef
   assert.equal(fetchMock.mock.callCount(), 0);
 });
 
+// Two cached players (one known by a vanity name) and one only Steam could name.
+const ALICE = '76561197960287930';
+const BOB = '76561197960287931';
+const seedPlayers = () =>
+  _reset([
+    [
+      `player:${ALICE}`,
+      {
+        value: { personaname: 'Alice', avatarfull: 'https://avatars.example/a.jpg', realname: 'A. Secret' },
+        ts: Date.now(),
+      },
+    ],
+    [`player:${BOB}`, { value: { personaname: 'Bob', avatarfull: 'https://avatars.example/b.jpg' }, ts: Date.now() }],
+    ['resolve:bobby', { value: BOB, ts: Date.now() }],
+    ['resolve:nobody', { value: null, ts: Date.now() }],
+  ]);
+
+test('GET /lists/owned|wishlist?u=: names a cached account, with its avatar in a small card', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
+  seedPlayers();
+  const owned = await api.get(`/lists/owned?u=${ALICE}`);
+  assert.match(owned.text, /<meta property="og:title" content="Alice's Library" \/>/);
+  assert.match(owned.text, /<meta property="og:description" content="Alice's Steam games, with [^"]+" \/>/);
+  assert.match(owned.text, /<meta property="og:image" content="https:\/\/avatars\.example\/a\.jpg" \/>/);
+  assert.match(owned.text, /<meta name="twitter:card" content="summary" \/>/);
+  assert.doesNotMatch(owned.text, /Secret/);
+
+  // A profile URL, a vanity name, and a Family (no single avatar).
+  const wishlist = await api.get('/lists/wishlist?u=https://steamcommunity.com/id/bobby/');
+  assert.match(wishlist.text, /<meta property="og:title" content="Bob's Wishlist" \/>/);
+  const family = await api.get(`/lists/owned?u=${ALICE},bobby`);
+  assert.match(family.text, /<meta property="og:title" content="Alice \+ Bob's Library" \/>/);
+  assert.match(family.text, /<meta name="twitter:card" content="summary_large_image" \/>/);
+
+  // No account, several slots, a cached miss, an unknown vanity name, an unnamed steam64: the site card.
+  for (const route of [
+    '/lists/owned',
+    `/lists/owned?u=${ALICE}&u=${BOB}`,
+    '/lists/owned?u=nobody',
+    '/lists/owned?u=stranger',
+    '/lists/wishlist?u=76561197960287999',
+  ]) {
+    const res = await api.get(route);
+    assert.match(res.text, /<meta property="og:title" content="Playshelf" \/>/, route);
+  }
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
+test('GET /lists/compare?u=&u=: names every cached player, as the page does', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
+  seedPlayers();
+  const res = await api.get(`/lists/compare?u=${ALICE}&u=bobby`);
+  assert.match(res.text, /<meta property="og:title" content="Alice vs\. Bob" \/>/);
+  assert.match(
+    res.text,
+    /<meta property="og:description" content="The Steam games Alice and Bob own, together and apart\." \/>/,
+  );
+
+  const many = Array.from({ length: 9 }, () => `u=${ALICE}`).join('&');
+  for (const route of [`/lists/compare?u=${ALICE}`, `/lists/compare?u=${ALICE}&u=stranger`, `/lists/compare?${many}`]) {
+    const other = await api.get(route);
+    assert.match(other.text, /<meta property="og:title" content="Playshelf" \/>/, route);
+  }
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
 test('index.html links the SVG favicon, and raster icons, which link previews fall back to', () => {
   // The source, not the served shell: that one is a possibly stale dist/ build when one exists.
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');

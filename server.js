@@ -1502,6 +1502,65 @@ async function bundlePreview(id) {
   return { title: bundle.title, description: description || undefined, image };
 }
 
+// A link's player slots as public/urlState.ts's parseSlots reads them, each an array of members.
+const parseSlots = (query) =>
+  query
+    .getAll('u')
+    .map((value) =>
+      value
+        .split(',')
+        .map((member) => member.trim())
+        .filter(Boolean),
+    )
+    .filter((slot) => slot.length > 0);
+
+// Bounds the cache reads a crafted link costs, and a title's length.
+const PREVIEW_MAX_MEMBERS = 8;
+const PREVIEW_MAX_TITLE = 100;
+const capTitle = (title) => (title.length > PREVIEW_MAX_TITLE ? `${title.slice(0, PREVIEW_MAX_TITLE - 1)}…` : title);
+
+// Each slot's members' cached Steam profiles, or null when one isn't resolved or named yet.
+// Only `personaname` and `avatarfull` reach a card (integrations.md).
+function cachedPlayers(slots) {
+  if (slots.flat().length > PREVIEW_MAX_MEMBERS) return null;
+  const players = slots.map((slot) =>
+    slot.map((member) => {
+      const steamId = peekSteamId(member);
+      const player = steamId && getCached(playerCacheKey(steamId), { record: false });
+      return typeof player?.personaname === 'string' ? player : null;
+    }),
+  );
+  return players.flat().every(Boolean) ? players : null;
+}
+
+const slotName = (players) => players.map((player) => player.personaname).join(' + ');
+
+// The page's own title (ListRoute.tsx) for one account's Owned or Wishlist; several slots aren't an account.
+function accountListPreview(query, kind) {
+  const slots = parseSlots(query);
+  const players = slots.length === 1 && cachedPlayers(slots);
+  if (!players) return {};
+  const [members] = players;
+  const name = slotName(members);
+  const avatar = members.length === 1 && members[0].avatarfull;
+  return {
+    title: capTitle(`${name}'s ${kind === 'owned' ? 'Library' : 'Wishlist'}`),
+    description: `${name}'s Steam ${kind === 'owned' ? 'games' : 'wishlist'}, with ratings, completion times and current prices.`,
+    ...(typeof avatar === 'string' && { image: avatar, card: 'summary' }),
+  };
+}
+
+function comparePreview(query) {
+  const slots = parseSlots(query);
+  const players = slots.length >= 2 && cachedPlayers(slots);
+  if (!players) return {};
+  const names = players.map(slotName);
+  return {
+    title: capTitle(names.join(' vs. ')),
+    description: `The Steam games ${names.slice(0, -1).join(', ')} and ${names.at(-1)} own, together and apart.`,
+  };
+}
+
 // The page's card for chat apps' link previews; {} is the site's card. Cache only: a preview
 // mustn't cost an upstream request (integrations.md's trust tiers).
 async function linkPreview(req) {
@@ -1514,6 +1573,9 @@ async function linkPreview(req) {
   if (bundleId) return bundlePreview(Number(bundleId));
   const appid = /^\/game\/(\d+)\/?$/.exec(req.path)?.[1];
   if (appid) return gamePreview(appid);
+  if (req.path === '/lists/owned') return accountListPreview(query, 'owned');
+  if (req.path === '/lists/wishlist') return accountListPreview(query, 'wishlist');
+  if (req.path === '/lists/compare') return comparePreview(query);
   return {};
 }
 
