@@ -236,6 +236,43 @@ test('GET /game/:appid: the preview names and describes a cached game and shows 
   assert.equal(fetchMock.mock.callCount(), 0);
 });
 
+test('GET /lists/bundle/:id: the preview names and describes a cached bundle of any region, without fetching', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
+  const bundle = {
+    id: 42,
+    title: 'Narrative & Co Bundle',
+    page: { name: 'Humble Bundle' },
+    expiry: '2099-03-05T18:00:00Z',
+    counts: { games: 8 },
+    tiers: [{ games: [{ assets: {} }, { assets: { banner600: 'https://cdn.example/b600.jpg' } }] }],
+  };
+  // Found on the DE list's second page, as a visitor in the euro region cached it.
+  const page = (bundles, offset) => [`itad-bundles:DE:-publish:false:${offset}:50`, { value: bundles, ts: Date.now() }];
+  _reset([
+    page(
+      Array.from({ length: 50 }, (_, i) => ({ id: 1000 + i })),
+      0,
+    ),
+    page([bundle], 50),
+  ]);
+  const res = await api.get('/lists/bundle/42');
+  assert.match(res.text, /<meta property="og:title" content="Narrative &amp; Co Bundle" \/>/);
+  assert.match(res.text, /<meta property="og:description" content="8 games · Humble Bundle · ends Mar 5, 2099" \/>/);
+  assert.match(res.text, /<meta property="og:image" content="https:\/\/cdn\.example\/b600\.jpg" \/>/);
+
+  const uncached = await api.get('/lists/bundle/43');
+  assert.match(uncached.text, /<meta property="og:title" content="Playshelf" \/>/);
+
+  // An ended bundle on a cached page past an evicted one; malformed fields degrade, not fail.
+  const ended = { id: 44, title: 'Old', expiry: '2001-01-02T12:00:00Z', counts: { games: 1 }, tiers: 'bad' };
+  _reset([[`itad-bundles:US:-publish:true:50:50`, { value: [ended], ts: Date.now() }]]);
+  const old = await api.get('/lists/bundle/44');
+  assert.equal(old.status, 200);
+  assert.match(old.text, /<meta property="og:description" content="1 game · ended Jan 2, 2001" \/>/);
+  assert.match(old.text, /<meta property="og:image" content="http:\/\/[^"]+\/og-image\.jpg" \/>/);
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
 test('index.html links the SVG favicon, and raster icons, which link previews fall back to', () => {
   // The source, not the served shell: that one is a possibly stale dist/ build when one exists.
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');

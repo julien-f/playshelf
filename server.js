@@ -57,6 +57,7 @@ const {
   getBundles,
   bundlesCacheKey,
   findBundleById,
+  findCachedBundle,
   resolveSteamAppIds,
   steamAppIdCacheKey,
   resolveItadIds,
@@ -1455,6 +1456,33 @@ async function sendAppShell(
   res.type('html').send(shellHtml.replace('</head>', `${tags.join('\n')}\n</head>`));
 }
 
+// Cache only, like a game's: a preview mustn't cost an upstream request. ITAD has no bundle image,
+// so the cover is the first game banner wide enough for a card. Shapes checked: a bad field
+// degrades to the site's card rather than failing the page load.
+async function bundlePreview(id) {
+  const bundle = await findCachedBundle(id, REGION_CODES);
+  if (typeof bundle?.title !== 'string') return {};
+  const games = Number.isInteger(bundle.counts?.games) ? bundle.counts.games : undefined;
+  const expiry = typeof bundle.expiry === 'string' && new Date(bundle.expiry);
+  const ends =
+    expiry &&
+    !isNaN(expiry) &&
+    `${expiry < Date.now() ? 'ended' : 'ends'} ${expiry.toLocaleDateString('en-US', { dateStyle: 'medium', timeZone: 'UTC' })}`;
+  const description = [
+    games && `${games} game${games === 1 ? '' : 's'}`,
+    typeof bundle.page?.name === 'string' && bundle.page.name,
+    ends,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const tiers = Array.isArray(bundle.tiers) ? bundle.tiers : [];
+  const image = tiers
+    .flatMap((tier) => (Array.isArray(tier?.games) ? tier.games : []))
+    .map((game) => game?.assets?.banner600)
+    .find((url) => typeof url === 'string');
+  return { title: bundle.title, description: description || undefined, image };
+}
+
 // SPA fallback: any GET that isn't an /api/* call and doesn't look like a static-asset request
 // (no dot-extension in its path) falls through to the app shell, letting the client-side
 // router (see public/App.tsx) render the right view from the URL — needed once navigation
@@ -1465,6 +1493,8 @@ async function sendAppShell(
 // extension) but genuinely doesn't exist still 404s via Express's default handler instead of
 // being silently rewritten into the shell.
 app.get(/^\/(?!api\/)(?!.*\.[a-zA-Z0-9]+$).*/, async (req, res) => {
+  const bundleId = /^\/lists\/bundle\/(\d+)\/?$/.exec(req.path)?.[1];
+  if (bundleId) return sendAppShell(req, res, await bundlePreview(Number(bundleId)));
   const appid = /^\/game\/(\d+)\/?$/.exec(req.path)?.[1];
   // Cache only: a link preview mustn't cost an upstream request (integrations.md's trust tiers).
   // Not recorded: a page load isn't a meta-tier lookup the cache metrics should count.
