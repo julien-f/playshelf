@@ -80,7 +80,6 @@ Baseline for these items (2026-10-28, a 1196-game account, warm cache, real dev 
 
 ## Docs
 
-- **C280 · minor · S** — `docs/dev/architecture.md`: `lib/streamEvent.mjs` is missing from the module list and is an ES module, unlike "plain CommonJS" (lines 3, 17). Vite also proxies `/auth/` to Express, Host kept, to the `PORT` backend (line 10). `eslint.config.mjs` also bans lucide-solid's barrel imports (line 37). The Game Pass catalog is an upstream too (line 3); `static/` holds an SVG favicon too (line 11). Correct each line.
 - **C281 · minor · S** — `docs/dev/data.md:32` lists only some of `MISS_CACHE_TTL_MINUTES`' uses: also an empty developer/publisher list, a package or bundle with no contents, a Game Pass product with no title, and search results kept unfiltered when the demo filter failed (`lib/steam.js`, `lib/gamepass.js`). Add them.
 - **C282 · minor · S** — `docs/user/configuration.md:25` says every screen with cached data offers its age as a refresh; a single bundle only states its age and game search results show none. Qualify it.
 - **C283 · minor · S** — `docs/dev/pitfalls.md:31` points to `node scripts/session-end.js` for a port held by another checkout, but it lists only servers started through `mock-server.js`/`dev-server.js` (pid files), not a hand-started `npm run dev`. Say so and name `ss -ltnp 'sport = :3000'`.
