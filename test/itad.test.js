@@ -77,18 +77,20 @@ test('getBundles: returns and caches the bundle list', async (t) => {
   assert.equal(calls, 2, 'a different country is a different cache key');
 });
 
-test('getBundles: drops a malformed bundle, keeping the rest of the page', async (t) => {
-  _reset();
-  const warn = t.mock.method(console, 'warn', () => {});
-  const good = { id: 1, title: 'A', expiry: null, tiers: [{ games: [{ assets: { banner600: 'u' } }] }] };
-  const bad = [
+test('getBundles: a malformed bundle fails its page, so a walk never mistakes a short page for the last (C269)', async (t) => {
+  for (const bad of [
     { id: 2, title: 'B', tiers: 'x' },
     { id: 3, title: 'C', tiers: [{ games: [{ assets: { banner600: 1 } }] }] },
     { id: 'x', title: 'D' },
-  ];
-  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [good, ...bad] }));
-  assert.deepEqual(await getBundles(PAGE), [good]);
-  assert.match(warn.mock.calls[0].arguments[0], /^\[itad\] dropped 3 malformed/);
+  ]) {
+    _reset();
+    const good = { id: 1, title: 'A', expiry: null, tiers: [{ games: [{ assets: { banner600: 'u' } }] }] };
+    t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [good, bad] }));
+    await assert.rejects(
+      () => getBundles(PAGE),
+      (err) => err.isUpstream === true,
+    );
+  }
 });
 
 // ITAD's `mature` is an *include* switch, not an "only mature" filter, and this app never hides a
