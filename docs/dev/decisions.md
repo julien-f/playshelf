@@ -1,6 +1,6 @@
 # Decisions
 
-Choices that look wrong without their reasoning: the numbers this app derives itself rather than reading off an upstream (columns in `public/gameColumns.ts`, lines in the side panel — see [frontend.md](frontend.md)), and tooling choices.
+Choices that look wrong without their reasoning: the numbers this app derives itself rather than reading off an upstream (columns in `public/gameColumns.ts`, lines in the side panel — see [game-table.md](game-table.md) and [panel-and-lightbox.md](panel-and-lightbox.md)), and tooling choices.
 
 ## Ratings — Wilson score vs. Weighted Rating
 

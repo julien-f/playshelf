@@ -1,5 +1,5 @@
 // The presentation window (present.html): a lightbox on another screen, showing the one media its main window sends
-// (presentation.ts). Its DOM is never rebuilt, so fullscreen holds across sends (docs/dev/frontend.md#the-presentation-window).
+// (presentation.ts). Its DOM is never rebuilt, so fullscreen holds across sends (docs/dev/panel-and-lightbox.md#the-presentation-window).
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import Cast from 'lucide-solid/icons/cast';

@@ -129,7 +129,7 @@ export interface PanelOptions {
 }
 
 // ── Shared game side panel ──────────────────────────────────────────────────
-// Mounted once by AppShell.tsx's single `initPanel(options)` call (see docs/dev/frontend.md), not
+// Mounted once by AppShell.tsx's single `initPanel(options)` call (see docs/dev/panel-and-lightbox.md), not
 // per-route — ListRoute.tsx, SearchRoute.tsx and RankRoute.tsx (the callers of `panelOpen`) just open/close it,
 // never configure it; `PanelOptions` are the shell's hooks, which relay to the mounted route. A
 // real Solid component (converted from the original panel.ts's hand-rolled innerHTML rebuilds):
@@ -146,7 +146,7 @@ export interface PanelOptions {
 // (not just the ones it explicitly triggers) should do it there rather than in a wrapper around
 // panelClose(), which those other paths would silently bypass.
 //
-// Docked, not modal (see docs/dev/frontend.md and style.css's own "App shell layout"
+// Docked, not modal (see docs/dev/panel-and-lightbox.md and style.css's own "App shell layout"
 // comment): the panel is a sibling column next to whatever list/content is showing, not an
 // overlay — no backdrop element, no click-outside-to-close, no `inert`-toggling of the
 // background (there's nothing to make inert; the rest of the page stays fully interactive

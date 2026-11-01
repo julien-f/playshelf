@@ -1,6 +1,6 @@
 // Shared "share/persist/reset a @vates/data-table-solid view via prefs.js + a one-shot URL
 // param" logic — extracted verbatim from library.js's and bundles.js's own near-identical
-// copies (see docs/dev/frontend.md's table section for the "share on demand, not
+// copies (see docs/dev/game-table.md for the "share on demand, not
 // live-synced" reasoning). Both pages call these the same way: a `table` instance and the
 // ViewStore that page's view is kept in.
 import { createEffect, createRoot, createSignal, untrack } from 'solid-js';

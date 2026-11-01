@@ -1,6 +1,6 @@
 # UI guidelines
 
-How the UI should behave where [journeys.md](journeys.md) and the feature docs are silent; what `ux-review` judges taste against. Conventions, not hard rules: a design that breaks one says why in [frontend.md](frontend.md).
+How the UI should behave where [journeys.md](journeys.md) and the feature docs are silent; what `ux-review` judges taste against. Conventions, not hard rules: a design that breaks one says why in the frontend docs ([frontend.md](frontend.md), [game-table.md](game-table.md), [panel-and-lightbox.md](panel-and-lightbox.md)).
 
 ## Principles
 

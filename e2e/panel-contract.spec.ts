@@ -1,4 +1,4 @@
-// The side panel's shared contract (docs/dev/frontend.md#the-side-panel), on every page that hosts it:
+// The side panel's shared contract (docs/dev/panel-and-lightbox.md#the-side-panel), on every page that hosts it:
 // one panel, so a behaviour that differs between pages is a bug.
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { mockApi } from './mockApi.ts';

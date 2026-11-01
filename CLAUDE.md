@@ -13,7 +13,9 @@ Working conventions for this repo. Documentation lives in `docs/` — keep it th
 - [README.md](README.md) — what the app is, setup, dev commands
 - [docs/user/features.md](docs/user/features.md) · [docs/user/configuration.md](docs/user/configuration.md) — user-facing: what it does, every setting
 - [docs/dev/architecture.md](docs/dev/architecture.md) — backend modules, build/dev setup, API routes, request flow
-- [docs/dev/frontend.md](docs/dev/frontend.md) — SPA routes, module map, **reactivity rules**, the game table, the side panel, URL state
+- [docs/dev/frontend.md](docs/dev/frontend.md) — SPA routes, module map, **reactivity rules**, URL state
+- [docs/dev/game-table.md](docs/dev/game-table.md) — the game table, each list kind, saved views
+- [docs/dev/panel-and-lightbox.md](docs/dev/panel-and-lightbox.md) — the side panel, the lightbox, the presentation window
 - [docs/dev/lists-and-accounts.md](docs/dev/lists-and-accounts.md) — the account/list data model and its localStorage schema
 - [docs/dev/integrations.md](docs/dev/integrations.md) — Steam/HLTB/ITAD/ProtonDB, including which endpoints are undocumented and the compliance notes on them
 - [docs/dev/data.md](docs/dev/data.md) — `db.sqlite`, cache tiers and TTLs, the three refresh paths
