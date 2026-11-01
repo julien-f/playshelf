@@ -2507,6 +2507,91 @@ test('GET /api/game-bundles/:appid: 502 when the upstream call fails', async (t)
   assert.equal(res.status, 502);
 });
 
+test("GET /api/bundles: a Fanatical pick-and-mix ITAD expired early is appended to the active list, with Fanatical's end date", async (t) => {
+  _reset();
+  process.env.ITAD_API_KEY = 'test-itad-key';
+  const killer = {
+    id: 16542,
+    title: 'Build Your Own Killer Bundle',
+    page: { name: 'Fanatical' },
+    url: 'https://www.fanatical.com/en/pick-and-mix/byo-killer',
+    expiry: '2001-01-01T00:58:54+01:00',
+    publish: '2026-09-07T13:00:00Z',
+    tiers: [{ price: null, games: [{ id: 'gid-k' }] }],
+  };
+  const feed = {
+    pickandmix: [
+      {
+        slug: 'byo-killer',
+        type: 'bundle',
+        valid_from: '2026-09-07T13:00:00.000Z',
+        valid_until: '2099-11-13T23:59:00.000Z',
+        tiers: [{ quantity: 5, price: { USD: 599 } }],
+        products: [],
+      },
+    ],
+  };
+  const fetchMock = t.mock.method(globalThis, 'fetch', async (url) => {
+    if (String(url).startsWith('https://www.fanatical.com/')) return { ok: true, json: async () => feed };
+    const expired = new URL(url).searchParams.get('expired') === 'true';
+    return { ok: true, json: async () => (expired ? [killer] : [{ id: 1, title: 'Humble One' }]) };
+  });
+  const res = await api.get('/api/bundles?limit=50');
+  assert.equal(res.status, 200);
+  assert.deepEqual(
+    res.body.bundles.map((b) => [b.id, b.expiry ?? null]),
+    [
+      [1, null],
+      [16542, '2099-11-13T23:59:00.000Z'],
+    ],
+  );
+  // The next page (the client asks while a page holds 50) and "Include expired" add nothing more.
+  assert.deepEqual((await api.get('/api/bundles?limit=50&offset=2')).body.bundles, [{ id: 1, title: 'Humble One' }]);
+  const withExpired = await api.get('/api/bundles?limit=50&expired=1');
+  assert.deepEqual(
+    withExpired.body.bundles.map((b) => [b.id, b.expiry]),
+    [[16542, '2099-11-13T23:59:00.000Z']],
+  );
+  const calls = fetchMock.mock.callCount();
+  await api.get('/api/bundles?limit=50');
+  assert.equal(fetchMock.mock.callCount(), calls, 'every page cached');
+});
+
+test('GET /api/game-bundles/:appid: a bundle ITAD expired early is added from the cached list pages', async (t) => {
+  _reset();
+  process.env.ITAD_API_KEY = 'test-itad-key';
+  setCache('itad-gid:400', 'gid-k');
+  const killer = {
+    id: 16542,
+    title: 'Build Your Own Killer Bundle',
+    page: { name: 'Fanatical' },
+    url: 'https://www.fanatical.com/en/pick-and-mix/byo-killer',
+    expiry: '2001-01-01T00:58:54+01:00',
+    publish: '2026-09-07T13:00:00Z',
+    tiers: [{ price: null, games: [{ id: 'gid-k' }] }],
+  };
+  setCache('itad-bundles:US:-publish:false:0:50', [{ id: 1 }]);
+  setCache('itad-bundles:US:-publish:true:0:50', [{ id: 2 }, killer]);
+  setCache('fanatical-pnm:v3', {
+    'byo-killer': {
+      tiers: [{ quantity: 5, prices: { USD: 5.99 } }],
+      products: [],
+      type: 'bundle',
+      validFrom: '2026-09-07T13:00:00.000Z',
+      validUntil: '2099-11-13T23:59:00.000Z',
+    },
+  });
+  // ITAD's own answer for the game: current bundles only, so not the Killer one.
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [] }));
+  const res = await api.get('/api/game-bundles/400');
+  assert.equal(res.status, 200);
+  assert.deepEqual(
+    res.body.bundles.map((b) => [b.id, b.expiry]),
+    [[16542, '2099-11-13T23:59:00.000Z']],
+  );
+  assert.equal(fetchMock.mock.callCount(), 1, "only ITAD's game-bundles call");
+});
+
 // ── GET /api/bundles/:id ──────────────────────────────────────────────────────
 
 test('GET /api/bundles/:id: 503 when ITAD_API_KEY is not configured', async () => {
@@ -2917,8 +3002,9 @@ test('GET /api/bundles: a country outside the region list falls back to US', asy
   });
   await api.get('/api/bundles?country=zz').expect(200);
   await api.get('/api/bundles?country=de').expect(200);
-  assert.match(urls[0], /country=US/);
-  assert.match(urls[1], /country=DE/);
+  const itad = urls.filter((u) => u.startsWith('https://api.isthereanydeal.com/'));
+  assert.match(itad[0], /country=US/);
+  assert.match(itad[1], /country=DE/);
 });
 
 test('GET /api/bundles: an unknown sort falls back to the default, offset is an integer', async (t) => {
