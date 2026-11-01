@@ -2,14 +2,7 @@
 
 An Express backend (`server.js` + `lib/*`, plain CommonJS JavaScript) serving a Solid.js single-page app (`public/*`, TypeScript, bundled by Vite). The backend is a caching proxy over Steam/HLTB/IsThereAnyDeal/ProtonDB/Fanatical; accounts, lists and preferences live in the browser's `localStorage`, and the server stores them only for a signed-in user who syncs (`users`, `sessions`, `user_prefs` — [data.md](data.md)).
 
-- [frontend.md](frontend.md) — the SPA: shell, routes, module map, reactivity rules
-- [lists-and-accounts.md](lists-and-accounts.md) — the account/list data model the frontend is built around
-- [integrations.md](integrations.md) — every upstream, and what's undocumented about each
-- [data.md](data.md) — `db.sqlite`, cache tiers, refresh paths
-- [observability.md](observability.md) — `/api/metrics`, budgets, proactive log warnings
-- [decisions.md](decisions.md) — computed values (Weighted Rating, Production Tier), tooling choices, and why
-
-Setup and dev commands are in [README.md](../../README.md); tests and hooks in [testing.md](testing.md).
+Setup and dev commands are in [README.md](../../README.md), along with the index of the other docs; tests and hooks in [testing.md](testing.md).
 
 ## Build and serving
 
