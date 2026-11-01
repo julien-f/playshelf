@@ -41,14 +41,14 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 
 - **When it breaks**: HLTB renames these endpoints from time to time (they were `api/bleed/*`); recent npm packages such as `howlongtobeat-ts` reverse-engineer the new flow quickly and are the first place to look.
 - **Token**: cached in memory for 5 minutes (session-bound, not on disk). A 401/403 from search clears it.
-  - A 403, or a 401 on the current fresh token (one no search has accepted yet), is a block: it holds off re-init for 30 s, and two in a row trip the breaker. Searches queued on a token already rejected count once, not each.
+  - A 403, or a 401 on the current fresh token (one no search has accepted yet), is a block: it holds off re-init for 30 s, and two in a row trip the breaker. 401s on searches queued behind a token already rejected count once, not each; every 403 counts.
   - A 401 on a token searches already accepted is expiry: re-init at once. Assumed, not documented: HLTB's real token lifetime is unknown, so a fresh token idle long enough to expire reads as a block: a 30 s hold.
   - A 200 counts as a success only with a `data` array: any other body fails that search uncached, without accepting the token or resetting the breaker's streak.
 - **Matching**: Levenshtein similarity (`stringSimilarity`); below 0.35 is discarded.
 - **What's searched**: the store metadata's `type` skips soundtracks, videos, series, episodes, hardware, demos and ads (`NOT_PLAYED_TYPES`, `lib/hltb.js`), which read as no data rather than failed. Tools are still searched: none of the types the app knows (`TYPE_LABELS`) marks them — an assumption from observed data, not Steam's docs.
 - **Times** (`pickBestMatch`): `main` (`comp_main`), `extra` (`comp_plus`), `completionist` (`comp_100`) and `all` (`comp_all`), seconds converted to hours rounded to the half hour, as HLTB's own site shows them.
   - `all` ("All PlayStyles") is **not** the average of the other three: it pools every submission regardless of category (`comp_all_count` = the sum of the three counts), so it usually lands near Main Story.
-  - Being one representative number, it's the default HLTB column (`hltbAll`, "HLTB (h)"), the ranking card's "10.5 h to beat", and the first figure in the panel's How Long To Beat section.
+  - Being one representative number, it's the default HLTB column (`hltbAll`, "HLTB (h)"), the ranking card's "10.5 h to beat", and the panel's HLTB glance chip ("all playstyles"); its How Long To Beat section breaks it down into Main Story, Main + Extra and Completionist.
 
 ## Owned games — `GetOwnedGames`' playtime fields
 
@@ -152,7 +152,7 @@ Bundle browsing (`/bundles`, `/lists/bundle/:bundleId`) and every price column c
   - Confirmed on cached data (38 bundles): each tier lists only the games it adds. Some bundles list every game under the first tier and leave pricier ones empty (e.g. 16599, TrineVerse Triple Co-op Pack: €10.55 / €14.77 / €18.99, all 5 games in the first); the last tier with games then shows a range up to the priciest empty tier (`tierPriceMax`, also from `extractGameBundles`), since which tier holds which game is unknown. An empty unpriced trailing tier is ignored.
 - **Add-on tiers** (`addon: true`) are bought apart from the base tiers: not cumulative, not in price order, never part of a base tier's range (e.g. 16689: $4 / $6 / $9 / $13 / $16 base, $2 and $4 add-ons). An empty unpriced add-on (e.g. 14804) prices nothing and is dropped.
 - **A `null` tier price is not free.** In practice it's Fanatical's "Build Your Own ⟨N⟩ Bundle": one tier, a pool of 15–30 games, priced by quantity. A free or pay-what-you-want tier would carry `{amount: 0, …}` (never observed yet).
-  - When Fanatical's feed has the bundle, its quantity tiers stand in ([Fanatical](#fanatical--pick-and-mix-tier-prices)); otherwise `cheapestTierPrice` (`BundlesBrowseRoute.tsx`) and `renderTierPrice` (`ListRoute.tsx`) render "Varies"/"Price varies", keeping "Free" for `amount === 0`.
+  - When Fanatical's feed has the bundle, its quantity tiers stand in ([Fanatical](#fanatical--pick-and-mix-tier-prices)); otherwise `/bundles` renders `cheapestTierPrice`'s (`bundleRows.ts`) null and `renderTierPrice` (`ListRoute.tsx`) a null tier as "Varies"/"Price varies", keeping "Free" for `amount === 0`.
   - The `tierPrice` column uses `compareNumMissingLast`, or `null` would sort as 0 — every Build Your Own game first under the default ascending sort.
 - **`GET /games/bundles/v2`** (`getGameBundles`/`extractGameBundles`, `GET /api/game-bundles/:appid`): the bundles one game is in, for the panel's Price card.
   - Verified live: full `/bundles/v1`-shaped objects, current only unless `expired=true` (one game: 1 by default, 8 with it).
@@ -199,7 +199,7 @@ Bundle games carry only an ITAD id (uuid), slug and title. `resolveSteamAppIds` 
 
 ### Rate limiting
 
-- `BUNDLES_RATE_LIMIT_MAX` backs six limiters — `bundlesListLimit`, `bundlesByIdLimit`, `bundlesResolveLimit`, `pricesLimit`, `gameBundlesLimit`, `gamePassLimit` — each `skip`ping a request it can answer from cache by checking every cache key that route would read (the same pattern as `detailsLimit`). Without the skip, reloading a bundle page a few times would 429 a genuinely new bundle open.
+- `BUNDLES_RATE_LIMIT_MAX` backs six limiters — `bundlesListLimit`, `bundlesByIdLimit`, `bundlesResolveLimit`, `pricesLimit`, `gameBundlesLimit`, `gamePassLimit` — each `skip`ping a request it can answer from cache by checking the cache keys that route reads (the same pattern as `detailsLimit`); `bundlesListLimit` checks only the page it serves, not the expired pages `findEarlyExpired` may walk. Without the skip, reloading a bundle page a few times would 429 a genuinely new bundle open.
 - `pricesLimit` checks `itad-price:` for whichever of `gids`/`appids` was sent, plus `itad-gid:` for `appids`.
 - `bundlesByIdLimit` can't skip — `findBundleById` walks a variable number of pages — so it gets twice the budget instead; its pages are still cached underneath.
 
