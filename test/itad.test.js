@@ -77,20 +77,45 @@ test('getBundles: returns and caches the bundle list', async (t) => {
   assert.equal(calls, 2, 'a different country is a different cache key');
 });
 
-test('getBundles: a malformed bundle fails its page, so a walk never mistakes a short page for the last (C269)', async (t) => {
-  for (const bad of [
-    { id: 2, title: 'B', tiers: 'x' },
-    { id: 3, title: 'C', tiers: [{ games: [{ assets: { banner600: 1 } }] }] },
-    { id: 'x', title: 'D' },
-  ]) {
+test('getBundles: replaces a mistyped optional field and keeps the bundle, so the page keeps its length', async (t) => {
+  _reset();
+  const warn = t.mock.method(console, 'warn', () => {});
+  const good = { id: 1, title: 'A', expiry: null, tiers: [{ games: [{ assets: { banner600: 'u' } }] }] };
+  const bad = {
+    id: 2,
+    title: 'B',
+    expiry: 5,
+    page: { name: 7 },
+    counts: 'x',
+    tiers: [{ games: [{ assets: { banner600: 1 } }, 'x'] }, { games: 'x' }, null],
+  };
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [good, bad] }));
+  const page = JSON.parse(JSON.stringify(await getBundles(PAGE)));
+  assert.deepEqual(page, [
+    good,
+    { id: 2, title: 'B', expiry: null, page: {}, tiers: [{ games: [{ assets: {} }] }, { games: [] }] },
+  ]);
+  assert.match(warn.mock.calls[0].arguments[0], /^\[itad\] bundle 2: replaced mistyped expiry, page\.name, counts, /);
+});
+
+test('getBundles: a bundle without an id or title fails its page', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  for (const bad of [{ id: 'x', title: 'D' }, { id: 4 }, null]) {
     _reset();
-    const good = { id: 1, title: 'A', expiry: null, tiers: [{ games: [{ assets: { banner600: 'u' } }] }] };
-    t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [good, bad] }));
+    t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ id: 1, title: 'A' }, bad] }));
     await assert.rejects(
       () => getBundles(PAGE),
       (err) => err.isUpstream === true,
     );
   }
+});
+
+test('findBundleById: walks past a full page holding a mistyped bundle (C269)', async (t) => {
+  _reset();
+  t.mock.method(console, 'warn', () => {});
+  const page1 = Array.from({ length: 50 }, (_, i) => ({ id: i + 1, title: `Active ${i + 1}`, tiers: i ? [] : 'x' }));
+  t.mock.method(globalThis, 'fetch', makeBundlesPager({ active: [...page1, { id: 999, title: 'Target' }] }));
+  assert.equal((await findBundleById(999, { country: 'US' }))?.bundle?.title, 'Target');
 });
 
 // ITAD's `mature` is an *include* switch, not an "only mature" filter, and this app never hides a
