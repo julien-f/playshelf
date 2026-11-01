@@ -412,7 +412,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   1. set up the table
   2. **Share view** (carries my account on Owned/Wishlist)
   3. friend opens the link
-- **Done when**: the friend sees my account's list with my layout; their own account and saved views are untouched; clicking around keeps the shared account. The link previews in a chat app with the app's name, description and image.
+- **Done when**: the friend sees my account's list with my layout; their own account and saved views are untouched; clicking around keeps the shared account. The link previews in a chat app naming whose list it is, with their avatar.
 - **Edges**: sharing a dynamic list (`/lists/shared?f=`) → friend saves it; on a ranked or manual-sourced list the button says why it can't share, before it's clicked ◇.
 
 ### S2 Link one game

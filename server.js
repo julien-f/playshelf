@@ -1456,7 +1456,7 @@ const decodeEntities = (s) =>
 async function sendAppShell(
   req,
   res,
-  { title = SITE_NAME, description = SITE_DESCRIPTION, image = '/og-image.jpg' } = {},
+  { title = SITE_NAME, description = SITE_DESCRIPTION, image = '/og-image.jpg', card = 'summary_large_image' } = {},
 ) {
   // Read per request, as sendFile did: a rebuild replaces the hashed asset names it links.
   const shellHtml = await fs.promises.readFile(path.join(STATIC_DIR, 'index.html'), 'utf8');
@@ -1467,13 +1467,24 @@ async function sendAppShell(
     ['property', 'og:title', title],
     ['property', 'og:description', description],
     ['property', 'og:image', image.startsWith('/') ? origin + image : image],
-    ['name', 'twitter:card', 'summary_large_image'],
+    ['name', 'twitter:card', card],
   ].map(([attr, key, value]) => `<meta ${attr}="${key}" content="${escapeXml(value)}" />`);
   res.type('html').send(shellHtml.replace('</head>', `${tags.join('\n')}\n</head>`));
 }
 
-// Cache only, like a game's: a preview mustn't cost an upstream request. ITAD has no bundle image,
-// so the cover is the first game banner wide enough for a card. Fields are typed by getBundles.
+// Not recorded: a page load isn't a meta-tier lookup the cache metrics should count.
+function gamePreview(appid) {
+  const game = getCached(appDetailsCacheKey(appid), { record: false });
+  // `||`: Steam's raw details can hold null, which defaults don't replace.
+  return {
+    title: game?.name || undefined,
+    description: game?.short_description ? decodeEntities(game.short_description) : undefined,
+    image: game?.header_image || undefined,
+  };
+}
+
+// ITAD has no bundle image, so the cover is the first game banner wide enough for a card. Fields
+// are typed by getBundles.
 async function bundlePreview(id) {
   const cached = await findCachedBundle(id, REGION_CODES);
   if (!cached) return {};
@@ -1491,6 +1502,101 @@ async function bundlePreview(id) {
   return { title: bundle.title, description: description || undefined, image };
 }
 
+// A link's player slots as public/urlState.ts's parseSlots reads them, each an array of members.
+const parseSlots = (query) =>
+  query
+    .getAll('u')
+    .map((value) =>
+      value
+        .split(',')
+        .map((member) => member.trim())
+        .filter(Boolean),
+    )
+    .filter((slot) => slot.length > 0);
+
+// Bounds the cache reads a crafted link costs, and a title's length.
+const PREVIEW_MAX_MEMBERS = 8;
+const PREVIEW_MAX_TITLE = 100;
+const capTitle = (title) => (title.length > PREVIEW_MAX_TITLE ? `${title.slice(0, PREVIEW_MAX_TITLE - 1)}…` : title);
+
+// Each slot's members' cached Steam profiles, or null when one isn't resolved or named yet.
+// Only `personaname` and `avatarfull` reach a card (integrations.md).
+function cachedPlayers(slots) {
+  if (slots.flat().length > PREVIEW_MAX_MEMBERS) return null;
+  const players = slots.map((slot) =>
+    slot.map((member) => {
+      const steamId = peekSteamId(member);
+      const player = steamId && getCached(playerCacheKey(steamId), { record: false });
+      return typeof player?.personaname === 'string' ? player : null;
+    }),
+  );
+  return players.flat().every(Boolean) ? players : null;
+}
+
+const slotName = (players) => players.map((player) => player.personaname).join(' + ');
+
+// The page's own title (ListRoute.tsx) for one account's Owned or Wishlist; several slots aren't an account.
+function accountListPreview(query, kind) {
+  const slots = parseSlots(query);
+  const players = slots.length === 1 && cachedPlayers(slots);
+  if (!players) return {};
+  const [members] = players;
+  const name = slotName(members);
+  const avatar = members.length === 1 && members[0].avatarfull;
+  return {
+    title: capTitle(`${name}'s ${kind === 'owned' ? 'Library' : 'Wishlist'}`),
+    description: `${name}'s Steam ${kind === 'owned' ? 'games' : 'wishlist'}, with ratings, completion times and current prices.`,
+    ...(typeof avatar === 'string' && { image: avatar, card: 'summary' }),
+  };
+}
+
+function comparePreview(query) {
+  const slots = parseSlots(query);
+  const players = slots.length >= 2 && cachedPlayers(slots);
+  if (!players) return {};
+  const names = players.map(slotName);
+  return {
+    title: capTitle(names.join(' vs. ')),
+    description: `The Steam games ${names.slice(0, -1).join(', ')} and ${names.at(-1)} own, together and apart.`,
+  };
+}
+
+// public/creatorData.ts's creatorTitle wording.
+function creatorPreview(query, role) {
+  const name = query.get('name')?.trim();
+  if (!name) return {};
+  const by = role === 'developer' ? 'by' : 'published by';
+  return {
+    title: capTitle(role === 'developer' ? `Games by ${name}` : `Published by ${name}`),
+    description: `Every Steam game ${by} ${capTitle(name)}, with ratings, completion times and current prices.`,
+  };
+}
+
+const FIXED_PREVIEWS = {
+  '/lists/game-pass': { title: 'Steam games in PC Game Pass' },
+  '/bundles': { title: 'Current game bundles' },
+};
+
+// The page's card for chat apps' link previews; {} is the site's card. Cache only: a preview
+// mustn't cost an upstream request (integrations.md's trust tiers).
+async function linkPreview(req) {
+  // Not req.query: Express 5 makes a repeated param an array.
+  const query = new URL(req.url, 'http://x').searchParams;
+  // A list opened on a game: that game is what the page shows first.
+  const openGame = Number(query.get('game'));
+  if (req.path.startsWith('/lists/') && Number.isInteger(openGame) && openGame > 0) return gamePreview(openGame);
+  const bundleId = /^\/lists\/bundle\/(\d+)\/?$/.exec(req.path)?.[1];
+  if (bundleId) return bundlePreview(Number(bundleId));
+  const appid = /^\/game\/(\d+)\/?$/.exec(req.path)?.[1];
+  if (appid) return gamePreview(appid);
+  if (req.path === '/lists/owned') return accountListPreview(query, 'owned');
+  if (req.path === '/lists/wishlist') return accountListPreview(query, 'wishlist');
+  if (req.path === '/lists/compare') return comparePreview(query);
+  if (req.path === '/lists/developer') return creatorPreview(query, 'developer');
+  if (req.path === '/lists/publisher') return creatorPreview(query, 'publisher');
+  return FIXED_PREVIEWS[req.path] ?? {};
+}
+
 // SPA fallback: any GET that isn't an /api/* call and doesn't look like a static-asset request
 // (no dot-extension in its path) falls through to the app shell, letting the client-side
 // router (see public/App.tsx) render the right view from the URL — needed once navigation
@@ -1501,18 +1607,7 @@ async function bundlePreview(id) {
 // extension) but genuinely doesn't exist still 404s via Express's default handler instead of
 // being silently rewritten into the shell.
 app.get(/^\/(?!api\/)(?!.*\.[a-zA-Z0-9]+$).*/, async (req, res) => {
-  const bundleId = /^\/lists\/bundle\/(\d+)\/?$/.exec(req.path)?.[1];
-  if (bundleId) return sendAppShell(req, res, await bundlePreview(Number(bundleId)));
-  const appid = /^\/game\/(\d+)\/?$/.exec(req.path)?.[1];
-  // Cache only: a link preview mustn't cost an upstream request (integrations.md's trust tiers).
-  // Not recorded: a page load isn't a meta-tier lookup the cache metrics should count.
-  const game = appid && getCached(appDetailsCacheKey(appid), { record: false });
-  // `||`: Steam's raw details can hold null, which defaults don't replace.
-  await sendAppShell(req, res, {
-    title: game?.name || undefined,
-    description: game?.short_description ? decodeEntities(game.short_description) : undefined,
-    image: game?.header_image || undefined,
-  });
+  await sendAppShell(req, res, await linkPreview(req));
 });
 
 // Anything a route didn't catch, body-parser's malformed or oversized JSON included: Express's own

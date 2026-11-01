@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - On a bundle's page, clicking a tier narrows the table to what that tier gets, and New to you counts those games only
 - GET /api/metrics counts game-details lookups that join one already in flight, under dedupHits.details
 - Bundle links show the bundle's name, game count, shop, end date and a game banner in chat app previews
+- Shared library, wishlist, comparison, developer and list-with-a-game links show what they are in chat app previews
 
 ### Changed
 
