@@ -2650,7 +2650,7 @@
     border-radius: 0;
     clip-path: polygon(50% 0, 100% 100%, 0 100%);
   }
-  /* A Steam tag's weight, along the bottom edge of its pill (the panel's, Plays mostly's). */
+  /* A Steam tag's weight, along the bottom edge of its pill in the panel. */
   .tag-weight {
     position: absolute;
     bottom: 0;
