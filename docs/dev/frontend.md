@@ -1,6 +1,6 @@
 # Frontend
 
-A Solid.js single-page app in `public/`, TypeScript throughout, bundled by Vite. One HTML entry (`index.html` → `AppRoot.tsx`), `@solidjs/router` for navigation, and a persistent shell that survives every route change.
+A Solid.js single-page app in `public/`, TypeScript throughout, bundled by Vite. One HTML entry for the app (`index.html` → `AppRoot.tsx`, plus `present.html` for the presentation window), `@solidjs/router` for navigation, and a persistent shell that survives every route change.
 
 The data model it renders — accounts, lists, combines, the localStorage schema — is [lists-and-accounts.md](lists-and-accounts.md). This file is the machinery: routes, modules, reactivity, URL state. The table and each list kind are [game-table.md](game-table.md); the side panel, lightbox and presentation window [panel-and-lightbox.md](panel-and-lightbox.md).
 
@@ -46,7 +46,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `:;(),` are legal unencoded in a query, so a formula reads as plain text; each leaf (`accountId`, `bundleId`, a developer's or publisher's `name`) is `encodeURIComponent`'d plus `(`/`)`, and `shareListUrl` escapes those `%` once more, since the route reads `f` through `URLSearchParams` (one decode). A `?u=` carried along (`withAccountParam`) re-encodes the whole value, so that link isn't readable.
 - A `user` source (another saved list) can't travel as a bare `listId`, so `encodeListFormula` inlines it as a `g:` group, recursing like `listResolve.ts`'s `resolveRef` with the same visited-set cycle guard. Nesting is uncapped (the one-level cap in `listLabels.ts`'s `createDefaultNaming` only limits label length).
 - Decoding turns each `g:` group into a synthetic in-memory `GameList` (`decoded.synthetic`, generated id) referenced as an ordinary `{ kind: 'user', listId }`, so `resolveListWithSources`/`listLabels.ts` are unchanged; only `getList`/`ListNaming.list` check that map first (`ListRoute.tsx`'s `sharedFetchers`/`sharedNaming`, mirroring `compareNaming()`).
-- A `user` source pointing at a _manual_ list can't be encoded (no appid-set token): "Share list" disables itself with a tooltip (`shareFailure()`).
+- A `user` source pointing at a _manual_ or _ranked_ list can't be encoded (no token for an appid set or an order): "Share list" disables itself with a tooltip (`shareFailure()`).
 - The landing offers **only** "Save as a list" (`handleSaveShared`): each synthetic group is `createList()`'d first to mint a real id, substituted into its parent's `sources[]`, then the top level is saved. No "Edit players"/op-select — there's no form for editing an arbitrary decoded tree.
 
 `/game/:appid?` is **both** the Recently Looked Up list and the canonical single-game link: `ListRoute` renders it as kind `recent`, with `params.appid` as an initial focus. Opening another game there rewrites the path (`/game/<appid>`, `replace`) instead of setting `?game=`, and closing the panel strips it back to `/game` (`onGameClose`).
@@ -81,7 +81,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
   - A debounced on-page search box keeps `?q=` in sync, auto-opening the closest match only on the initial landing. The nav-bar box's "See all results for …" row (`gameSearch.ts`) is the other way in.
 - `AboutRoute.tsx`, `NotFoundRoute.tsx`, `ShortcutsModal.tsx`, `ListHero.tsx` — static about page; unknown-path page; the `?` shortcuts dialog (rendered once by the shell); the hero every list route opens with.
 
-**Account and list model** (plain modules over `prefs.ts`, no Solid reactivity of their own — see [lists-and-accounts.md](lists-and-accounts.md))
+**Account and list model** (modules over `prefs.ts`, some owning a signal of their own — see [Reactivity](#reactivity) and [lists-and-accounts.md](lists-and-accounts.md))
 
 - `accountsStore.ts` — `myAccount`/`currentAccount`/`recentAccounts` CRUD, `getEffectiveCurrentAccount()`, all reactive (`getEffectiveCurrentAccount()` follows the `?u=` override signal and the stored accounts).
 - `accountOverride.ts` — the `?u=` half: parse, resolve, hand to `accountsStore` as an override that is never adopted into the stored preference.
@@ -92,6 +92,8 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `ranking.ts` — the pure binary-insertion engine behind ranked lists.
 - `listLabels.ts` — how an op and a source read on screen, shared by the hero, Home's combine form, and the tree.
 - `membershipColumn.ts` — the "Owned by"/"In" column a group-by-membership list is grouped by (see [game-table.md](game-table.md#each-list-kind-in-practice)).
+- `gameStatuses.ts` — the viewer's own Finished/Abandoned mark per game, one synced map for whoever uses the browser.
+- `tagTaste.ts` — tag-weight vectors: an account's `Taste`, Taste fit, Group fit, similarity and the profile figures built on them.
 - `bundleSnapshots.ts` — the last-known title and games of each bundle a saved list uses, kept for when ITAD stops listing it.
 - `myOwnership.ts` — one cached pair of owned/wishlisted appid sets for the effective account, behind both the panel's badge and the search dropdown's markers.
 - `recentGames.ts` — the recently-looked-up list backing `/game`.
@@ -123,6 +125,9 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `tableViewPrefs.ts` / `tableViewKeys.ts` / `tableViewSync.ts` / `SharedViewBanner.tsx` / `TableViewControls.tsx` — a table's layout draft, restore/share/reset; the table-view pref keys; what a stored layout leaves out and which parts differ; the shared-layout and unsaved-changes banners and the Share/Default view buttons.
 - `listViews.ts` / `ViewTabs.tsx` — Owned/Wishlist's saved views and their templates; the tabs, the active view's ⋯ and the hero's New view menu.
 - `clipboard.ts` / `CopyButton.tsx` — the one copy-then-confirm helper behind every copy button (`copyWithFeedback` for plain DOM buttons, `<CopyButton>` for JSX), with a `window.prompt` fallback where the Clipboard API isn't available (it needs a secure context, and can be permission-denied).
+- `announce.ts` — the app's one polite live region, for a change shown only visually.
+- `motion.ts` — JS animations (`animate`), skipped under reduced motion like the CSS ones.
+- `Kbd.tsx` / `SearchClearButton.tsx` — a key cap; the × emptying a search field.
 - `pageTitle.ts` — the two-layer `document.title` (route context, overridden by an open game).
 - `types.ts` — `Game`, `ReadonlyGame`, and the account/list interfaces; the single source of truth for row shape.
 - `utils.ts` — shared formatting/scoring helpers (`scoreColor`, `formatMoney`, `computeSteamdbRating`, `dealRecordTier`, `discountPct`, …).
@@ -137,7 +142,7 @@ Four kinds of state, four mechanisms:
 
 - **A game/row's data** lives in a Solid **store** owned by the route that loaded it (`createStore<Game[]>` in `ListRoute.tsx`, reached through `rowStore.ts`). Writes go through `rowStore.mutateRow(appid, fn)` — `produce(fn)`, so the callback gets an assignable draft — and the store notifies per field, so a streamed field patches only the cells and panel lines that read it. `standaloneRows` (a `createStore<Record<number, Game>>` in the same file) does the same for a game opened as a standalone aside (a nav-bar lookup, a DLC/base-game hop).
 - **The side panel's own UI state** (which game is open, hero index, expanded collapsibles, …) is plain signals in `panel.tsx`, set by its own click handlers.
-- **Everything the panel fetches for itself** (news, achievements, "Owned by", ownership status, price, bundles, DLC) is a `createResource` keyed on the open game, created in one module-level `createRoot` (the panel is a singleton whose data outlives every render). Fetching and session-caching is `panelData.ts`; the resource is only wiring, giving `.loading`, discard of superseded responses and re-rendering for free. `refetch()` is the panel's Refresh details; each fetcher reads `info.refetching` as "force" (bypass both the session cache and the server's TTL).
+- **Everything the panel fetches for itself** (news, achievements, "Owned by", ownership status, price, bundles, DLC) is a `createResource` keyed on the open game, created in one module-level `createRoot` (the panel is a singleton whose data outlives every render). Fetching and session-caching is `panelData.ts`; the resource is only wiring, giving `.loading`, discard of superseded responses and re-rendering for free. Refresh details refetches news, achievements, price and bundles, whose fetchers read `info.refetching` as "force" (bypass both the session cache and the server's TTL); owners and ownership read `myOwnership.ts`'s cache.
   - News, achievements, price and bundles wait `PANEL_SETTLE_MS` before an uncached, unforced fetch and drop it if the panel has moved on, so holding ↓ fetches only the game it stops on; a cached value still answers at once, a game come back to within the pause joins its pending load, and ↻ replaces that load rather than racing it.
 
 - **Shared app state** (prefs, the signed-in user, the `?u=` override and its resolve state, the ownership cache) is a signal owned by its module, read through its getter, so a reader in JSX, a memo, an effect or a table cell `render` follows it with no window event, ready callback or tick counter.
@@ -154,7 +159,7 @@ Three rules keep it that way:
 
 1. **One reactive source of truth per row; the only write path is its store's setter.** Enforced by the type system: readers take `ReadonlyGame` (`types.ts`), so `game.field = x` outside a `produce` draft is a typecheck failure rather than a silent no-op. `Readonly` is deliberately shallow — it stops `g.details = …`, not `g.details.rating = …`, and `details` is only ever replaced wholesale.
 2. **Async state belongs in `createResource`, not in booleans on a domain object.** News, achievements, price, DLC and owners therefore aren't on the `Game` shape. (`inLibrary`/`onWishlist` stay — they're the _table's_ copy, stamped onto rows for the ✓/☆ name-cell markers; the panel reads its own `ownership` resource, so a standalone lookup still gets a badge. Both go through `myOwnership.ts`'s one cached pair of sets, so they can't disagree.)
-3. **Never capture a reactive read into a plain `const` in a component body** — read signals and store fields inside JSX or a `createMemo`. This is what `npm run lint`'s `solid/reactivity` rule checks, and why the panel is a set of small components (`PanelSubnav`, `HltbSection`, `RefreshButton`, …): a component function runs once and is not a reactive scope. The two deliberate exceptions carry an `eslint-disable-next-line`: `PanelRest`'s `const g = props.game` — the row _object_ is stable for the mount (`PanelBody` renders it under a `keyed` `<Show>`), and capturing a store row is not capturing a field of it — and `BundlesBrowseRoute.tsx` handing its `viewingShared` accessor to `bindViewPersistence`, which reads it in its own effect.
+3. **Never capture a reactive read into a plain `const` in a component body** — read signals and store fields inside JSX or a `createMemo`. This is what `npm run lint`'s `solid/reactivity` rule checks, and why the panel is a set of small components (`PanelSubnav`, `HltbSection`, `RefreshButton`, …): a component function runs once and is not a reactive scope. Deliberate exceptions carry an `eslint-disable-next-line` with their reason (`grep -rn 'solid/reactivity' public`), e.g. `PanelRest`'s `const g = props.game` — the row _object_ is stable for the mount (`PanelBody` renders it under a `keyed` `<Show>`), and capturing a store row is not capturing a field of it.
    - A JSX prop passed as `body={body()}` is a getter: every signal `body()` reads rebuilds its whole DOM, detaching elements (an e2e locator's `boundingBox()` returns `null` under load). Pass JSX built once (`body={body}`) with `<Show>`/`<For>` inside, over one memo for every state, as `DlcSection` in `panel.tsx`.
 
 Still deliberately imperative: the subnav scroll-spy (measures section positions, marks the current tab and moves its underline, re-run from a `createEffect` when the buttons change); `panelNav.ts` rendering the prev/next/random bar into `#panel-nav` (its "i / N" from one `createEffect` over the route's `getGameList()`, ↑/↓ through the route's `stepGame` at click time, hidden while the open game isn't in the list); and `lightbox.tsx`'s own DOM.
@@ -185,7 +190,7 @@ The "look up any game" box is one nav-bar search in the shell, not one per route
 
 `AccountChip.tsx` says who the app is showing, following a `?u=` link that resolves after mount, with a link icon (named "from a link") when a link's account is showing.
 
-- Both nav popovers (this and Preferences), and the rank menu, are native popovers (`button[popovertarget]` + `[popover]`: the browser opens, closes and dismisses them on an outside click) sharing `navPopover.ts`: it closes them on Esc ahead of the page's own Esc handlers, and positions the panel in JS because `.site-nav`'s flex-wrap moves its triggers with viewport width (seen off-screen on a real Galaxy S10, ruling out CSS-only anchoring).
+- The popover menus (this chip, Preferences, the rank menu, Home's tree rows, the view tabs' menus) are native popovers (`button[popovertarget]` + `[popover]`: the browser opens, closes and dismisses them on an outside click) sharing `navPopover.ts`: it closes them on Esc ahead of the page's own Esc handlers, and positions the panel in JS because `.site-nav`'s flex-wrap moves its triggers with viewport width (seen off-screen on a real Galaxy S10, ruling out CSS-only anchoring).
 - It carries **copyable Steam identifiers** (`accountsStore.ts`'s `accountIdentifiers`: the stored custom-URL name, else the steam64 id), read from the slot since the chip fetches nothing: one for the current account, one per member beside each recents row (outside its switch button, which can't nest one).
 
 ## URL & sharing
