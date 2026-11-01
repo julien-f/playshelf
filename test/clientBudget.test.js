@@ -221,7 +221,7 @@ test('one client’s refused Fanatical call isn’t cached as a failure for ever
     await fanatical('spend', 'https://example.com/');
     assert.deepEqual(await getPickAndMix(), {});
   });
-  assert.equal(getCached('fanatical-pnm:v2'), undefined);
+  assert.equal(getCached('fanatical-pnm:v3'), undefined);
 });
 
 test('a client waiting on another client’s refused Fanatical call gets the feed', async (t) => {

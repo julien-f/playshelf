@@ -70,7 +70,7 @@ const {
   gameBundlesCacheKey,
   extractGameBundles,
 } = require('./lib/itad');
-const { withPickAndMix } = require('./lib/fanatical');
+const { withPickAndMix, withCachedPickAndMix, findEarlyExpired } = require('./lib/fanatical');
 const { streamEvent } = require('./lib/streamEvent.mjs');
 const { catalogCacheKey, getGamePass, isGamePassCached } = require('./lib/gamepass');
 const {
@@ -923,7 +923,11 @@ app.get('/api/bundles', bundlesListLimit, requireItad, async (req, res) => {
     // TTL". Only this page of the list is forced; GET /api/bundles/:id deliberately has no
     // equivalent (findBundleById walks up to BUNDLE_SEARCH_MAX_PAGES pages, so forcing it would
     // cost several upstream calls to answer one deep link).
-    const bundles = await getBundles({ country, offset, limit, sort, expired, force: isForceRefresh(req) });
+    let bundles = await getBundles({ country, offset, limit, sort, expired, force: isForceRefresh(req) });
+    // Only on a first page that holds the whole active list: the client stops paging there, so no
+    // later page repeats them. Its revival pages aren't forced by ?refresh=1: one call stays one call.
+    if (!expired && offset === 0 && bundles.length < limit)
+      bundles = [...bundles, ...(await findEarlyExpired(bundles, (params) => getBundles({ country, ...params })))];
     // Age of this page of the list, for the "Updated <when>" beside the browse page's own ↻ —
     // a bundle going live or expiring is exactly what that button is for, and that question is
     // unanswerable without knowing how old the list on screen is.
@@ -1063,8 +1067,20 @@ app.get('/api/game-bundles/:appid', gameBundlesLimit, requireItad, async (req, r
   try {
     const gid = (await resolveItadIds([appid])).get(appid);
     if (!gid) return res.json({ bundles: [] });
-    const bundles = await getGameBundles(gid, { country: parseCountry(req), force: isForceRefresh(req) });
-    res.json({ bundles: extractGameBundles(await withPickAndMix(bundles), gid) });
+    const country = parseCountry(req);
+    const current = await getGameBundles(gid, { country, force: isForceRefresh(req) });
+    // ITAD answers current bundles only; one it expired early comes from the list pages already
+    // cached (/api/bundles fetched them), never an extra call.
+    const cachedPage = (params) => getCached(bundlesCacheKey({ country, ...params }), { record: false });
+    const active = cachedPage({ offset: 0, limit: 50, sort: '-publish', expired: false });
+    const revived = Array.isArray(active)
+      ? (await findEarlyExpired(active, cachedPage)).filter(
+          (b) =>
+            !current.some((c) => c.id === b.id) &&
+            (b.tiers || []).some((t) => (t.games || []).some((g) => g.id === gid)),
+        )
+      : [];
+    res.json({ bundles: extractGameBundles(await withPickAndMix([...current, ...revived]), gid) });
   } catch (err) {
     sendRouteError(res, 'game-bundles', err);
   }
@@ -1459,8 +1475,9 @@ async function sendAppShell(
 // Cache only, like a game's: a preview mustn't cost an upstream request. ITAD has no bundle image,
 // so the cover is the first game banner wide enough for a card. Fields are typed by getBundles.
 async function bundlePreview(id) {
-  const bundle = await findCachedBundle(id, REGION_CODES);
-  if (!bundle) return {};
+  const cached = await findCachedBundle(id, REGION_CODES);
+  if (!cached) return {};
+  const bundle = withCachedPickAndMix(cached);
   const games = bundle.counts?.games;
   const expiry = bundle.expiry && new Date(bundle.expiry);
   const ends =

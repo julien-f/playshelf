@@ -68,6 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Bundles: the empty page past the end of the list no longer counts against the per-minute request limit
 - Expired sign-in sessions are cleared from the server hourly, not only when it restarts
 - Bundles: add-on tiers no longer count as part of the tiers, and a pressed tier is no longer saved into every bundle's layout
+- Fanatical Build Your Own bundles no longer vanish from Bundles, or show as ended, while still on sale
 
 ### Development
 
