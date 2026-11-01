@@ -1456,7 +1456,7 @@ const decodeEntities = (s) =>
 async function sendAppShell(
   req,
   res,
-  { title = SITE_NAME, description = SITE_DESCRIPTION, image = '/og-image.jpg' } = {},
+  { title = SITE_NAME, description = SITE_DESCRIPTION, image = '/og-image.jpg', card = 'summary_large_image' } = {},
 ) {
   // Read per request, as sendFile did: a rebuild replaces the hashed asset names it links.
   const shellHtml = await fs.promises.readFile(path.join(STATIC_DIR, 'index.html'), 'utf8');
@@ -1467,13 +1467,24 @@ async function sendAppShell(
     ['property', 'og:title', title],
     ['property', 'og:description', description],
     ['property', 'og:image', image.startsWith('/') ? origin + image : image],
-    ['name', 'twitter:card', 'summary_large_image'],
+    ['name', 'twitter:card', card],
   ].map(([attr, key, value]) => `<meta ${attr}="${key}" content="${escapeXml(value)}" />`);
   res.type('html').send(shellHtml.replace('</head>', `${tags.join('\n')}\n</head>`));
 }
 
-// Cache only, like a game's: a preview mustn't cost an upstream request. ITAD has no bundle image,
-// so the cover is the first game banner wide enough for a card. Fields are typed by getBundles.
+// Not recorded: a page load isn't a meta-tier lookup the cache metrics should count.
+function gamePreview(appid) {
+  const game = getCached(appDetailsCacheKey(appid), { record: false });
+  // `||`: Steam's raw details can hold null, which defaults don't replace.
+  return {
+    title: game?.name || undefined,
+    description: game?.short_description ? decodeEntities(game.short_description) : undefined,
+    image: game?.header_image || undefined,
+  };
+}
+
+// ITAD has no bundle image, so the cover is the first game banner wide enough for a card. Fields
+// are typed by getBundles.
 async function bundlePreview(id) {
   const cached = await findCachedBundle(id, REGION_CODES);
   if (!cached) return {};
@@ -1491,6 +1502,16 @@ async function bundlePreview(id) {
   return { title: bundle.title, description: description || undefined, image };
 }
 
+// The page's card for chat apps' link previews; {} is the site's card. Cache only: a preview
+// mustn't cost an upstream request (integrations.md's trust tiers).
+async function linkPreview(req) {
+  const bundleId = /^\/lists\/bundle\/(\d+)\/?$/.exec(req.path)?.[1];
+  if (bundleId) return bundlePreview(Number(bundleId));
+  const appid = /^\/game\/(\d+)\/?$/.exec(req.path)?.[1];
+  if (appid) return gamePreview(appid);
+  return {};
+}
+
 // SPA fallback: any GET that isn't an /api/* call and doesn't look like a static-asset request
 // (no dot-extension in its path) falls through to the app shell, letting the client-side
 // router (see public/App.tsx) render the right view from the URL — needed once navigation
@@ -1501,18 +1522,7 @@ async function bundlePreview(id) {
 // extension) but genuinely doesn't exist still 404s via Express's default handler instead of
 // being silently rewritten into the shell.
 app.get(/^\/(?!api\/)(?!.*\.[a-zA-Z0-9]+$).*/, async (req, res) => {
-  const bundleId = /^\/lists\/bundle\/(\d+)\/?$/.exec(req.path)?.[1];
-  if (bundleId) return sendAppShell(req, res, await bundlePreview(Number(bundleId)));
-  const appid = /^\/game\/(\d+)\/?$/.exec(req.path)?.[1];
-  // Cache only: a link preview mustn't cost an upstream request (integrations.md's trust tiers).
-  // Not recorded: a page load isn't a meta-tier lookup the cache metrics should count.
-  const game = appid && getCached(appDetailsCacheKey(appid), { record: false });
-  // `||`: Steam's raw details can hold null, which defaults don't replace.
-  await sendAppShell(req, res, {
-    title: game?.name || undefined,
-    description: game?.short_description ? decodeEntities(game.short_description) : undefined,
-    image: game?.header_image || undefined,
-  });
+  await sendAppShell(req, res, await linkPreview(req));
 });
 
 // Anything a route didn't catch, body-parser's malformed or oversized JSON included: Express's own
