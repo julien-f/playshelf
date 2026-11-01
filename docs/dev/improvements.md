@@ -16,7 +16,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 ## Sharing
 
-- **U125 · minor · S1, C1, S3** — List and compare links all preview identically, and a `/lists/<id>` list that exists only in the sender's browser can't be described at all. Server-side per-route `og:title` from the path alone (Owned games, Wishlist, Compare libraries, Shared list), generic for `/lists/<id>`.
+- **U125 · minor · S1, C1, S3** — List and compare links all preview identically, and a `/lists/<id>` list that exists only in the sender's browser can't be described at all. Server-side per-route `og:title` from the path alone (Owned games, Wishlist, Compare libraries, Shared list), generic for `/lists/<id>`. Make the SPA fallback one route → preview table then (`server.js`: `/game/` and `/lists/bundle/` are special cases today), stating the cache-only rule once.
 - **U172 · minor · S3, B1, I3** — a dead link to a list (`/lists/<unknown id>`) or a bundle (`/lists/bundle/<unknown id>`) shows one bare status line: no h1, no way back, and the bundle's reads "Error: Bundle not found". Page not found has a heading and Go to Home; give these the same, with All bundles for a bundle.
 - **U229 · minor · R3, L1, S1** — manual and ranked lists can't be shared by link ("my top 10 co-op games"); the share grammar has no token for a list of appids or an order ([lists-and-accounts.md](lists-and-accounts.md#ranked-lists)). A snapshot token (appids in order), read-only on arrival. From the Backloggd study (2026-10-30).
 

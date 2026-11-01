@@ -1457,29 +1457,20 @@ async function sendAppShell(
 }
 
 // Cache only, like a game's: a preview mustn't cost an upstream request. ITAD has no bundle image,
-// so the cover is the first game banner wide enough for a card. Shapes checked: a bad field
-// degrades to the site's card rather than failing the page load.
+// so the cover is the first game banner wide enough for a card. Fields are typed by getBundles.
 async function bundlePreview(id) {
   const bundle = await findCachedBundle(id, REGION_CODES);
-  if (typeof bundle?.title !== 'string') return {};
-  const games = Number.isInteger(bundle.counts?.games) ? bundle.counts.games : undefined;
-  const expiry = typeof bundle.expiry === 'string' && new Date(bundle.expiry);
+  if (!bundle) return {};
+  const games = bundle.counts?.games;
+  const expiry = bundle.expiry && new Date(bundle.expiry);
   const ends =
     expiry &&
     !isNaN(expiry) &&
     `${expiry < Date.now() ? 'ended' : 'ends'} ${expiry.toLocaleDateString('en-US', { dateStyle: 'medium', timeZone: 'UTC' })}`;
-  const description = [
-    games && `${games} game${games === 1 ? '' : 's'}`,
-    typeof bundle.page?.name === 'string' && bundle.page.name,
-    ends,
-  ]
+  const description = [games && `${games} game${games === 1 ? '' : 's'}`, bundle.page?.name, ends]
     .filter(Boolean)
     .join(' · ');
-  const tiers = Array.isArray(bundle.tiers) ? bundle.tiers : [];
-  const image = tiers
-    .flatMap((tier) => (Array.isArray(tier?.games) ? tier.games : []))
-    .map((game) => game?.assets?.banner600)
-    .find((url) => typeof url === 'string');
+  const image = bundle.tiers?.flatMap((tier) => tier.games).find((game) => game.assets?.banner600)?.assets.banner600;
   return { title: bundle.title, description: description || undefined, image };
 }
 

@@ -139,6 +139,7 @@ Bundle browsing (`/bundles`, `/lists/bundle/:bundleId`) and every price column c
 
 - **Optional**: gated on `ITAD_API_KEY`. `isItadConfigured()` (`server.js`) is checked per request; `GET /api/bundles`, `GET /api/bundles/:id`, `POST /api/bundles/resolve`, `POST /api/prices`, `GET /api/game-bundles/:appid` and `GET /api/game-pass` return 503 when unset, and the frontend hides those surfaces (`GET /api/health`'s `itadConfigured`).
 - **Batches of 200 ids** (`BATCH_MAX`) for every multi-id call: documented for `/games/prices/v3` (`gids-200`); an assumption for the two `/lookup/` endpoints, whose docs list no cap. A larger set goes out in chunks, 3 at a time (`mapChunks`, `BATCH_CONCURRENCY` in `lib/upstream.js`), each cached as it returns.
+- **Bundle shape checked before caching**: a `/bundles/v1` bundle without an integer `id` and a string `title`, or with a mistyped field readers use (`isBundleShape`, `lib/itad.js`), is dropped from its page with an `[itad]` warning, the rest kept.
 - **Links are passed through unmodified** — ITAD's terms require prices and links as returned. An opened bundle's hero shows "View on IsThereAnyDeal ↗" (`details`) and "Get this bundle ↗" (`url`, the shop/affiliate link with its tracking params). The one addition anywhere is **Buy on Fanatical**'s `scg=…` parameter ([Fanatical](#fanatical--pick-and-mix-tier-prices)), inside that same link; every tracking parameter is left alone.
 
 ### Bundles

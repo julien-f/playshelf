@@ -83,6 +83,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Unit tests run with git's hook variables stripped, so a test can't write to the real repository.
 - An end-to-end run whose port is taken moves to the next free one instead of failing.
 - Claude Code sessions are stopped from killing processes by name and pointed to the server scripts' down command.
+- Bundles from IsThereAnyDeal with a malformed field are dropped before caching, with a warning
 
 ## [0.12.0] - 2026-10-30
 

@@ -77,6 +77,20 @@ test('getBundles: returns and caches the bundle list', async (t) => {
   assert.equal(calls, 2, 'a different country is a different cache key');
 });
 
+test('getBundles: drops a malformed bundle, keeping the rest of the page', async (t) => {
+  _reset();
+  const warn = t.mock.method(console, 'warn', () => {});
+  const good = { id: 1, title: 'A', expiry: null, tiers: [{ games: [{ assets: { banner600: 'u' } }] }] };
+  const bad = [
+    { id: 2, title: 'B', tiers: 'x' },
+    { id: 3, title: 'C', tiers: [{ games: [{ assets: { banner600: 1 } }] }] },
+    { id: 'x', title: 'D' },
+  ];
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [good, ...bad] }));
+  assert.deepEqual(await getBundles(PAGE), [good]);
+  assert.match(warn.mock.calls[0].arguments[0], /^\[itad\] dropped 3 malformed/);
+});
+
 // ITAD's `mature` is an *include* switch, not an "only mature" filter, and this app never hides a
 // bundle from whoever's browsing — see getBundles' own comment for what the old `mature=false`
 // default actually cost (measured live: 33 of 35 active bundles, one of them an ordinary Humble

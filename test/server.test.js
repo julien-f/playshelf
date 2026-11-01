@@ -263,8 +263,8 @@ test('GET /lists/bundle/:id: the preview names and describes a cached bundle of 
   const uncached = await api.get('/lists/bundle/43');
   assert.match(uncached.text, /<meta property="og:title" content="Playshelf" \/>/);
 
-  // An ended bundle on a cached page past an evicted one; malformed fields degrade, not fail.
-  const ended = { id: 44, title: 'Old', expiry: '2001-01-02T12:00:00Z', counts: { games: 1 }, tiers: 'bad' };
+  // An ended bundle without games, on a cached page past an evicted one.
+  const ended = { id: 44, title: 'Old', expiry: '2001-01-02T12:00:00Z', counts: { games: 1 } };
   _reset([[`itad-bundles:US:-publish:true:50:50`, { value: [ended], ts: Date.now() }]]);
   const old = await api.get('/lists/bundle/44');
   assert.equal(old.status, 200);
@@ -2521,6 +2521,7 @@ test('GET /api/bundles/:id: adds Fanatical pick-and-mix tiers and product names 
   process.env.ITAD_API_KEY = 'test-itad-key';
   const bundle = {
     id: 43,
+    title: 'BYO',
     page: { name: 'Fanatical' },
     url: 'https://www.fanatical.com/en/pick-and-mix/byo-test',
     tiers: [{ price: null, games: [{ id: 'g1', slug: 'x-game', title: 'X Game' }] }],
