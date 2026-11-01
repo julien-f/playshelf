@@ -385,7 +385,7 @@ export function AppShell(props: RouteSectionProps): JSX.Element {
 
       {/* Docked, not modal — <aside> (complementary) rather than "dialog"/aria-modal, since the
           rest of the page stays fully interactive while this is open (see panel.tsx's own
-          comment and docs/dev/frontend.md). Fixed and full-height, so it sits outside the
+          comment and docs/dev/panel-and-lightbox.md). Fixed and full-height, so it sits outside the
           scrolling column entirely (see style.css's .app-shell). */}
       <aside id="game-panel" class="game-panel" aria-labelledby="panel-title">
         <button id="panel-close" class="panel-close" aria-label="Close">

@@ -35,7 +35,7 @@ Every key prefix belongs to a group in `lib/cache.js`'s `GROUPS` (a key matching
 
 ## Refresh paths
 
-`getCached` and the fetch functions behind a refresh path below accept `{ force: true }`: skip the cache read, still write the fresh value back. That's what lets the tiers be long — each user-facing refresh is the readout that states the age ([frontend.md](frontend.md#each-list-kind-in-practice)). A forced request always counts against its route's rate limiter (the cache-hit skip is off for `refresh=1`).
+`getCached` and the fetch functions behind a refresh path below accept `{ force: true }`: skip the cache read, still write the fresh value back. That's what lets the tiers be long — each user-facing refresh is the readout that states the age ([game-table.md](game-table.md#each-list-kind-in-practice)). A forced request always counts against its route's rate limiter (the cache-hit skip is off for `refresh=1`).
 
 - **Home's account card** (`HomeRoute.tsx`'s `loadAccountData({ refresh: true })`) — re-POSTs `/api/common-games`/`/api/wishlist` with `refresh: true`.
 - **A list's Updated tile** (owned, wishlist, and any list built from an account fetch or a developer/publisher at any depth: compare, dynamic, ranked, a shared formula — `ListRoute.tsx`'s `handleRefreshList`) — the same, for _every_ account the list resolves through, and `GET /api/creator-games?refresh=1` for every developer/publisher (`listResolve.ts`'s `createDefaultFetchers({ refresh })`).

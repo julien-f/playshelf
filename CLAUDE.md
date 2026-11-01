@@ -10,25 +10,27 @@ Working conventions for this repo. Documentation lives in `docs/` — keep it th
 
 ## Where things are documented
 
-- [README.md](README.md) — what the app is, setup, dev commands
-- [docs/user/features.md](docs/user/features.md) · [docs/user/configuration.md](docs/user/configuration.md) — user-facing: what it does, every setting
-- [docs/dev/architecture.md](docs/dev/architecture.md) — backend modules, build/dev setup, API routes, request flow
-- [docs/dev/frontend.md](docs/dev/frontend.md) — SPA routes, module map, **reactivity rules**, the game table, the side panel, URL state
-- [docs/dev/lists-and-accounts.md](docs/dev/lists-and-accounts.md) — the account/list data model and its localStorage schema
-- [docs/dev/integrations.md](docs/dev/integrations.md) — Steam/HLTB/ITAD/ProtonDB, including which endpoints are undocumented and the compliance notes on them
-- [docs/dev/data.md](docs/dev/data.md) — `db.sqlite`, cache tiers and TTLs, the three refresh paths
-- [docs/dev/observability.md](docs/dev/observability.md) — `GET /api/metrics`, outbound budgets, proactive log warnings
-- [docs/dev/journeys.md](docs/dev/journeys.md) — user journeys (goal, numbered steps, done-when); the basis for design reviews and end-to-end tests
-- [docs/dev/ui-guidelines.md](docs/dev/ui-guidelines.md) — UI conventions where scenarios and feature docs are silent, and the checklist for a new UI feature
-- [docs/dev/improvements.md](docs/dev/improvements.md) — UX backlog from design reviews, keyed to scenarios
-- [docs/dev/code-backlog.md](docs/dev/code-backlog.md) — code backlog from `code-audit` runs (simplify, security, perf, reliability, compliance, tests)
-- [docs/dev/setup-backlog.md](docs/dev/setup-backlog.md) — `setup-review` proposals: changes applied and the measure each must move, open ones, declined ones with the reason
-- [docs/dev/decisions.md](docs/dev/decisions.md) — Weighted Rating vs. Wilson score, the Production Tier heuristic, player likeness as a count, native trailer playback, linting with Babel
-- [docs/dev/testing.md](docs/dev/testing.md) — unit and e2e tests, the mocked server, the real dev server's prefs seed/restore, the git hooks
-- [docs/dev/pitfalls.md](docs/dev/pitfalls.md) — surprising behaviors, misleading errors and their fixes; on an unexpected error, `grep -ri '<fragment>' docs/ .claude/skills/` first
+Each doc, and when to read it — the section you need, not the whole file:
+
+- [README.md](README.md) — setup, dev commands and ports
+- [docs/user/features.md](docs/user/features.md) · [docs/user/configuration.md](docs/user/configuration.md) — before changing what a user sees or a setting; update them with it
+- [docs/dev/architecture.md](docs/dev/architecture.md) — before adding or changing an API route, a backend module, the build or input validation
+- [docs/dev/frontend.md](docs/dev/frontend.md) — before any frontend change: the **reactivity rules**, the module map (where things live), routes, URL state
+- [docs/dev/game-table.md](docs/dev/game-table.md) — before changing a column, sorting, grouping, saved views, a list's hero or a list kind
+- [docs/dev/panel-and-lightbox.md](docs/dev/panel-and-lightbox.md) — before changing the side panel, the lightbox, trailers or the presentation window
+- [docs/dev/lists-and-accounts.md](docs/dev/lists-and-accounts.md) — before changing accounts, `?u=`, lists, combine, ranking, sync or a localStorage key
+- [docs/dev/integrations.md](docs/dev/integrations.md) — before adding or changing any upstream call: trust tiers, what's undocumented, confirmed rules and assumptions
+- [docs/dev/data.md](docs/dev/data.md) — before changing a cache key, a TTL, a refresh path or a migration
+- [docs/dev/observability.md](docs/dev/observability.md) — before adding an outbound group, a rate limiter or a log warning
+- [docs/dev/journeys.md](docs/dev/journeys.md) — before a design review, an end-to-end test or a user-facing feature plan
+- [docs/dev/ui-guidelines.md](docs/dev/ui-guidelines.md) — before any UI change; its checklist for a new UI feature
+- [docs/dev/improvements.md](docs/dev/improvements.md) · [docs/dev/code-backlog.md](docs/dev/code-backlog.md) · [docs/dev/setup-backlog.md](docs/dev/setup-backlog.md) — open UX, code and setup work: check before proposing something (it may be filed, or declined)
+- [docs/dev/decisions.md](docs/dev/decisions.md) — before changing a computed value or a tooling choice that looks wrong
+- [docs/dev/testing.md](docs/dev/testing.md) — before writing or fixing a test, looking at the UI, or touching the hooks
+- [docs/dev/pitfalls.md](docs/dev/pitfalls.md) — on an unexpected error: `grep -ri '<fragment>' docs/ .claude/skills/` first
 - [docs/images/](docs/images) — the screenshots the docs embed; shooting them is the `screenshots` skill
 
-Read the relevant one before changing that area. Two are load-bearing: **frontend.md's reactivity rules** (`npm run lint` enforces the no-reactive-`const` one), and **integrations.md's trust tiers** — several upstreams are undocumented and unsanctioned, so don't scale request volume without revisiting them.
+Two are load-bearing: **frontend.md's reactivity rules** (`npm run lint` enforces the no-reactive-`const` one), and **integrations.md's trust tiers** — several upstreams are undocumented and unsanctioned, so don't scale request volume without revisiting them.
 
 ## Code conventions
 

@@ -1,6 +1,6 @@
 // Shared prev/next/random nav-bar rendering for the game detail side panel (`#panel-nav`) —
 // extracted from library.js's and bundles.js's own near-identical copies (same markup/CSS/keys,
-// see docs/dev/frontend.md's side-panel section). Each page keeps its own `getGameList()` (its table's current
+// see docs/dev/panel-and-lightbox.md). Each page keeps its own `getGameList()` (its table's current
 // search/filter/sort order — the data shape differs enough per page that the list itself stays
 // local) and passes it in here.
 

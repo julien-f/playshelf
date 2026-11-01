@@ -1,7 +1,7 @@
 // The "Owned by" / "In" column a group-by-membership list is grouped by: one table for every
 // group rather than one per group, so sort, filters and columns are set once and saved like any
 // other view. Groups keep combine.ts's order (most sources first) through `compare`, and each
-// header says who's in and who's missing. See docs/dev/frontend.md's table section.
+// header says who's in and who's missing. See docs/dev/game-table.md.
 import type { ColumnDef, SortEntry } from '@vates/data-table-solid';
 import type { MembershipGroup } from './combine.ts';
 import type { Game } from './types.ts';

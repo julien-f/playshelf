@@ -18,6 +18,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 - **U172 · minor · S3, B1, I3** — a dead link to a list (`/lists/<unknown id>`) or a bundle (`/lists/bundle/<unknown id>`) shows one bare status line: no h1, no way back, and the bundle's reads "Error: Bundle not found". Page not found has a heading and Go to Home; give these the same, with All bundles for a bundle.
 - **U229 · minor · R3, L1, S1** — manual and ranked lists can't be shared by link ("my top 10 co-op games"); the share grammar has no token for a list of appids or an order ([lists-and-accounts.md](lists-and-accounts.md#ranked-lists)). A snapshot token (appids in order), read-only on arrival. From the Backloggd study (2026-10-30).
+- **U239 · polish · S3** — a reload with `?game=` reopens the game only on list routes and `/search`: Home, `/bundles` and `/about` register no route handler with the shell and the rank screen only `refreshGame`, so `/?game=440` doesn't reopen. Rarely reachable: a lookup from those routes goes to `/game/:appid`.
 
 ## Loading and feedback
 
@@ -35,6 +36,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U194 · minor · L1, I2** — focus still drops to `<body>` when the selection bar unmounts after Exclude, Remove from this list, Clear selection or Re-rank (Add now hands focus to a selected row). Have the bar hand focus back on unmount whenever it held focus.
 - **U214 · minor · F3, L5** — Play next ranks an owned game that isn't out yet ("Coming soon", e.g. a pre-order) at the top, though it can't be played tonight. Leave unreleased games out of Play next and Short games.
 - **U216 · minor · F3, L5, P1** — no view answers "runs on my Linux PC or Steam Deck": filtering on ProtonDB Gold or better (or native Linux) is several clicks each time. A suggested view on Owned, and on Wishlist if it proves useful; rated the most useful missing view in a persona review.
+- **U236 · polish · L1** — Home's folder/list tree deletes through a plain `window.confirm`, moves only through each row's "Move to…" select (no drag-and-drop), and soft-deleted lists have no trash or restore.
 
 ## Taste profile
 
@@ -51,10 +53,12 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U196 · minor · C5, F1** — a Deck player has only ProtonDB's crowd tier to go on. A **Deck rating** from `GetAppReviews`' `primarily_steam_deck` (Steam reviews by mostly-Deck players), beside ProtonDB; one more review call per uncached game, and many games will have too few reviews — measure how many of a typical library get one first.
 - **U197 · minor · C5, F1** — same for desktop Linux: a **Linux rating** from `GetAppReviews`' `hardware_os`, with U196's cost and sparsity caveats.
 - **U139 · polish · C4** — panel Owned by reads "never played · not played". One phrase.
+- **U237 · minor · C3** — a saved dynamic list grouped by membership shows only the current account's playtime: no Played column per player and no per-player hours in the panel's "Owned by", which the live comparison has (`createDefaultFetchers`' `onOwners`).
 
 ## Bundles and prices
 
 - **U177 · polish · B1** — shop chips (`.shop-chip`) take a hue hashed from the shop's name, outside the tokens, so a shop can land on amber, which ui-guidelines.md's Colour keeps for warnings and owned games (Humble Bundle does). One neutral chip, or a few token hues that exclude amber.
+- **U238 · minor · B1** — `/bundles`' clock doesn't tick: its countdowns ("⏳ in 6h"), the Age and Ends in buckets and the hero's New and Ending soon counts are computed when the table processes its rows. Re-run the whole sort/filter/render pass on a timer: ticking only the hero counts would make them disagree with the rows.
 
 ## Phone
 

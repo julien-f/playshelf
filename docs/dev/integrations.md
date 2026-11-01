@@ -230,7 +230,7 @@ Bundle games carry only an ITAD id (uuid), slug and title. `resolveSteamAppIds` 
     - It waits for each add to show. A game already in the basket can render unselected while the basket loads, so a click removes it; it clicks again.
     - A **SOLD OUT** card keeps a working-looking Add button that adds nothing; the bookmarklet reports it instead of clicking (the feed carries no stock, so the app can't say so in advance).
     - It runs only because Fanatical sends no Content-Security-Policy. Verified live through ITAD's Awin link (10 adds 500 ms apart all held). Depends on that markup: a redesign breaks it until updated.
-- **Frontend**: [frontend.md](frontend.md#each-list-kind-in-practice) — tier chips, the per-game Tier Price, the selection's cost (`cheapestPicks`).
+- **Frontend**: [game-table.md](game-table.md#each-list-kind-in-practice) — tier chips, the per-game Tier Price, the selection's cost (`cheapestPicks`).
 - **Pricing rule** (confirmed by the maintainer): any number of games can be picked, each at the per-game rate of the largest tier reached — 6 games at "5 for €5.99" cost 6 × €5.99 / 5. `cheapestPicks` also considers rounding up to a larger tier when its price is lower.
 - **Assumptions** (unconfirmed against Fanatical's checkout): below the smallest tier, that tier's price is the minimum; the total is rounded to the cent, not each game's price.
 

@@ -55,7 +55,9 @@ Application data lives in `db.sqlite` (gitignored); it holds the upstream caches
 ### Development
 
 - [architecture.md](docs/dev/architecture.md) — backend, build, API routes, request flow
-- [frontend.md](docs/dev/frontend.md) — the SPA: routes, modules, reactivity, table, panel
+- [frontend.md](docs/dev/frontend.md) — the SPA: routes, modules, reactivity, URL state
+- [game-table.md](docs/dev/game-table.md) — the game table and each list kind
+- [panel-and-lightbox.md](docs/dev/panel-and-lightbox.md) — the side panel, the lightbox and the presentation window
 - [lists-and-accounts.md](docs/dev/lists-and-accounts.md) — the account/list data model
 - [integrations.md](docs/dev/integrations.md) — Steam, HLTB, IsThereAnyDeal, ProtonDB
 - [data.md](docs/dev/data.md) — database, cache tiers, refresh paths

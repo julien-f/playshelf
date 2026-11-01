@@ -1604,7 +1604,7 @@ function syncLbPaused() {
 // ── Mount ────────────────────────────────────────────────────────────────
 // Replaces the original lazy-singleton `getLightbox()` — mounted eagerly, once, from
 // `initLightbox` (called once for the whole app, from AppShell.tsx's own `onMount` — see
-// docs/dev/frontend.md), same "exists exactly once for the app's whole lifetime" shape
+// docs/dev/panel-and-lightbox.md), same "exists exactly once for the app's whole lifetime" shape
 // the lazy getter amounted to in practice (nothing else ever unmounts it), just created up front
 // instead of on first open — negligible cost for a
 // ~20-node static tree, and it means every other function in this file can keep using a bare
