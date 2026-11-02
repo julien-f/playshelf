@@ -60,7 +60,7 @@ const {
   achievementRarityCacheKey,
   newsCacheKey,
 } = require('./lib/steam');
-const { getSemaphoreStats, getWindowStats } = require('./lib/upstream');
+const { getUpstreamStats } = require('./lib/upstream');
 const { getHLTB, getHeldGames, hltbCacheKey } = require('./lib/hltb');
 const {
   getBundles,
@@ -183,11 +183,11 @@ function cachedSteamIds(members) {
 }
 
 // Wraps rateLimit() so every limiter also records when it actually rejects a request — the
-// inbound counterpart to lib/metrics.js's outbound statusCounts. `handler` only runs once a
+// inbound counterpart to lib/metrics.js's outbound statuses. `handler` only runs once a
 // request is actually over budget (not on every request, and not on a skip), so this is a
 // direct trip count, not a coarser proxy. Centralized here rather than repeating a `handler`
 // on each of the limiter definitions below. Mirrors express-rate-limit's own default handler
-// (status + message) after recording the trip — see lib/metrics.js's rateLimiters.
+// (status + message) after recording the trip — see GET /api/metrics' limiterTrips.
 // The defaults and test bypass every limiter shares; `skip` only adds the route's own rule.
 function namedRateLimit(name, { skip, ...opts }) {
   return rateLimit({
@@ -570,28 +570,19 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// Outbound-request counts to Steam/HLTB/ITAD/ProtonDB, grouped by trust-tier/routing boundary
-// then by the specific function making the call — see lib/metrics.js. Every windowed signal
-// (groups, rateLimiters, dedupHits, cacheHits — all tracked there directly) nests under the
-// top-level sinceRestart/lastHour buckets, not the other way around — cacheHits named
-// distinctly from GET /api/health's own `cache` field, a different shape: per-group hit/miss/
-// forced windowed breakdown here vs. a flat entry count there. In-memory, resets on restart; no
-// auth, same trust level as /api/health (nothing sensitive in it). `circuitBreakers`/`semaphores`/
-// `cacheEntries` are composed in here rather than folded into lib/metrics.js itself — none of
-// them are append-only counters the way everything else here is: `circuitBreakers`/`semaphores`
-// are live state owned by lib/circuitBreaker.js and lib/steam.js (the storeLimit/tagLimit/protonLimit
-// semaphores' own active/queued/rejected counts), and `cacheEntries` is a snapshot read
-// straight from db.sqlite by lib/cache.js, not an in-memory counter at all.
+// Shape and reading guide: docs/dev/observability.md. No auth, like /api/health: nothing sensitive in it.
 app.get('/api/metrics', (_req, res) => {
-  res.json({
-    ...getMetrics(),
-    circuitBreakers: getCircuitBreakers(),
-    semaphores: getSemaphoreStats(),
-    windows: getWindowStats(),
-    heldGames: { hltb: getHeldGames() },
-    openStreams: streamsOpen,
-    cacheEntries: getCacheEntryCounts(),
-  });
+  res.json(
+    getMetrics({
+      version,
+      commit,
+      upstreamStats: getUpstreamStats(),
+      breakers: getCircuitBreakers(),
+      held: { hltb: getHeldGames() },
+      openStreams: streamsOpen,
+      cacheEntries: getCacheEntryCounts(),
+    }),
+  );
 });
 
 // Browsing the bundle list, resolving games to/from Steam appids, and pricing them — each

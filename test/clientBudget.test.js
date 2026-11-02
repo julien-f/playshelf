@@ -54,7 +54,7 @@ test('a client is refused past its share, other clients are not', async (t) => {
     assert.equal(err.isBudgetExhausted, true);
   });
   await runAsClient('b', () => spend());
-  const budget = getMetrics().budgets['test-group'];
+  const budget = getMetrics().upstreams['test-group'].budget;
   assert.equal(budget.hourUsed, 3);
   assert.equal(budget.hourTopClient, 2);
 });

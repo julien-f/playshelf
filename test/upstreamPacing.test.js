@@ -169,7 +169,7 @@ test('createRetryingFetch: each retry of a 429 takes its own place in the window
 test('createWindow: reports its live state, and the wait of each reservation that had to queue', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
   const waits = [];
-  const window = createWindow(1, 1000, 'stats-test', (ms) => waits.push(ms));
+  const window = createWindow(1, 1000, { name: 'stats-test', onWait: (ms) => waits.push(ms) });
   const granted = [];
   for (let i = 0; i < 3; i++) void window.reserve().then((place) => granted.push(place));
   await settle();

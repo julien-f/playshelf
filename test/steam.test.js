@@ -9,6 +9,7 @@ process.env.DB_FILE = '';
 
 const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
+const { getMetrics } = require('../lib/metrics');
 const {
   peekSteamId,
   resolveSteamId,
@@ -34,7 +35,7 @@ const {
   _resetTagNameMap,
   _resetPauses,
 } = require('../lib/steam');
-const { getSemaphoreStats, createSemaphore } = require('../lib/upstream');
+const { getUpstreamStats, createSemaphore } = require('../lib/upstream');
 const { _reset, getCachedAt, setCache } = require('../lib/cache');
 const { getCircuitBreakers, _resetCircuitBreakers } = require('../lib/circuitBreaker');
 const { db } = require('../lib/db');
@@ -270,7 +271,7 @@ test('steam-store circuit breaker: consecutive403s exposes pre-trip state and re
   assert.equal(getCircuitBreakers()['steam-store'].consecutive403s, 0, 'a success resets the streak');
 });
 
-test('getSemaphoreStats: reports live active/queued and a lifetime queue-depth high-water mark', async (t) => {
+test('getUpstreamStats: reports each semaphore under its group, live active/queued and a lifetime queue-depth high-water mark', async (t) => {
   _reset();
   const releases = [];
   // tagLimit (concurrency 3, no minIntervalMs cooldown, unlike storeLimit's 500ms one — see
@@ -290,7 +291,7 @@ test('getSemaphoreStats: reports live active/queued and a lifetime queue-depth h
   const results = Promise.all([704, 705, 706, 707].map((appid) => getStoreBrowseItem(appid)));
   await new Promise((r) => setImmediate(r)); // let the first three fetches actually start
 
-  const busy = getSemaphoreStats();
+  const busy = getUpstreamStats()['steam-browse'].semaphores;
   assert.equal(busy.tag.active, 3);
   assert.equal(busy.tag.queued, 1);
   assert.ok(busy.tag.maxQueueSeen >= 1);
@@ -307,10 +308,11 @@ test('getSemaphoreStats: reports live active/queued and a lifetime queue-depth h
   }
 
   // A high-water mark must not reset back down once the queue has drained.
-  assert.ok(getSemaphoreStats().tag.maxQueueSeen >= 1);
-  assert.equal(typeof getSemaphoreStats().store.active, 'number');
-  assert.equal(typeof getSemaphoreStats().proton.queued, 'number');
-  assert.equal(typeof getSemaphoreStats().tag.rejected, 'number');
+  const stats = getUpstreamStats();
+  assert.ok(stats['steam-browse'].semaphores.tag.maxQueueSeen >= 1);
+  assert.equal(typeof stats['steam-store'].semaphores.store.active, 'number');
+  assert.equal(typeof stats.protondb.semaphores.proton.queued, 'number');
+  assert.equal(typeof stats['steam-reviews'].semaphores.reviews.rejected, 'number');
 });
 
 // createSemaphore's maxQueue safety valve is tested directly here (rather than by exhausting
@@ -318,7 +320,7 @@ test('getSemaphoreStats: reports live active/queued and a lifetime queue-depth h
 // SEMAPHORE_MAX_QUEUE's own comment in lib/upstream.js).
 test('createSemaphore: rejected counts calls turned away once maxQueue is hit, active/queued unaffected', async (t) => {
   const warnMock = t.mock.method(console, 'warn', () => {});
-  const sem = createSemaphore(1, 0, 'test-sem', 1); // 1 concurrent slot, queue depth 1
+  const sem = createSemaphore(1, 0, 'test-sem', { maxQueue: 1 }); // 1 concurrent slot, queue depth 1
   let releaseFirst;
   const p1 = sem(
     () =>
@@ -686,9 +688,12 @@ test('getFriendList: caches result — second call skips fetch', async (t) => {
 test('getFriendList: returns null (does not throw) on 401 — private friends list', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 401 }));
+  const unexpected = () => getMetrics().sinceRestart.outbound['steam-api']?.getFriendList?.unexpected ?? 0;
+  const before = unexpected();
 
   const friends = await getFriendList('76561198000000003');
   assert.equal(friends, null);
+  assert.equal(unexpected(), before, 'a declared 401 is an answer, not an alert');
 });
 
 test('getFriendList: throws with isUpstream when Steam API returns non-ok', async (t) => {
