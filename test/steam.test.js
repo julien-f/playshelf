@@ -176,6 +176,38 @@ test('fetchStoreApi: a 429 holds every queued store request until Retry-After ha
   await Promise.all([first, second]);
 });
 
+test("a store details 429 doesn't pause the store's other calls", async (t) => {
+  _reset();
+  t.after(_resetPauses);
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
+  const flush = async () => {
+    for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
+  };
+  const urls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(String(url));
+    if (String(url).includes('appdetails'))
+      return { ok: false, status: 429, headers: new Headers({ 'retry-after': '60' }) };
+    if (String(url).includes('storesearch')) return { ok: true, status: 200, json: async () => ({ items: [] }) };
+    return { ok: true, status: 200, json: async () => ({ response: { store_items: [] } }) };
+  });
+
+  const details = getAppDetails(520).catch(() => {});
+  await flush();
+  const search = searchStoreGames('portal');
+  await flush();
+  assert.ok(
+    urls.some((url) => url.includes('storesearch')),
+    'the search goes out during the details pause',
+  );
+  await search;
+  for (let retry = 0; retry < 3; retry++) {
+    t.mock.timers.tick(60 * 1000);
+    await flush();
+  }
+  await details;
+});
+
 // One pause per call group: the 429 shown is refused (no retry), the call queued after it waits out Retry-After.
 for (const [group, refused, queued, ok] of [
   [
