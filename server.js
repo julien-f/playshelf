@@ -15,7 +15,15 @@ const rateLimit = require('express-rate-limit');
 
 const { getCached, getCachedAt, isCached, capExpiry, getCacheEntryCounts } = require('./lib/cache');
 const { createDedup } = require('./lib/dedup');
-const { getMetrics, recordLimiterTrip, recordStream, runAsClient, startedAt } = require('./lib/metrics');
+const {
+  getMetrics,
+  recordLimiterTrip,
+  recordRequest,
+  recordStream,
+  runAsClient,
+  startEventLoopSampling,
+  startedAt,
+} = require('./lib/metrics');
 const { getCircuitBreakers } = require('./lib/circuitBreaker');
 const {
   peekSteamId,
@@ -268,6 +276,25 @@ morgan.token('url', (req) => {
   return /^\/auth\/steam\/callback\/?$/i.test(path) ? path : url;
 });
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
+// A route pattern, never the URL; the app shell's is the one RegExp path, named rather than shown. `mountPath`:
+// a router restores `baseUrl` when an error leaves it, before the reply closes.
+function routeKey({ method, baseUrl, mountPath = baseUrl, route }, status) {
+  if (!route) return status < 400 ? '(static)' : '(no route)';
+  return `${method} ${typeof route.path === 'string' ? mountPath + route.path : '(app shell)'}`;
+}
+// At `close`, so the details stream counts to its end and a client leaving early shows as aborted.
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('close', () =>
+    recordRequest(routeKey(req, res.statusCode), {
+      status: res.headersSent ? res.statusCode : null,
+      ms: Date.now() - start,
+      bytes: Number(res.getHeader('content-length')) || 0,
+      aborted: !res.writableFinished,
+    }),
+  );
+  next();
+});
 // Express 5 leaves req.body undefined when no JSON body was parsed.
 app.use((req, _res, next) => {
   req.body ??= {};
@@ -275,6 +302,10 @@ app.use((req, _res, next) => {
 });
 // Ahead of the global parser: its routes parse their own body, past the 100 KB default and only once signed in.
 const prefsRouter = express.Router();
+prefsRouter.use((req, _res, next) => {
+  req.mountPath = req.baseUrl; // see routeKey
+  next();
+});
 app.use('/api/me/prefs', prefsRouter);
 app.use(express.json());
 // Charges a request's outbound calls to its client's share (chargeBudget); after the body parser, whose stream
@@ -1716,6 +1747,7 @@ if (require.main === module) {
       process.exit(1);
     }
     console.log(`\nPlayshelf → http://${HOST}:${PORT}\n`);
+    startEventLoopSampling();
   });
 }
 

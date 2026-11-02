@@ -36,3 +36,23 @@ test('mockApi: the details stream leaves out media and keeps the banner, as the 
   assert.equal('movies' in event.meta, false);
   assert.equal((await ask('/api/game-meta/1145360')).body.meta.screenshots.length, 3);
 });
+
+// Sized like a real warm stream (measured 2026-11-02 on 300 cached games: 3.2 KB raw, 570 B gzipped a game), ±25%.
+test('mockApi: big-library adds 1200 synthetic games, streamed at a real event size', async () => {
+  const zlib = require('node:zlib');
+  const { respond } = await import('../e2e/mockApi.ts');
+  const states = new Set(['big-library']);
+  const library = respond('POST', new URL('/api/common-games', 'http://localhost'), '{"members":["alice"]}', states);
+  const { games } = JSON.parse(library.body);
+  assert.equal(games.length, 1206);
+  const { body } = respond(
+    'POST',
+    new URL('/api/game-details/stream', 'http://localhost'),
+    JSON.stringify({ games }),
+    states,
+  );
+  const raw = Buffer.byteLength(body) / games.length;
+  const gzipped = zlib.gzipSync(body).length / games.length;
+  assert.ok(raw > 2400 && raw < 4000, `raw ${Math.round(raw)} B/game`);
+  assert.ok(gzipped > 430 && gzipped < 720, `gzipped ${Math.round(gzipped)} B/game (raw ${Math.round(raw)})`);
+});

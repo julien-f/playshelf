@@ -10,6 +10,8 @@ const {
   recordLimiterTrip,
   recordDedupHit,
   recordCacheEvent,
+  startEventLoopSampling,
+  recordRequest,
   getMetrics,
   _reset,
 } = require('../lib/metrics');
@@ -178,6 +180,27 @@ test('getMetrics: sinceRestart/lastHour report avg/max latency per label', async
     assert.equal(entry.maxLatencyMs, 30);
     assert.equal(lastHour.groups['steam-store'].getAppDetails.avgLatencyMs, 20);
     assert.equal(lastHour.groups['steam-store'].getAppDetails.maxLatencyMs, 30);
+  } finally {
+    globalThis.fetch = restore;
+  }
+});
+
+test('getMetrics: p50/p95 latency per label are bucket upper bounds, capped by the largest seen', async (t) => {
+  const durations = [10, 20, 30, 40, 3000];
+  let i = 0;
+  const restore = globalThis.fetch;
+  t.mock.timers.enable({ apis: ['Date'] });
+  globalThis.fetch = async () => {
+    t.mock.timers.tick(durations[i++]);
+    return { ok: true, status: 200 };
+  };
+  try {
+    for (let n = 0; n < durations.length; n++) await createTrackedFetch('hltb')('search', 'u');
+    const { sinceRestart, lastHour } = getMetrics();
+    for (const entry of [sinceRestart.groups.hltb.search, lastHour.groups.hltb.search]) {
+      assert.equal(entry.p50LatencyMs, 50);
+      assert.equal(entry.p95LatencyMs, 3000);
+    }
   } finally {
     globalThis.fetch = restore;
   }
@@ -469,4 +492,49 @@ test('getMetrics: daily drops days older than 30 at the first call of a day', as
     getMetrics().daily.map((r) => r.day),
     [daysAgo(29), daysAgo(0)],
   );
+});
+
+test('startEventLoopSampling: records one sample per minute under eventLoop, absent before the first', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: Date.parse('2026-11-02T10:00:30Z') });
+  const stop = startEventLoopSampling();
+  try {
+    assert.equal(getMetrics().sinceRestart.eventLoop, undefined);
+    assert.equal(getMetrics().lastHour.eventLoop, undefined);
+    t.mock.timers.tick(60 * 1000);
+    t.mock.timers.tick(60 * 1000);
+    const { sinceRestart, lastHour } = getMetrics();
+    assert.deepEqual(lastHour.eventLoop, sinceRestart.eventLoop);
+    const { minutes, utilization, maxP99DelayMs, maxDelayMs } = sinceRestart.eventLoop;
+    assert.equal(minutes, 2);
+    assert.ok(utilization >= 0 && utilization <= 1, `utilization ${utilization}`);
+    assert.ok(Number.isInteger(maxP99DelayMs) && Number.isInteger(maxDelayMs));
+    assert.ok(maxP99DelayMs <= maxDelayMs);
+  } finally {
+    stop();
+  }
+});
+
+test('getMetrics: a live process snapshot in MB, with no db file sizes for an in-memory database', () => {
+  const { process: proc } = getMetrics();
+  for (const key of ['rssMb', 'maxRssMb', 'heapUsedMb', 'externalMb']) assert.ok(proc[key] > 0, key);
+  assert.ok(proc.maxRssMb >= proc.rssMb - 1);
+  assert.equal(proc.dbMb, null);
+  assert.equal(proc.dbWalMb, null);
+});
+
+test('recordRequest: a route quiet for an hour leaves lastHour, without breaking getMetrics', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-02T10:00:00Z') });
+  recordRequest('GET /api/x', { status: 200, ms: 7, bytes: 10, aborted: false });
+  t.mock.timers.tick(2 * 60 * 60 * 1000);
+  const { sinceRestart, lastHour } = getMetrics();
+  assert.equal(sinceRestart.routes['GET /api/x'].requests, 1);
+  assert.equal(lastHour.routes['GET /api/x'], undefined);
+});
+
+test('recordRequest: a request left before any reply counts as aborted, in no status class', () => {
+  recordRequest('GET /api/x', { status: null, ms: 900, bytes: 0, aborted: true });
+  const entry = getMetrics().sinceRestart.routes['GET /api/x'];
+  assert.deepEqual(entry.statusCounts, {});
+  assert.equal(entry.aborted, 1);
+  assert.equal(entry.maxLatencyMs, 900);
 });

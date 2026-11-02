@@ -52,6 +52,19 @@ Each rule comes from a flake it fixed; add one when a fix teaches something new.
   2. afterwards, `restore --file` and `demo-restore.js`, then confirm `steam.isonoe.net:prefs.backup` is gone.
   - Seeding refuses while a backup exists: restore that one first, never overwrite it.
 
+## Measuring performance
+
+- `node scripts/perf-measure.js [--runs=N]` (default 7, after one discarded warm-up) loads Owned on a production build served by `MOCK_API=1 vite preview`, with the `big-library` mock state: 1206 games whose events match a real warm stream's size, raw and gzipped (`e2e/bigLibrary.ts`).
+  - Each run: a fresh Chromium context at the code backlog's phone profile (390×844, CPU ×4, 1.6 Mbps / 150 ms, through CDP), then Owned → Home → Owned in the app.
+  - It prints each metric's median and range against the last recorded run, flagging a change only when the ranges don't overlap and the medians differ by 5% or more, and records the run in `.git/dev-metrics/perf.jsonl`.
+  - Use it for a performance change's before/after, and put both in the commit body. On demand only: runner noise keeps it out of checks, hooks and CI; compare runs from the same machine.
+- What it can't show:
+  - Server and upstream time (the mock answers at once; read `GET /api/metrics`), so not a server-side cache change.
+  - A cold load's split `fast`/`store` events: the mock sends one event per game, as a warm cache does, so `list:listed` ≈ `list:done`.
+  - Image bytes: every request off localhost fails at once (no traffic to Steam's CDN), so images are counted, not timed.
+  - A change to the stream's payload, unless the same commit changes `e2e/mockApi.ts`, which builds it by hand.
+  - HTTP/2: `vite preview` serves HTTP/1.1, six connections per host, which can lengthen a chain of chunk loads.
+
 ## Skill evals
 
 - `node scripts/skill-evals.js [SKILL...]` runs each `.claude/skills/<name>/evals.json` routing case through headless `claude -p` and reports which skill it loaded (~30 s for all; each run stops at its first tool call). `--repeat=N` measures how stable a route is; a single run can pass by luck.

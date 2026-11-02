@@ -93,6 +93,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Split the frontend developer doc into the core, the game table, and the panel and lightbox
 - `node scripts/accounts.js` lists the Steam accounts with a cached profile and those who signed in
 - GET /api/metrics shows how lists load (timings, uncached games, concurrent loads), the store details cap's waits and HLTB's held lookups
+- GET /api/metrics reports the event loop, each route's latency (p50/p95), memory and database size; a list load leaves User Timing marks; `node scripts/perf-measure.js` measures an Owned load at the phone profile
 
 ## [0.12.0] - 2026-10-30
 

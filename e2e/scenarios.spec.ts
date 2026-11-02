@@ -129,6 +129,19 @@ test("A1 edge: a list's stat labels meet AA contrast on the hero", async ({ page
   expect(await heroContrast(label)).toBeGreaterThanOrEqual(4.5);
 });
 
+test("A1 edge: a list load leaves its steps' timings for DevTools, in order", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  const measures = () =>
+    page.evaluate(() => Object.fromEntries(performance.getEntriesByType('measure').map((m) => [m.name, m.duration])));
+  await expect
+    .poll(async () => Object.keys(await measures()).sort())
+    .toEqual(['list:done', 'list:listed', 'list:rows']);
+  const m = await measures();
+  expect(m['list:rows']).toBeLessThanOrEqual(m['list:listed']);
+  expect(m['list:listed']).toBeLessThanOrEqual(m['list:done']);
+});
+
 test("A1 edge: a pressed stat tile's label still meets AA contrast on the hero", async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/bundles');

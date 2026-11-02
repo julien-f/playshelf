@@ -114,6 +114,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `detailsEvent.ts` — `applyDetailsEvent`: merges one details-stream part into a row and flattens it into the table's fields.
 - `staleGuard.ts` — generation counters for "a newer load superseded this one".
 - `loadProgress.ts` — the details stream's progress bar and time left.
+- `loadTiming.ts` — a list load's User Timing measures from `list:start`: `list:rows` (the table is built), `list:listed` (every row's fast part received), `list:done` (store parts too); the latest load's only. Read them in DevTools' Performance panel or with `performance.getEntriesByType('measure')`.
 - `priceLoading.ts` — the `POST /api/prices` call and the row-field mapping/fallbacks around it.
 - `panel.tsx` / `panelData.ts` / `panelNav.ts` / `panelHistory.ts` / `panelKeyboard.ts` / `ownerList.ts` — the side panel and its per-game data, prev/next nav, DLC trail rule, keyboard handler, and the pure half of the "Owned by" card.
 - `lightbox.tsx` / `mediaItems.ts` / `lightboxSwipe.ts` / `hlsPlayer.ts` — screenshot/video lightbox, its ordered media list, its swipe thresholds/decision, and trailer playback (shared with the presentation window).
