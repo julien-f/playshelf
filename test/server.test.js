@@ -29,7 +29,7 @@ const { _resetTagNameMap } = require('../lib/steam');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
 const { SESSION_TTL_MS, MISS_CACHE_TTL_MS } = require('../lib/config');
 const { getMetrics } = require('../lib/metrics');
-const { getSemaphoreStats } = require('../lib/upstream');
+const { getUpstreamStats } = require('../lib/upstream');
 
 // The tag-name map's failure hold-off outlives _reset(), which only empties the cache.
 beforeEach(_resetTagNameMap);
@@ -440,40 +440,43 @@ test('GET /api/metrics: 200 with a since timestamp and per-group/label request c
   const res = await api.get('/api/metrics');
   assert.equal(res.status, 200);
   assert.equal(typeof res.body.since, 'number');
-  const label = res.body.sinceRestart.groups['steam-api'].getOwnedGames;
+  const label = res.body.sinceRestart.outbound['steam-api'].getOwnedGames;
   assert.ok(label.requests >= 1);
-  assert.equal(typeof label.statusCounts, 'object');
+  assert.equal(typeof label.statuses, 'object');
   assert.equal(label.networkErrors, 0);
-  assert.equal(typeof label.avgLatencyMs, 'number');
-  assert.equal(typeof label.maxLatencyMs, 'number');
-  assert.ok(res.body.lastHour.groups['steam-api'].getOwnedGames.requests >= 1);
-  assert.equal(res.body.circuitBreakers['steam-store'].blockedUntil, 0);
-  assert.equal(typeof res.body.circuitBreakers['steam-store'].tripCount, 'number');
-  assert.equal(res.body.circuitBreakers['steam-store'].consecutive403s, 0);
-  assert.deepEqual(Object.keys(res.body.circuitBreakers).sort(), ['hltb', 'protondb', 'steam-store']);
+  assert.equal(typeof label.avgMs, 'number');
+  assert.equal(typeof label.maxMs, 'number');
+  assert.ok(res.body.lastHour.outbound['steam-api'].getOwnedGames.requests >= 1);
+  const { upstreams } = res.body;
+  assert.deepEqual(upstreams['steam-store'].breaker, { blockedUntil: 0, tripCount: 0, consecutive403s: 0 });
+  assert.deepEqual(
+    Object.keys(upstreams).filter((g) => upstreams[g].breaker),
+    ['hltb', 'protondb', 'steam-store'],
+  );
+  assert.equal(typeof res.body.version, 'string');
 });
 
 test('GET /api/metrics: times inbound requests per route pattern, never per URL', async (t) => {
   const agent = await loginAs(t, '76561198000000207');
   await agent.put('/api/me/prefs/region').send({ value: 1, updatedAt: 1000 }).expect(200);
   await api.get('/api/no-such-route-123').expect(404);
-  const routes = () => getMetrics().sinceRestart.routes;
+  const routes = () => getMetrics().sinceRestart.inbound;
   await until(() => routes()['PUT /api/me/prefs/:key'] && routes()['(no route)'], 'both requests recorded');
   const entry = routes()['PUT /api/me/prefs/:key'];
   assert.ok(entry.requests >= 1);
-  assert.ok(entry.statusCounts['2xx'] >= 1);
+  assert.ok(entry.statusClasses['2xx'] >= 1);
   assert.equal(entry.aborted, 0);
-  for (const key of ['avgLatencyMs', 'p50LatencyMs', 'p95LatencyMs', 'maxLatencyMs', 'avgBytes'])
-    assert.equal(typeof entry[key], 'number', key);
-  assert.ok(routes()['(no route)'].statusCounts['4xx'] >= 1);
+  for (const key of ['avgMs', 'maxMs', 'avgBytes']) assert.equal(typeof entry[key], 'number', key);
+  assert.ok('p50Ms' in entry && 'p95Ms' in entry);
+  assert.ok(routes()['(no route)'].statusClasses['4xx'] >= 1);
   assert.ok(!JSON.stringify(routes()).includes('no-such-route-123'));
-  assert.ok(getMetrics().lastHour.routes['PUT /api/me/prefs/:key'].requests >= 1);
+  assert.ok(getMetrics().lastHour.inbound['PUT /api/me/prefs/:key'].requests >= 1);
   await api.get('/lists/owned').expect(200);
   await until(() => routes()['GET (app shell)'], 'the app shell named');
   // An error leaving a mounted router keeps the mount path in the key.
   await agent.put('/api/me/prefs/region').set('Content-Type', 'application/json').send('{').expect(400);
   await until(
-    () => routes()['PUT /api/me/prefs/:key']?.statusCounts['4xx'],
+    () => routes()['PUT /api/me/prefs/:key']?.statusClasses['4xx'],
     `the router error recorded: ${Object.keys(routes())}`,
   );
   assert.equal(routes()['PUT /:key'], undefined);
@@ -489,26 +492,32 @@ test('GET /api/metrics: includes semaphore, cache hit/entry, rate-limiter, and d
 
   const res = await api.get('/api/metrics');
   assert.equal(res.status, 200);
-  for (const name of ['store', 'tag', 'proton', 'hltb', 'itad-info']) {
-    assert.equal(typeof res.body.semaphores[name].active, 'number');
-    assert.equal(typeof res.body.semaphores[name].queued, 'number');
-    assert.equal(typeof res.body.semaphores[name].maxQueueSeen, 'number');
-    assert.equal(res.body.semaphores[name].rejected, 0);
+  for (const [group, name] of [
+    ['steam-store', 'store'],
+    ['steam-browse', 'tag'],
+    ['protondb', 'proton'],
+    ['steam-reviews', 'reviews'],
+    ['hltb', 'hltb'],
+    ['itad', 'itad-info'],
+  ]) {
+    const stats = res.body.upstreams[group].semaphores[name];
+    assert.deepEqual(Object.keys(stats), ['active', 'queued', 'maxQueueSeen', 'rejected'], name);
+    assert.equal(stats.rejected, 0);
   }
   // Only groups actually touched by this request are present — resolveSteamId short-circuits
   // on an already-Steam64 id without a cache read, so 'resolve' never shows up here, but
   // getOwnedGames/getPlayerSummaries do (games:/player: — both 'library'), same "absent when
   // never called" convention the rest of lib/metrics.js already uses.
-  assert.equal(typeof res.body.sinceRestart.cacheHits.library.hits, 'number');
-  assert.equal(typeof res.body.sinceRestart.cacheHits.library.misses, 'number');
-  assert.equal(typeof res.body.sinceRestart.cacheHits.library.forced, 'number');
-  assert.equal(typeof res.body.lastHour.cacheHits.library.hits, 'number');
-  // cacheEntries, unlike cacheHits, always lists every group (a db.sqlite row count, not an
+  assert.equal(typeof res.body.sinceRestart.cache.library.hits, 'number');
+  assert.equal(typeof res.body.sinceRestart.cache.library.misses, 'number');
+  assert.equal(typeof res.body.sinceRestart.cache.library.forced, 'number');
+  assert.equal(typeof res.body.lastHour.cache.library.hits, 'number');
+  // cacheEntries, unlike `cache`, always lists every group (a db.sqlite row count, not an
   // in-memory-since-restart counter — see lib/cache.js's getCacheEntryCounts).
   for (const label of ['library', 'resolve', 'rating', 'meta', 'search', 'news', 'bundles']) {
-    assert.equal(typeof res.body.cacheEntries[label], 'number');
+    assert.equal(typeof res.body.server.cacheEntries[label], 'number');
   }
-  assert.equal(typeof res.body.sinceRestart.rateLimiters, 'object');
+  assert.equal(typeof res.body.sinceRestart.limiterTrips, 'object');
   assert.equal(typeof res.body.sinceRestart.dedupHits, 'object');
   // Two accounts resolved in the same POST /api/common-games share the 'steam' dedup instance
   // for anything they both trigger concurrently — not asserted on an exact count here (that's
@@ -533,7 +542,7 @@ test('GET /api/metrics: a details stream records how its list loaded', async (t)
   let { body } = await api.get('/api/metrics');
   assert.equal(body.sinceRestart.streams.count, 1);
   assert.equal(body.sinceRestart.streams.cold, 0, 'a cached list adds no timing');
-  assert.equal(body.openStreams, 0);
+  assert.equal(body.server.openStreams, 0);
 
   await ssePost(server.address().port, '/api/game-details/stream', { games: [{ appid: 1001 }, { appid: 700 }] });
   ({ body } = await api.get('/api/metrics'));
@@ -561,8 +570,8 @@ test('GET /api/metrics: counts HLTB lookups its failed-lookup hold answered', as
   await getHLTB(5, 'Portal').catch(() => {});
   await getHLTB(5, 'Portal').catch(() => {});
   const { body } = await api.get('/api/metrics');
-  assert.equal(body.lastHour.heldLookups.hltb, 1);
-  assert.equal(body.heldGames.hltb, 1);
+  assert.equal(body.lastHour.heldAnswers.hltb, 1);
+  assert.equal(body.upstreams.hltb.held, 1);
 });
 
 // ── POST /api/common-games — input validation ─────────────────────────────────
@@ -1018,7 +1027,7 @@ test('GET /api/game-details/:appid: a warm request reads each cached meta-tier r
   });
   await api.get('/api/game-details/403');
 
-  const metaHits = () => getMetrics().sinceRestart.cacheHits.meta.hits;
+  const metaHits = () => getMetrics().sinceRestart.cache.meta.hits;
   const before = metaHits();
   const res = await api.get('/api/game-details/404');
   assert.deepEqual(res.body.tags, ['Action', 'Co-op']);
@@ -3393,7 +3402,7 @@ test('POST /api/game-details/stream: caps in-flight appids and stops fetching on
   const concurrency = Number(process.env.STREAM_CONCURRENCY);
   // Every appid queues one reviews call on its semaphore (3 at a time): active + queued counts the appids in flight.
   const reviewsPending = () => {
-    const { active, queued } = getSemaphoreStats().reviews;
+    const { active, queued } = getUpstreamStats()['steam-reviews'].semaphores.reviews;
     return active + queued;
   };
   let started = 0;

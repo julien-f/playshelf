@@ -4,74 +4,74 @@ Outbound-request metrics, budgets, and the warnings the app logs on its own. Cac
 
 ## GET /api/metrics
 
-No auth, same trust level as `GET /api/health`. In memory, reset on restart, except `cacheEntries` and `daily`, the only history beyond the trailing hour.
+No auth, same trust level as `GET /api/health`. In memory, reset on restart, except `cacheEntries` and `daily`, the only history beyond the trailing hour. Keys in reading order: what's live per upstream, the server, the two windows, history.
 
 ```
-{ since,
-  sinceRestart: { groups:       { [group]: { [label]: { requests, statusCounts, networkErrors,
-                                                        avgLatencyMs, p50LatencyMs, p95LatencyMs, maxLatencyMs } } },
-                  routes:       { [route]: { requests, statusCounts, aborted, avgBytes,
-                                             avgLatencyMs, p50LatencyMs, p95LatencyMs, maxLatencyMs } },
-                  rateLimiters: { [name]: count },
-                  dedupHits:    { [name]: count },
-                  cacheHits:    { [group]: { hits, misses, forced } },
-                  windowWaits:  { 'store-details': { waits, avgWaitMs, maxWaitMs } },
-                  heldLookups:  { hltb: count },
-                  streams:      { count, games, fastUncached, storeUncached, closedEarly, closedEarlyCold, limited,
-                                  concurrentMax, cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs },
-                  eventLoop:    { minutes, busyPercent, maxP99DelayMs, maxDelayMs, maxDelayAt } },
-  lastHour:     { …same shape as sinceRestart… },
-  budgets:         { [group]: { hourUsed, hourMax, hourTopClient, dayUsed, dayMax, dayTopClient } },
-  process:         { rssMb, maxRssMb, heapUsedMb, externalMb, dbMb, dbWalMb },
-  circuitBreakers: { 'steam-store' | hltb | protondb: { blockedUntil, tripCount, consecutive403s } },
-  semaphores:      { store | tag | proton | reviews | hltb | 'itad-info': { active, queued, maxQueueSeen, rejected } },
-  windows:         { 'store-details': { max, inWindow, reserved, waiting, maxQueueSeen } },
-  heldGames:       { hltb: count },
-  openStreams:     count,
-  cacheEntries:    { [group]: count },
-  daily:           [{ day, group, label, status, count }] }
+{ since, version, commit,
+  upstreams: { [group]: { budget:      { hourUsed, hourTopClient, dayUsed, dayTopClient },
+                          breaker?:    { blockedUntil, tripCount, consecutive403s },
+                          semaphores?: { [name]: { active, queued, maxQueueSeen, rejected } },
+                          windows?:    { [name]: { max, inWindow, reserved, waiting, maxQueueSeen } },
+                          held?:       count } },
+  budgetCeilings: { hour, day, clientSharePercent },
+  server:         { openStreams, process: { rssMb, maxRssMb, heapUsedMb, externalMb, dbMb, dbWalMb },
+                    cacheEntries: { [group]: count } },
+  lastHour: { outbound:     { [group]: { [label]: { requests, statuses, networkErrors, avgMs, p50Ms, p95Ms, maxMs } } },
+              inbound:      { [route]: { requests, statusClasses, aborted, avgBytes, avgMs, p50Ms, p95Ms, maxMs } },
+              limiterTrips: { [name]: count },
+              dedupHits:    { [name]: count },
+              cache:        { [group]: { hits, misses, forced } },
+              windowWaits:  { 'store-details': { waits, avgWaitMs, maxWaitMs } },
+              heldAnswers:  { hltb: count },
+              streams:      { count, games, fastUncached, storeUncached, closedEarly, closedEarlyCold, limited,
+                              concurrentMax, cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs },
+              eventLoop:    { minutes, busyPercent, maxP99DelayMs, maxDelayMs, maxDelayAt } },
+  sinceRestart: { …same shape as lastHour… },
+  daily: { [day]: { [group]: { [label]: { [status]: count } } } } }
 ```
 
-- **Windows**: every windowed signal nests under `sinceRestart`/`lastHour`, always the outermost keys; nothing nests a window of its own. `lastHour` sums 60 per-minute buckets, so an event leaves it 59–60 minutes after it happened: bounded memory and O(1) recording whatever the traffic. Live snapshots (`budgets`, `process`, `circuitBreakers`, `semaphores`, `windows`, `heldGames`, `openStreams`, `cacheEntries`) and the persisted `daily` sit outside both. A name with no events yet is absent rather than zeroed.
+- **Windows**: every windowed signal nests under `lastHour`/`sinceRestart`; nothing nests a window of its own. `lastHour` sums 60 per-minute buckets, so an event leaves it 59–60 minutes after it happened: bounded memory and O(1) recording whatever the traffic. A name with no event in a window is absent rather than zeroed, so the first hour after a start reads the same in both.
+- **`upstreams`**: every live state per outbound group, so one object answers "is this upstream OK". Every group that `createTrackedFetch` bound is listed from startup; `semaphores`/`windows` gain their group at creation (`createSemaphore`/`createWindow`'s `group`, `lib/upstream.js` `getUpstreamStats`).
 
-### Outbound — `groups`
+### Outbound — `outbound`
 
-- Every outbound call goes through `trackedFetch` (`lib/metrics.js`), a drop-in for `fetch`. Modules reach it only through `createTrackedFetch(group)`, bound once per group at load; it returns `(label, url, opts)` and registers the group, which is how `budgets` lists it from startup.
+- Every outbound call goes through `trackedFetch` (`lib/metrics.js`), a drop-in for `fetch`. Modules reach it only through `createTrackedFetch(group)`, bound once per group at load; it returns `(label, url, opts)` and registers the group, which is how `upstreams` lists it from startup.
 - `group` is the service or routing boundary: `steam-store` (`fetchStoreApi`/`storeLimit`), `steam-browse` (`tagLimit`), `steam-reviews` (`GetAppReviews`), `steam-api` (the other `api.steampowered.com` calls, keyed or not, untrusted `GetWishlist` included), `steam-openid`, `protondb`, `hltb`, `itad`, `fanatical`, `gamepass`. `label` is the calling function, so one operation stalling shows apart from its siblings.
-- `statusCounts` is a `{ [status]: count }` map, deliberately not one "errors" count: several non-2xx answers are expected outcomes (403 = private profile or no stats on achievements, 404 = no ProtonDB reports; see [integrations.md](integrations.md)). Read it against what's expected for that label.
+- `statuses` is a `{ [status]: count }` map, deliberately not one "errors" count: several non-2xx answers are expected outcomes (403 = private profile or no stats on achievements, 404 = no ProtonDB reports; see [integrations.md](integrations.md)). Read it against what's expected for that label.
 - `networkErrors`: `fetch()` itself threw (timeout, DNS, abort); never an expected outcome.
+- A call counts when it ends, in both windows: one in flight is in neither.
 - Latencies cover every outcome, so an upstream slowing down before it errors shows here first.
-- `p50LatencyMs`/`p95LatencyMs` (also on `routes`): the upper bound of the fixed log-scale bucket (5 ms … 10 s) holding that quantile, capped by `maxLatencyMs`; `null` with no call. Read them over the average: hit/miss times are bimodal, and one timeout pins the max at 10 s.
+- `p50Ms`/`p95Ms` (also on `inbound`): the upper bound of the fixed log-scale bucket (5 ms … 10 s) holding that quantile, capped by `maxMs`; `null` under 10 calls, where one call decides it (`QUANTILE_MIN_SAMPLES`). Read them over the average: hit/miss times are bimodal, and one timeout pins the max at 10 s.
 
-### Inbound — `routes`
+### Inbound — `inbound`
 
 - Every request, recorded at `close` by a middleware in `server.js`, keyed `<METHOD> <route pattern>` (`GET /api/game/:appid`), never the filled URL; `(static)` for static files, `(no route)` for 404s, `GET (app shell)` for the page every client route serves.
-- `statusCounts` by class (`2xx`, `4xx`…); `aborted`: the client left before the reply ended; one that left before any reply is in no status class. The details stream counts to its end, unlike morgan's time, which stops at the headers.
+- `statusClasses` (`2xx`, `4xx`…); `aborted`: the client left before the reply ended; one that left before any reply is in no status class. The details stream counts to its end, unlike morgan's time, which stops at the headers.
 - `avgBytes` over replies with a `Content-Length` only: the details stream is chunked (its size: [code-backlog.md](code-backlog.md#performance)'s baseline).
 
-### Inbound — `rateLimiters`
+### Inbound — `limiterTrips`
 
 - Trips (requests rejected) per `express-rate-limit` instance in `server.js`, recorded by the shared `namedRateLimit` wrapper: `search`, `friends`, `details`, `meta`, `news`, `gameSearch`, `creatorGames`, `achievements`, `bundlesList`, `bundlesById`, `bundlesResolve`, `prices`, `gameBundles`, `gamePass`, `auth`. Plus `stream`: details streams refused by `STREAM_MAX_PER_IP`. `meta` also limits an opened list row's media loads.
 - Only trips count, not requests a limiter saw or skipped as cached.
 
-### `dedupHits`, `cacheHits`, `cacheEntries`
+### `dedupHits`, `cache`, `cacheEntries`
 
 - `dedupHits`: concurrent calls `createDedup(name)` (`lib/dedup.js`) coalesced into one in flight — `steam`, `hltb`, `itad`, `fanatical`, `gamepass`, `details` (`server.js`'s game details). A burst points at a retry loop or a polling client.
-- `cacheHits`: `getCached()` outcomes per `lib/cache.js` `GROUPS` label (`library`, `resolve`, `rating`, `meta`, `search`, `news`, `bundles`, `itad-ids`). `forced` (a user's ↻) is kept apart from `misses`. A rate limiter's cache check doesn't record, so each request counts once; nor does a game's tags reusing the parsed tag-name map (`meta`), which reads no row. Tells "traffic grew" apart from "the cache stopped working" when outbound counts jump.
-- `cacheEntries`: row count per group, read from `db.sqlite` (survives restarts, lists every group). With `cacheHits`: few entries plus many misses means a TTL too short; many entries plus many misses, a key space the cache can't help.
+- `cache`: `getCached()` outcomes per `lib/cache.js` `GROUPS` label (`library`, `resolve`, `rating`, `meta`, `search`, `news`, `bundles`, `itad-ids`). `forced` (a user's ↻) is kept apart from `misses`. A rate limiter's cache check doesn't record, so each request counts once; nor does a game's tags reusing the parsed tag-name map (`meta`), which reads no row. Tells "traffic grew" apart from "the cache stopped working" when outbound counts jump.
+- `cacheEntries`: row count per group, read from `db.sqlite` (survives restarts, lists every group). With `cache`: few entries plus many misses means a TTL too short; many entries plus many misses, a key space the cache can't help.
 
-### List loading — `streams`, `windowWaits`, `heldLookups`
+### List loading — `streams`, `windowWaits`, `heldAnswers`
 
 What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREAM_STORE_CONCURRENCY`), `STORE_DETAILS_MAX_PER_5_MIN` and HLTB's failed-lookup hold reads. Aggregates only: no client, appid or IP.
 
 - `streams`: one record per `POST /api/game-details/stream`, at its end.
   - `fastUncached`/`storeUncached`: games each part had to fetch (each pool's own cachedness), so ms per uncached game is derivable for each pool.
   - `closedEarly`: the client left before the end; `closedEarlyCold` of those, ones with something to fetch — the slowest loads, missing from the timings.
-  - `concurrentMax`: streams open (every client's) when one started, the largest; `openStreams` is the live count.
+  - `concurrentMax`: streams open (every client's) when one started, the largest; `server.openStreams` is the live count.
   - Timings only from `cold` streams (something to fetch, ran to the end): `listed` when every game's fast part was sent (all rows listed), `done` at the end (store parts too). `null` with no cold stream. Absent from `lastHour` with no stream in it.
 - `windowWaits`: reservations that queued for a rolling cap's place (`createWindow`, `lib/upstream.js`), and how long. Counted per attempt: a 429's retry reserves again. Waits with no 429s on `getAppDetails` mean the cap, not Steam, is the limit; 429s with no waits, a cap too high.
-- `heldLookups.hltb`: lookups HLTB's failed-lookup hold answered without a request; `heldGames.hltb`, games held now.
-- Already answered elsewhere: appdetails 429s (`groups['steam-store'].getAppDetails.statusCounts`), whether `UPSTREAM_MIN_INTERVAL_MS` is the limit (`semaphores`' queues and the labels' latency).
+- `heldAnswers.hltb`: lookups HLTB's failed-lookup hold answered without a request; `upstreams.hltb.held`, games held now.
+- Already answered elsewhere: appdetails 429s (`outbound['steam-store'].getAppDetails.statuses`), whether `UPSTREAM_MIN_INTERVAL_MS` is the limit (`upstreams[group].semaphores`' queues and the labels' latency).
 
 ### Event loop — `eventLoop`
 
@@ -81,17 +81,17 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
 
 ### Daily — `daily`
 
-- Outbound status counts per UTC day, group and label, kept in `db.sqlite` (`metrics_daily`) for 30 days: dates when an upstream's answers changed (a 200 turning into 302s or 429s), across restarts. `status` is the HTTP status as text, or `network` for a `networkErrors` call.
+- Outbound status counts per UTC day (newest first), group and label, kept in `db.sqlite` (`metrics_daily`) for 30 days: dates when an upstream's answers changed (a 200 turning into 302s or 429s), across restarts. `status` is the HTTP status as text, or `network` for a `networkErrors` call.
 - Written on every outbound call, as part of `trackedFetch`; a failed write warns `[metrics]` and never fails the call. Days past 30 are deleted on the first call of each day.
 - Labels are published and kept for a month, so they stay function names, never built from a request.
 
-### Live snapshots
+### Live snapshots — `upstreams`, `server`
 
-- `circuitBreakers` (`lib/circuitBreaker.js`; Steam store, HLTB search, ProtonDB): `blockedUntil` (open while in the future; 0 = never tripped), `tripCount` (lifetime, tells "once long ago" from "every 20 minutes"), `consecutive403s` (one more trips it; HLTB also counts a 401 on a fresh token, [integrations.md](integrations.md#hltb--no-npm-package)).
-- `windows` (`lib/upstream.js` `getWindowStats`, one per `createWindow`): `inWindow` sends in the trailing window, `reserved` places taken but not sent, `waiting` queued for one, `maxQueueSeen` (lifetime).
-- `semaphores` (`lib/upstream.js` `getSemaphoreStats`, one per `createSemaphore`): `active`/`queued` now, `maxQueueSeen` (lifetime high-water mark), `rejected` (calls turned away by the `SEMAPHORE_MAX_QUEUE` valve; should stay 0). High latency with low `queued` = slow upstream; high `queued` = our own concurrency cap.
-- `process` (`getProcessStats`, `lib/metrics.js`): memory now (`rssMb`, `heapUsedMb`, `externalMb`), the largest RSS since start (`maxRssMb`), and the size of `db.sqlite` and its WAL (`null` for an in-memory database, or no WAL right after a checkpoint). A heap that only grows across reads is a leak; a WAL that keeps growing, a checkpoint that can't run.
-- `budgets`: current usage per outbound `group`, every one listed from startup (0 used) so the ceilings show before anything spends against them; see below.
+- `breaker` (`lib/circuitBreaker.js`; Steam store, HLTB search, ProtonDB): `blockedUntil` (open while in the future; 0 = never tripped), `tripCount` (lifetime, tells "once long ago" from "every 20 minutes"), `consecutive403s` (one more trips it; HLTB also counts a 401 on a fresh token, [integrations.md](integrations.md#hltb--no-npm-package)).
+- `windows` (one per named `createWindow`): `inWindow` sends in the trailing window, `reserved` places taken but not sent, `waiting` queued for one, `maxQueueSeen` (lifetime).
+- `semaphores` (one per `createSemaphore`): `active`/`queued` now, `maxQueueSeen` (lifetime high-water mark), `rejected` (calls turned away by the `SEMAPHORE_MAX_QUEUE` valve; should stay 0). High latency with low `queued` = slow upstream; high `queued` = our own concurrency cap.
+- `server.process` (`getProcessStats`, `lib/metrics.js`): memory now (`rssMb`, `heapUsedMb`, `externalMb`), the largest RSS since start (`maxRssMb`), and the size of `db.sqlite` and its WAL (`null` for an in-memory database, or no WAL right after a checkpoint). A heap that only grows across reads is a leak; a WAL that keeps growing, a checkpoint that can't run.
+- `budget`: current usage per outbound group, listed from startup (0 used); `budgetCeilings` holds the ceilings, the same for every group (`null` = disabled). See below.
 
 ## Outbound budgets
 
@@ -103,8 +103,8 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
   - The request's client rides an `AsyncLocalStorage` (`runAsClient`, set by a middleware after the body parser). `createSemaphore` binds each queued job to its caller's context, since another job's release runs it. Any new queue shared across requests must do the same.
   - A call outside any request context (every call while tests bypass the limiters) counts only against the global ceiling.
   - Shared state keeps one client's refusal from reaching others: `createDedup` retries once in a waiter's own context when it rode on another client's refused call (or, for a details part, a `limited` result); an HLTB login or the Fanatical feed refused for one client isn't recorded as a failure.
-  - `hourTopClient`/`dayTopClient` in `budgets`: the most one client spent in the current window.
-- Fixed windows, not sliding: it runs on every call and stays O(1). A window starts at the group's first call once the previous one has ended; reading `budgets` never starts one.
+  - `hourTopClient`/`dayTopClient` in each `budget`: the most one client spent in the current window.
+- Fixed windows, not sliding: it runs on every call and stays O(1). A window starts at the group's first call once the previous one has ended; reading `GET /api/metrics` never starts one.
 
 ## Log warnings
 

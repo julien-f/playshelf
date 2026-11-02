@@ -101,8 +101,8 @@ test('details limiter: counts cache misses but never counts cache hits', async (
   assert.equal(cached.body.rating.score, 88);
   assert.ok(!fetchedAppids.has('800'), 'cache hit must not fetch upstream');
   // The skip's own checks aren't reads: only the route's count as hits in GET /api/metrics.
-  const { cacheHits } = (await api.get('/api/metrics')).body.sinceRestart;
-  assert.deepEqual(cacheHits.rating, { hits: 1, misses: 0, forced: 0 });
+  const { cache } = (await api.get('/api/metrics')).body.sinceRestart;
+  assert.deepEqual(cache.rating, { hits: 1, misses: 0, forced: 0 });
 });
 
 // Same "cache hits never count" rule as above, applied to the game-search limiter.
@@ -263,9 +263,9 @@ test('bundles resolve limiter: counts cache misses but never counts fully-cached
 });
 
 // A limiter actually rejecting a request must be visible in GET /api/metrics's own
-// rateLimiters field (lib/metrics.js's recordLimiterTrip) — not just returned as a 429 to the
+// limiterTrips field (lib/metrics.js's recordLimiterTrip) — not just returned as a 429 to the
 // caller that hit it, with no server-side trail of how often that's happening overall.
-test('a rejected request is recorded in GET /api/metrics rateLimiters', async (t) => {
+test('a rejected request is recorded in GET /api/metrics limiterTrips', async (t) => {
   _reset();
   _resetMetrics();
   t.mock.method(globalThis, 'fetch', async () => ({
@@ -286,6 +286,6 @@ test('a rejected request is recorded in GET /api/metrics rateLimiters', async (t
   assert.ok(rejected >= 1, 'expected at least one rejection to exercise the metrics path');
 
   const metrics = await api.get('/api/metrics');
-  assert.equal(metrics.body.sinceRestart.rateLimiters.gameSearch, rejected);
-  assert.equal(metrics.body.lastHour.rateLimiters.gameSearch, rejected);
+  assert.equal(metrics.body.sinceRestart.limiterTrips.gameSearch, rejected);
+  assert.equal(metrics.body.lastHour.limiterTrips.gameSearch, rejected);
 });
