@@ -71,6 +71,8 @@ Baseline for these items (2026-10-28, a 1196-game account, warm cache, real dev 
 - **C1 · minor · M** — dependency updates wait on a manual `dependency-audit` run. Dependabot or Renovate could open them, since CI (`.github/workflows/ci.yml`) runs `check` and the e2e suite on PRs, but their PRs lack the `CHANGELOG.md` entry the pre-commit hook requires (CI doesn't check it) and skip `npm run build`, so each still needs a local pass through dependency-audit's Applying.
 - **C190 · minor · M** — a shared `?f=` or compare link with many account sources fires all their `/api/common-games` calls at once (`resolveListWithSources`, `public/listResolve.ts:152`): past `SEARCH_RATE_LIMIT_MAX` they 429, the whole list fails, and the viewer's search budget is spent for a minute. Dedupe and cap sources at decode with a clear message, or resolve with bounded concurrency.
 - **C200 · minor · S** — an achievements rarity call refused by the client share (`server.js:1029`) only sets `rarityFailed`, so the panel shows the generic rarity failure, not the share message `achievementsRefusal` (`public/panelData.ts`) shows on a 429. Rethrow on `isClientBudgetExhausted` so the route answers 429.
+- **C286 · minor · S** — inbound errors leave no history: `daily` (`lib/metrics.js`) persists outbound statuses only, so a burst of 5xx on a route vanishes at the next restart. Persist inbound status classes per day and route in `metrics_daily` too.
+- **C287 · minor · M** — `daily` keeps no latency, so the day an upstream started slowing down before it erred can't be dated once `sinceRestart` resets. Persist a per-day latency bucket count per group and label, read as p50/p95.
 
 ## Compliance
 
@@ -78,6 +80,7 @@ Baseline for these items (2026-10-28, a 1196-game account, warm cache, real dev 
 - **C271 · minor · S** — no `robots.txt`, so a crawler that runs JavaScript and follows links can open `?u=` pages and drive Steam requests through the app. `Disallow: /lists/`, after checking that WhatsApp's and Slack's preview fetchers ignore it.
 - **C221 · minor · S** — `getProtonDbStatus` is called for every appid (`server.js:737`), DLC, soundtracks and hardware included; the cache holds `null` for all 49 such rows, so ~2% of calls to an undocumented upstream are certain misses. Chain it off the meta lookup like HLTB and skip non-played types — once confirmed ProtonDB never has reports for them (inferred from the cache), recorded in integrations.md.
 - **C40 · minor · S** — players `GetPlayerSummaries` omits are never cached (`lib/steam.js` `fetchPlayerBatch`), so a deleted or invalid account in a friends list is re-requested on every load. Cache the omission briefly once it's confirmed Steam omits only ids that really don't exist (not transiently); record that in integrations.md.
+- **C288 · minor · M** — `daily` shows 429 storms the pacing didn't prevent: HLTB `search` on 2026-10-23 and 10-26, Steam `getAppDetails` on 10-26 despite `STORE_DETAILS_MAX_PER_5_MIN`. Find what drove them (one large cold load, several clients, retries) from `daily` and the logs, then tighten the pacing or the cap.
 
 ## Tests
 
