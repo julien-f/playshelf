@@ -4,10 +4,13 @@ Outbound-request metrics, budgets, and the warnings the app logs on its own. Cac
 
 ## GET /api/metrics
 
-No auth, same trust level as `GET /api/health`. In memory, reset on restart, except `cacheEntries` and `daily`, the only history beyond the trailing hour. Keys in reading order: what's live per upstream, the server, the two windows, history.
+No auth, same trust level as `GET /api/health`. In memory, reset on restart, except `cacheEntries` and `daily`, the only history beyond the trailing hour. Keys in reading order: what's wrong now, what's live per upstream, the server, the two windows, history. Is all quiet: `curl -s <host>/api/metrics | jq .alerts` (empty).
+
+- Locally, `dev:mock` answers `e2e mock: no fixture for GET /api/metrics`: it mocks every `/api` route. Run the real server on a scratch database instead: `PORT=<free> DB_FILE=<scratch>.sqlite STEAM_API_KEY=x node server.js` (no upstream call is made until a route needs one).
 
 ```
 { since, version, commit,
+  alerts:    [{ level: 'warn' | 'info', where, message, firstAt?, lastAt? }],
   upstreams: { [group]: { budget:      { hourUsed, hourTopClient, dayUsed, dayTopClient },
                           breaker?:    { blockedUntil, tripCount, consecutive403s },
                           semaphores?: { [name]: { active, queued, maxQueueSeen, rejected } },
@@ -16,8 +19,10 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
   budgetCeilings: { hour, day, clientSharePercent },
   server:         { openStreams, process: { rssMb, maxRssMb, heapUsedMb, externalMb, dbMb, dbWalMb },
                     cacheEntries: { [group]: count } },
-  lastHour: { outbound:     { [group]: { [label]: { requests, statuses, networkErrors, avgMs, p50Ms, p95Ms, maxMs } } },
-              inbound:      { [route]: { requests, statusClasses, aborted, avgBytes, avgMs, p50Ms, p95Ms, maxMs } },
+  lastHour: { outbound:     { [group]: { [label]: { requests, statuses, networkErrors, unexpected,
+                                                    firstUnexpectedAt?, lastUnexpectedAt?, avgMs, p50Ms, p95Ms, maxMs } } },
+              inbound:      { [route]: { requests, statusClasses, firstServerErrorAt?, lastServerErrorAt?, aborted, avgBytes,
+                                         avgMs, p50Ms, p95Ms, maxMs } },
               limiterTrips: { [name]: count },
               dedupHits:    { [name]: count },
               cache:        { [group]: { hits, misses, forced } },
@@ -33,11 +38,19 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 - **Windows**: every windowed signal nests under `lastHour`/`sinceRestart`; nothing nests a window of its own. `lastHour` sums 60 per-minute buckets, so an event leaves it 59–60 minutes after it happened: bounded memory and O(1) recording whatever the traffic. A name with no event in a window is absent rather than zeroed, so the first hour after a start reads the same in both.
 - **`upstreams`**: every live state per outbound group, so one object answers "is this upstream OK". Every group that `createTrackedFetch` bound is listed from startup; `semaphores`/`windows` gain their group at creation (`createSemaphore`/`createWindow`'s `group`, `lib/upstream.js` `getUpstreamStats`).
 
+### Alerts — `alerts`
+
+- `getAlerts` (`lib/metrics.js`, thresholds in its `ALERT`), computed at each read from the same body: warnings first, then information. `firstAt`/`lastAt` date a windowed one.
+- **warn**: ≥ 3 unexpected answers on one label in the last hour (`hltb.search`); a 5xx on an inbound route; a breaker open now; a budget at ≥ 80 % of a ceiling; an event-loop delay ≥ 1 s outside the first 2 minutes after start (loading the cache blocks it then).
+- **info**: a breaker that tripped in the last hour and closed again; rate-limiter trips; loads that hit a client's budget share (`streams.limited`); a semaphore's `rejected` (lifetime, so not a warning); a start less than an hour ago (`lastHour` partial, a crash loop shows).
+- Not from `daily`: history, not "now"; read it by day.
+
 ### Outbound — `outbound`
 
 - Every outbound call goes through `trackedFetch` (`lib/metrics.js`), a drop-in for `fetch`. Modules reach it only through `createTrackedFetch(group)`, bound once per group at load; it returns `(label, url, opts)` and registers the group, which is how `upstreams` lists it from startup.
 - `group` is the service or routing boundary: `steam-store` (`fetchStoreApi`/`storeLimit`), `steam-browse` (`tagLimit`), `steam-reviews` (`GetAppReviews`), `steam-api` (the other `api.steampowered.com` calls, keyed or not, untrusted `GetWishlist` included), `steam-openid`, `protondb`, `hltb`, `itad`, `fanatical`, `gamepass`. `label` is the calling function, so one operation stalling shows apart from its siblings.
-- `statuses` is a `{ [status]: count }` map, deliberately not one "errors" count: several non-2xx answers are expected outcomes (403 = private profile or no stats on achievements, 404 = no ProtonDB reports; see [integrations.md](integrations.md)). Read it against what's expected for that label.
+- `statuses` is a `{ [status]: count }` map, deliberately not one "errors" count: several non-2xx answers are expected outcomes (403 = private profile or no stats on achievements, 404 = no ProtonDB reports).
+- `unexpected`: network errors plus 4xx/5xx the call didn't declare as an answer. Each call declares its own (`apiFetch(label, url, { expected: [401] })`, stripped before `fetch`), next to the code that reads them: grep `expected: [` in `lib/`. Status alone can't always decide: getGameSchema's 403 is "no stats" with a JSON body but a rejected key with HTML; it's declared, since a rejected key also fails getOwnedGames, which isn't. `firstUnexpectedAt`/`lastUnexpectedAt` date them.
 - `networkErrors`: `fetch()` itself threw (timeout, DNS, abort); never an expected outcome.
 - A call counts when it ends, in both windows: one in flight is in neither.
 - Latencies cover every outcome, so an upstream slowing down before it errors shows here first.
@@ -46,7 +59,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 ### Inbound — `inbound`
 
 - Every request, recorded at `close` by a middleware in `server.js`, keyed `<METHOD> <route pattern>` (`GET /api/game/:appid`), never the filled URL; `(static)` for static files, `(no route)` for 404s, `GET (app shell)` for the page every client route serves.
-- `statusClasses` (`2xx`, `4xx`…); `aborted`: the client left before the reply ended; one that left before any reply is in no status class. The details stream counts to its end, unlike morgan's time, which stops at the headers.
+- `statusClasses` (`2xx`, `4xx`…), `firstServerErrorAt`/`lastServerErrorAt` dating any `5xx`; `aborted`: the client left before the reply ended; one that left before any reply is in no status class. The details stream counts to its end, unlike morgan's time, which stops at the headers.
 - `avgBytes` over replies with a `Content-Length` only: the details stream is chunked (its size: [code-backlog.md](code-backlog.md#performance)'s baseline).
 
 ### Inbound — `limiterTrips`

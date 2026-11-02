@@ -9,6 +9,7 @@ process.env.DB_FILE = '';
 
 const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
+const { getMetrics } = require('../lib/metrics');
 const {
   peekSteamId,
   resolveSteamId,
@@ -687,9 +688,12 @@ test('getFriendList: caches result — second call skips fetch', async (t) => {
 test('getFriendList: returns null (does not throw) on 401 — private friends list', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 401 }));
+  const unexpected = () => getMetrics().sinceRestart.outbound['steam-api']?.getFriendList?.unexpected ?? 0;
+  const before = unexpected();
 
   const friends = await getFriendList('76561198000000003');
   assert.equal(friends, null);
+  assert.equal(unexpected(), before, 'a declared 401 is an answer, not an alert');
 });
 
 test('getFriendList: throws with isUpstream when Steam API returns non-ok', async (t) => {

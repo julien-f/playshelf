@@ -14,6 +14,7 @@ const {
   recordRequest,
   recordStream,
   getMetrics,
+  getAlerts,
   _reset,
 } = require('../lib/metrics');
 const { db } = require('../lib/db');
@@ -551,5 +552,104 @@ test('recordStream: with no cold stream, cold is 0 and every timing null', () =>
       avgDoneMs: null,
       maxDoneMs: null,
     },
+  );
+});
+
+// ── alerts ────────────────────────────────────────────────────────────────────
+
+test('trackedFetch: an expected status is not unexpected; another 4xx/5xx and network errors are, with when', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-02T10:00:00Z') });
+  let status = 403;
+  const seen = [];
+  t.mock.method(globalThis, 'fetch', async (url, opts) => {
+    seen.push(opts);
+    if (status === 'network') throw new TypeError('fetch failed');
+    return { ok: status < 400, status };
+  });
+  const call = createTrackedFetch('steam-api');
+  await call('getPlayerAchievements', 'u', { expected: [403] });
+  assert.equal(seen[0].expected, undefined, 'never sent to fetch');
+  status = 500;
+  await call('getPlayerAchievements', 'u', { expected: [403] });
+  t.mock.timers.tick(60 * 1000);
+  status = 'network';
+  await assert.rejects(() => call('getPlayerAchievements', 'u', { expected: [403] }));
+  const entry = getMetrics().lastHour.outbound['steam-api'].getPlayerAchievements;
+  assert.equal(entry.unexpected, 2);
+  assert.equal(entry.firstUnexpectedAt, '2026-11-02T10:00:00.000Z');
+  assert.equal(entry.lastUnexpectedAt, '2026-11-02T10:01:00.000Z');
+  assert.deepEqual(getMetrics().sinceRestart.outbound['steam-api'].getPlayerAchievements, entry);
+});
+
+const NOW = Date.parse('2026-11-02T12:00:00Z');
+const quiet = () => ({
+  since: NOW - 2 * 60 * 60 * 1000,
+  upstreams: {},
+  budgetCeilings: { hour: 100, day: 1000, clientSharePercent: 50 },
+  lastHour: { outbound: {}, inbound: {}, limiterTrips: {} },
+});
+
+test('getAlerts: nothing to say about a quiet server', () => {
+  assert.deepEqual(getAlerts(quiet(), NOW), []);
+});
+
+test('getAlerts: warns from 3 unexpected answers on one label in the hour, with when', () => {
+  const m = quiet();
+  m.lastHour.outbound = {
+    hltb: {
+      search: {
+        statuses: { 200: 5, 429: 3 },
+        networkErrors: 0,
+        unexpected: 3,
+        firstUnexpectedAt: 'a',
+        lastUnexpectedAt: 'b',
+      },
+    },
+    fanatical: { getPickAndMix: { statuses: {}, networkErrors: 2, unexpected: 2 } },
+  };
+  assert.deepEqual(getAlerts(m, NOW), [
+    {
+      level: 'warn',
+      where: 'hltb.search',
+      message: '3 unexpected answers in the last hour (429 × 3)',
+      firstAt: 'a',
+      lastAt: 'b',
+    },
+  ]);
+});
+
+test('getAlerts: warns on inbound 5xx, an open breaker, a budget at 80 %, and a late event-loop block', () => {
+  const m = quiet();
+  m.lastHour.inbound = {
+    'GET /api/x': { statusClasses: { '2xx': 9, '5xx': 1 }, firstServerErrorAt: 'a', lastServerErrorAt: 'a' },
+  };
+  m.upstreams = {
+    'steam-store': { budget: { hourUsed: 80, dayUsed: 80 }, breaker: { blockedUntil: NOW + 1000, tripCount: 1 } },
+    hltb: { budget: { hourUsed: 0, dayUsed: 0 }, breaker: { blockedUntil: NOW - 10 * 60 * 1000, tripCount: 1 } },
+  };
+  m.lastHour.eventLoop = { maxDelayMs: 1500, maxDelayAt: new Date(NOW - 60 * 1000).toISOString() };
+  assert.deepEqual(
+    getAlerts(m, NOW).map(({ level, where }) => `${level} ${where}`),
+    ['warn GET /api/x', 'warn steam-store.breaker', 'warn steam-store.budget', 'warn eventLoop', 'info hltb.breaker'],
+  );
+});
+
+test('getAlerts: no budget warning with budgets disabled, no event-loop warning at startup', () => {
+  const m = quiet();
+  m.budgetCeilings = { hour: null, day: null, clientSharePercent: null };
+  m.upstreams = { grp: { budget: { hourUsed: 10_000, dayUsed: 10_000 } } };
+  m.lastHour.eventLoop = { maxDelayMs: 1900, maxDelayAt: new Date(m.since + 60 * 1000).toISOString() };
+  assert.deepEqual(getAlerts(m, NOW), []);
+});
+
+test('getAlerts: informs on limiter trips, limited streams, a rejecting semaphore and a recent start', () => {
+  const m = quiet();
+  m.since = NOW - 10 * 60 * 1000;
+  m.lastHour.limiterTrips = { details: 4 };
+  m.lastHour.streams = { limited: 1 };
+  m.upstreams = { hltb: { budget: { hourUsed: 0, dayUsed: 0 }, semaphores: { hltb: { rejected: 2 } } } };
+  assert.deepEqual(
+    getAlerts(m, NOW).map(({ level, where }) => `${level} ${where}`),
+    ['info hltb.semaphores.hltb', 'info limiter details', 'info streams', 'info server'],
   );
 });
