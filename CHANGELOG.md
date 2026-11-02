@@ -87,6 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Claude Code sessions are stopped from killing processes by name and pointed to the server scripts' down command.
 - A bundle from IsThereAnyDeal with a mistyped field is repaired before caching, with a warning naming the field
 - Split the frontend developer doc into the core, the game table, and the panel and lightbox
+- `node scripts/accounts.js` lists the Steam accounts with a cached profile and those who signed in
 
 ## [0.12.0] - 2026-10-30
 
