@@ -477,7 +477,7 @@ test('GET /api/metrics: times inbound requests per route pattern, never per URL'
     `the router error recorded: ${Object.keys(routes())}`,
   );
   assert.equal(routes()['PUT /:key'], undefined);
-  await api.get('/style.css').expect(200);
+  await api.get('/present.html').expect(200); // in both public/ and dist/, whichever is served
   await until(() => routes()['(static)'], 'a static file recorded apart from 404s');
 });
 
