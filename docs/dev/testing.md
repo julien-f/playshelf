@@ -58,6 +58,7 @@ Each rule comes from a flake it fixed; add one when a fix teaches something new.
   - Each run: a fresh Chromium context at the code backlog's phone profile (390×844, CPU ×4, 1.6 Mbps / 150 ms, through CDP), then Owned → Home → Owned in the app.
   - It prints each metric's median and range against the last recorded run, flagging a change only when the ranges don't overlap and the medians differ by 5% or more, and records the run in `.git/dev-metrics/perf.jsonl`.
   - Use it for a performance change's before/after, and put both in the commit body. On demand only: runner noise keeps it out of checks, hooks and CI; compare runs from the same machine.
+- Recalibrating `e2e/bigLibrary.ts` after a change to the stream's payload: copy `db.sqlite` to a scratch file, run `server.js` on it with `node --require <preload>`, a preload setting `globalThis.fetch` to one that throws (no upstream traffic), POST cached appids (`meta:` keys in `cache_meta`) to the stream with and without `Accept-Encoding: gzip`, and divide each size by the game count; `test/mockApi.test.js` holds the target. Delete the copy after.
 - What it can't show:
   - Server and upstream time (the mock answers at once; read `GET /api/metrics`), so not a server-side cache change.
   - A cold load's split `fast`/`store` events: the mock sends one event per game, as a warm cache does, so `list:listed` ≈ `list:done`.
