@@ -18,6 +18,7 @@ const { createDedup } = require('./lib/dedup');
 const {
   getMetrics,
   recordLimiterTrip,
+  recordRequest,
   recordStream,
   runAsClient,
   startEventLoopSampling,
@@ -275,6 +276,19 @@ morgan.token('url', (req) => {
   return /^\/auth\/steam\/callback\/?$/i.test(path) ? path : url;
 });
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
+// At `close`, so the details stream counts to its end and a client leaving early shows as aborted.
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('close', () =>
+    recordRequest(req.route ? `${req.method} ${req.baseUrl}${req.route.path}` : '(no route)', {
+      status: res.statusCode,
+      ms: Date.now() - start,
+      bytes: Number(res.getHeader('content-length')) || 0,
+      aborted: !res.writableFinished,
+    }),
+  );
+  next();
+});
 // Express 5 leaves req.body undefined when no JSON body was parsed.
 app.use((req, _res, next) => {
   req.body ??= {};

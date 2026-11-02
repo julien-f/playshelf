@@ -453,6 +453,23 @@ test('GET /api/metrics: 200 with a since timestamp and per-group/label request c
   assert.deepEqual(Object.keys(res.body.circuitBreakers).sort(), ['hltb', 'protondb', 'steam-store']);
 });
 
+test('GET /api/metrics: times inbound requests per route pattern, never per URL', async (t) => {
+  const agent = await loginAs(t, '76561198000000207');
+  await agent.put('/api/me/prefs/region').send({ value: 1, updatedAt: 1000 }).expect(200);
+  await api.get('/api/no-such-route-123').expect(404);
+  const routes = () => getMetrics().sinceRestart.routes;
+  await until(() => routes()['PUT /api/me/prefs/:key'] && routes()['(no route)'], 'both requests recorded');
+  const entry = routes()['PUT /api/me/prefs/:key'];
+  assert.ok(entry.requests >= 1);
+  assert.ok(entry.statusCounts['2xx'] >= 1);
+  assert.equal(entry.aborted, 0);
+  for (const key of ['avgLatencyMs', 'p50LatencyMs', 'p95LatencyMs', 'maxLatencyMs', 'avgBytes'])
+    assert.equal(typeof entry[key], 'number', key);
+  assert.ok(routes()['(no route)'].statusCounts['4xx'] >= 1);
+  assert.ok(!JSON.stringify(routes()).includes('no-such-route-123'));
+  assert.ok(getMetrics().lastHour.routes['PUT /api/me/prefs/:key'].requests >= 1);
+});
+
 test('GET /api/metrics: includes semaphore, cache hit/entry, rate-limiter, and dedup stats', async (t) => {
   _reset();
   const GAME = { appid: 400, name: 'Portal' };

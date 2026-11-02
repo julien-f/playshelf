@@ -184,6 +184,27 @@ test('getMetrics: sinceRestart/lastHour report avg/max latency per label', async
   }
 });
 
+test('getMetrics: p50/p95 latency per label are bucket upper bounds, capped by the largest seen', async (t) => {
+  const durations = [10, 20, 30, 40, 3000];
+  let i = 0;
+  const restore = globalThis.fetch;
+  t.mock.timers.enable({ apis: ['Date'] });
+  globalThis.fetch = async () => {
+    t.mock.timers.tick(durations[i++]);
+    return { ok: true, status: 200 };
+  };
+  try {
+    for (let n = 0; n < durations.length; n++) await createTrackedFetch('hltb')('search', 'u');
+    const { sinceRestart, lastHour } = getMetrics();
+    for (const entry of [sinceRestart.groups.hltb.search, lastHour.groups.hltb.search]) {
+      assert.equal(entry.p50LatencyMs, 50);
+      assert.equal(entry.p95LatencyMs, 3000);
+    }
+  } finally {
+    globalThis.fetch = restore;
+  }
+});
+
 test('getMetrics: a thrown/network failure still counts toward latency (not just successes)', async (t) => {
   const restore = globalThis.fetch;
   t.mock.timers.enable({ apis: ['Date'] });

@@ -8,7 +8,10 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 
 ```
 { since,
-  sinceRestart: { groups:       { [group]: { [label]: { requests, statusCounts, networkErrors, avgLatencyMs, maxLatencyMs } } },
+  sinceRestart: { groups:       { [group]: { [label]: { requests, statusCounts, networkErrors,
+                                                        avgLatencyMs, p50LatencyMs, p95LatencyMs, maxLatencyMs } } },
+                  routes:       { [route]: { requests, statusCounts, aborted, avgBytes,
+                                             avgLatencyMs, p50LatencyMs, p95LatencyMs, maxLatencyMs } },
                   rateLimiters: { [name]: count },
                   dedupHits:    { [name]: count },
                   cacheHits:    { [group]: { hits, misses, forced } },
@@ -36,7 +39,14 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 - `group` is the service or routing boundary: `steam-store` (`fetchStoreApi`/`storeLimit`), `steam-browse` (`tagLimit`), `steam-reviews` (`GetAppReviews`), `steam-api` (the other `api.steampowered.com` calls, keyed or not, untrusted `GetWishlist` included), `steam-openid`, `protondb`, `hltb`, `itad`, `fanatical`, `gamepass`. `label` is the calling function, so one operation stalling shows apart from its siblings.
 - `statusCounts` is a `{ [status]: count }` map, deliberately not one "errors" count: several non-2xx answers are expected outcomes (403 = private profile or no stats on achievements, 404 = no ProtonDB reports; see [integrations.md](integrations.md)). Read it against what's expected for that label.
 - `networkErrors`: `fetch()` itself threw (timeout, DNS, abort); never an expected outcome.
-- `avgLatencyMs`/`maxLatencyMs` cover every outcome, so an upstream slowing down before it errors shows here first.
+- Latencies cover every outcome, so an upstream slowing down before it errors shows here first.
+- `p50LatencyMs`/`p95LatencyMs` (also on `routes`): the upper bound of the fixed log-scale bucket (25 ms … 10 s) holding that quantile, capped by `maxLatencyMs`; `null` with no call. Read them over the average: hit/miss times are bimodal, and one timeout pins the max at 10 s.
+
+### Inbound — `routes`
+
+- Every request, recorded at `close` by a middleware in `server.js`, keyed `<METHOD> <route pattern>` (`GET /api/game/:appid`), never the filled URL; `(no route)` for static files and 404s.
+- `statusCounts` by class (`2xx`, `4xx`…); `aborted`: the client left before the reply ended. The details stream counts to its end, unlike morgan's time, which stops at the headers.
+- `avgBytes` over replies with a `Content-Length` only: the details stream is chunked (its size: [code-backlog.md](code-backlog.md#performance)'s baseline).
 
 ### Inbound — `rateLimiters`
 
