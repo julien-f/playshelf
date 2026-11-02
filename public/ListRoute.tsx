@@ -1576,7 +1576,6 @@ export default function ListRoute() {
       const now = Date.now();
       // Rows fill with the fast part; once all are in, what's left is the store part's columns.
       const part = answered.fast < total ? 'fast' : 'store';
-      if (part === 'store') measureLoadStep('list:listed');
       if (part !== samplePart) [samplePart, loadSamples] = [part, []];
       const done = answered[part];
       loadSamples = [...loadSamples.filter((s) => s.t >= now - 30_000), { t: now, loaded: done }];
@@ -1961,6 +1960,8 @@ export default function ListRoute() {
           const parts = event.part ? [event.part] : (['fast', 'store'] as const);
           const wasLoading = unanswered.fast.has(event.appid) || unanswered.store.has(event.appid);
           for (const part of parts) if (unanswered[part].delete(event.appid)) answered[part]++;
+          // On receipt, not at a status update: one flush can bring the last fast and store parts together.
+          if (answered.fast === total) measureLoadStep('list:listed');
           detailBatcher.push(event, gen);
           if (wasLoading && !unanswered.fast.has(event.appid) && !unanswered.store.has(event.appid)) loaded++;
         }
