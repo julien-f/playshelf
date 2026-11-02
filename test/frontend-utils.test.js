@@ -23,6 +23,8 @@ const {
   isTextEntry,
   detailsPending,
   mediaPending,
+  noStorePage,
+  steamAppAsset,
 } = require('../public/utils.ts');
 
 // ── normalizeInput ────────────────────────────────────────────────────────────
@@ -466,6 +468,21 @@ test('detailsPending: media may still come until they load, fail, or there is no
   assert.equal(detailsPending({ details: details(filled) }), false);
   assert.equal(detailsPending({ details: details(null) }), false);
   assert.equal(detailsPending({ details: details(null), failedSources: ['meta'] }), true);
+});
+
+test('noStorePage: only once details are in and the store answered with no page', () => {
+  const details = (meta) => ({ rating: null, hltb: null, meta, tags: null, demo: null, protondb: null });
+  assert.equal(noStorePage({ details: null }), false);
+  assert.equal(noStorePage({ details: details({ name: 'Hades' }) }), false);
+  assert.equal(noStorePage({ details: details(null), failedSources: ['meta'] }), false);
+  assert.equal(noStorePage({ details: details(null), failedSources: [] }), true);
+});
+
+test('steamAppAsset: the conventional CDN path, kept for a delisted game', () => {
+  assert.equal(
+    steamAppAsset(28050, 'capsule_231x87.jpg'),
+    'https://cdn.akamai.steamstatic.com/steam/apps/28050/capsule_231x87.jpg',
+  );
 });
 
 // What a wait on media can end on: a failed store page brings none until ↻, so it isn't waited for.

@@ -16,6 +16,7 @@ import {
   safeHref,
   fmtReleaseDate,
   MEDIA_FAILED,
+  noStorePage,
 } from './utils.ts';
 import { openLightbox, openLightboxFrom, lightboxShot, lightboxOpen } from './lightbox.tsx';
 import { isMorphUpdating, loadedWhen, morph } from './viewTransition.ts';
@@ -2815,6 +2816,9 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
       <GlanceGrid game={g} />
       <Show when={!g.loading}>
         <PriceSection game={g} />
+      </Show>
+      <Show when={noStorePage(g)}>
+        <p class="panel-no-data">No Steam store page: delisted or unavailable, so no description, genres or media.</p>
       </Show>
       <Show when={description()}>
         <p class="panel-desc" id="panel-desc">

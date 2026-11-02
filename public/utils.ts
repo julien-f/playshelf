@@ -438,6 +438,15 @@ export function focusGameRow(root: ParentNode | null | undefined, appid: number)
   return true;
 }
 
+// An app's art at Steam's conventional CDN path, which outlives its store page (a delisted game).
+export const steamAppAsset = (appid: number | string, file: string) =>
+  `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/${file}`;
+
+// Details are in and the store answered that it has no page for this game (delisted, region-locked…).
+export function noStorePage(game: Pick<Game, 'details' | 'failedSources'>): boolean {
+  return !!game.details && !game.details.meta && !game.failedSources?.includes('meta');
+}
+
 // What a /api/game-details reply sets on a game outside a list's table (ListRoute's rows: applyDetailsEvent).
 export function detailsFields(
   data: GameDetailsReply,

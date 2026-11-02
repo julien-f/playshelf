@@ -26,7 +26,7 @@ import { setBaseTitle } from './pageTitle.ts';
 import { panelOpen, panelClose, isPanelOpen, getPanelGame } from './panel.tsx';
 import { isLightboxOpen } from './lightbox.tsx';
 import { withAccountParam } from './urlState.ts';
-import { computeSteamdbRating, detailsFields, fetchJson, isTextEntry, scoreColor } from './utils.ts';
+import { computeSteamdbRating, detailsFields, fetchJson, isTextEntry, scoreColor, steamAppAsset } from './utils.ts';
 import { registerRouteHandlers } from './AppShell.tsx';
 import Kbd from './Kbd.tsx';
 import type { Game, GameDetails, GameDetailsReply } from './types.ts';
@@ -34,10 +34,6 @@ import type { Game, GameDetails, GameDetailsReply } from './types.ts';
 const MAX_UNDO = 100;
 // Tie, Skip and Undo's keys, which wait while the details panel is open.
 const ANSWER_KEYS = new Set(['ArrowDown', '=', 's', 'S', 'z', 'Z', 'Backspace']);
-
-function headerImage(appid: number): string {
-  return `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/header.jpg`;
-}
 
 export default function RankRoute() {
   const params = useParams();
@@ -305,7 +301,7 @@ export default function RankRoute() {
             } else respond(excludeArmed() ? `exclude-${side}` : side);
           }}
         >
-          <img src={headerImage(appid)} alt="" width="460" height="215" loading="eager" />
+          <img src={steamAppAsset(appid, 'header.jpg')} alt="" width="460" height="215" loading="eager" />
           <span class="rank-card-name">
             {meta()?.name || `App ${appid}`}
             <Show when={rating() != null}>

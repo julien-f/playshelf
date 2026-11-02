@@ -125,6 +125,7 @@ import {
   fmtLocalDate,
   smoothScroll,
   refusalMessage,
+  steamAppAsset,
 } from './utils.ts';
 import {
   shareTableView,
@@ -770,8 +771,9 @@ function applyDetailsEvent(row: Game, event: DetailsEvent) {
   row.detailsFetchedAt = event.fetchedAt; // absent on a row the stream never answered: no age
   row.detailsFetchedAts = event.fetchedAts ?? null;
   row.failedSources = event.failed ?? [];
-  row.capsule = event.meta?.capsule ?? null;
-  row.thumb = event.meta?.thumb ?? null;
+  // No store metadata: guess the CDN art, as lib/steam.js's extractAppDetails does for a missing capsule.
+  row.capsule = event.meta ? event.meta.capsule : steamAppAsset(row.appid, 'capsule_sm_120.jpg');
+  row.thumb = event.meta ? event.meta.thumb : steamAppAsset(row.appid, 'capsule_231x87.jpg');
   if (!row.name) row.name = event.meta?.name || row.bundlePackage?.title || '';
   row.score = event.rating?.score ?? null;
   row.positivePct =

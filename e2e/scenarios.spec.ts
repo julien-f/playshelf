@@ -4725,6 +4725,38 @@ test("D2 edge: a link's screenshot of a game with no store page isn't opened on 
   expect(metaAsked).not.toContain('/api/game-meta/1145360'); // no store page, no media to ask for
 });
 
+test('D2 edge: a game with no store page keeps its CDN thumbnail and the panel says why it is empty', async ({
+  page,
+}) => {
+  await page.route('**/api/game-details/stream', (route) => {
+    const req = route.request();
+    const full = respond(req.method(), new URL(req.url()), req.postData());
+    const body = full.body
+      .split('\n\n')
+      .map((line: string) => {
+        if (!line.startsWith('data: ')) return line;
+        const event = JSON.parse(line.slice(6));
+        return event.appid === 1145360 ? `data: ${JSON.stringify({ ...event, meta: null })}` : line;
+      })
+      .join('\n\n');
+    return route.fulfill({ ...full, body });
+  });
+  // Served, else its load error swaps in the smaller capsule before the check.
+  await page.route('**/1145360/capsule_231x87.jpg', (route) =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="231" height="87"/>',
+    }),
+  );
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  await expect(row(page, 'Hades').locator('.game-thumb')).toHaveAttribute(
+    'src',
+    'https://cdn.akamai.steamstatic.com/steam/apps/1145360/capsule_231x87.jpg',
+  );
+  await expect(page.locator('.panel-no-data', { hasText: 'No Steam store page' })).toBeVisible();
+});
+
 test("D2 edge: a game the details stream refused shows no age, and its link's screenshot waits for ↻", async ({
   page,
 }) => {
