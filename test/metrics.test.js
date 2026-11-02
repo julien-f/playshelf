@@ -512,3 +512,11 @@ test('startEventLoopSampling: records one sample per minute under eventLoop, abs
     stop();
   }
 });
+
+test('getMetrics: a live process snapshot in MB, with no db file sizes for an in-memory database', () => {
+  const { process: proc } = getMetrics();
+  for (const key of ['rssMb', 'maxRssMb', 'heapUsedMb', 'externalMb']) assert.ok(proc[key] > 0, key);
+  assert.ok(proc.maxRssMb >= proc.rssMb - 1);
+  assert.equal(proc.dbMb, null);
+  assert.equal(proc.dbWalMb, null);
+});

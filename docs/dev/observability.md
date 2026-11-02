@@ -22,6 +22,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
                   eventLoop:    { minutes, utilization, maxP99DelayMs, maxDelayMs } },
   lastHour:     { …same shape as sinceRestart… },
   budgets:         { [group]: { hourUsed, hourMax, hourTopClient, dayUsed, dayMax, dayTopClient } },
+  process:         { rssMb, maxRssMb, heapUsedMb, externalMb, dbMb, dbWalMb },
   circuitBreakers: { 'steam-store' | hltb | protondb: { blockedUntil, tripCount, consecutive403s } },
   semaphores:      { store | tag | proton | reviews | hltb | 'itad-info': { active, queued, maxQueueSeen, rejected } },
   windows:         { 'store-details': { max, inWindow, reserved, waiting, maxQueueSeen } },
@@ -31,7 +32,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
   daily:           [{ day, group, label, status, count }] }
 ```
 
-- **Windows**: every windowed signal nests under `sinceRestart`/`lastHour`, always the outermost keys; nothing nests a window of its own. `lastHour` sums 60 per-minute buckets, so an event leaves it 59–60 minutes after it happened: bounded memory and O(1) recording whatever the traffic. Live snapshots (`budgets`, `circuitBreakers`, `semaphores`, `windows`, `heldGames`, `openStreams`, `cacheEntries`) and the persisted `daily` sit outside both. A name with no events yet is absent rather than zeroed.
+- **Windows**: every windowed signal nests under `sinceRestart`/`lastHour`, always the outermost keys; nothing nests a window of its own. `lastHour` sums 60 per-minute buckets, so an event leaves it 59–60 minutes after it happened: bounded memory and O(1) recording whatever the traffic. Live snapshots (`budgets`, `process`, `circuitBreakers`, `semaphores`, `windows`, `heldGames`, `openStreams`, `cacheEntries`) and the persisted `daily` sit outside both. A name with no events yet is absent rather than zeroed.
 
 ### Outbound — `groups`
 
@@ -89,6 +90,7 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
 - `circuitBreakers` (`lib/circuitBreaker.js`; Steam store, HLTB search, ProtonDB): `blockedUntil` (open while in the future; 0 = never tripped), `tripCount` (lifetime, tells "once long ago" from "every 20 minutes"), `consecutive403s` (one more trips it; HLTB also counts a 401 on a fresh token, [integrations.md](integrations.md#hltb--no-npm-package)).
 - `windows` (`lib/upstream.js` `getWindowStats`, one per `createWindow`): `inWindow` sends in the trailing window, `reserved` places taken but not sent, `waiting` queued for one, `maxQueueSeen` (lifetime).
 - `semaphores` (`lib/upstream.js` `getSemaphoreStats`, one per `createSemaphore`): `active`/`queued` now, `maxQueueSeen` (lifetime high-water mark), `rejected` (calls turned away by the `SEMAPHORE_MAX_QUEUE` valve; should stay 0). High latency with low `queued` = slow upstream; high `queued` = our own concurrency cap.
+- `process` (`getProcessStats`, `lib/metrics.js`): memory now (`rssMb`, `heapUsedMb`, `externalMb`), the largest RSS since start (`maxRssMb`), and the size of `db.sqlite` and its WAL (`null` for an in-memory database, or no WAL right after a checkpoint). A heap that only grows across reads is a leak; a WAL that keeps growing, a checkpoint that can't run.
 - `budgets`: current usage per outbound `group`, every one listed from startup (0 used) so the ceilings show before anything spends against them; see below.
 
 ## Outbound budgets
