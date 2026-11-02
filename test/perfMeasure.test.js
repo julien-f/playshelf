@@ -12,12 +12,15 @@ test('perf-measure summarize: median (even counts average the middle two), min a
   assert.deepEqual(summarize([run(40), run(10), run(20), run(30)]).doneMs, { median: 25, min: 10, max: 40 });
 });
 
-test('perf-measure compare: a change counts only when the ranges do not overlap', () => {
+test('perf-measure compare: a change counts only when the ranges do not overlap and it reaches 5%', () => {
   const previous = { stats: { doneMs: { median: 100, min: 90, max: 110 } } };
   assert.equal(only(compare(summarize([run(105), run(120)]), previous), 'doneMs').changed, false);
   const faster = only(compare(summarize([run(70), run(80)]), previous), 'doneMs');
   assert.deepEqual([faster.changed, faster.before], [true, 100]);
   assert.equal(only(compare(summarize([run(70)]), undefined), 'doneMs').before, null);
+  // Steady runs: ranges apart by a few ms, under 5% — noise, not a change.
+  const steady = { stats: { doneMs: { median: 100, min: 99, max: 101 } } };
+  assert.equal(only(compare(summarize([run(103), run(104)]), steady), 'doneMs').changed, false);
 });
 
 test('perf-measure previousRun: the latest successful run with the same profile', () => {

@@ -157,12 +157,17 @@ function summarize(runs) {
 // The latest recorded run with the same profile, to compare against.
 const previousRun = (rows) => rows.filter((r) => r.profile === PROFILE && r.outcome === 'ok').at(-1);
 
-// A change counts only when the two runs' ranges don't overlap; otherwise it's within the noise.
+// A change counts when the two runs' ranges don't overlap (else it's noise) and the medians differ by MIN_CHANGE:
+// CDP throttling makes runs so steady that ranges a few ms apart would flag nothing worth acting on.
+const MIN_CHANGE = 0.05;
 function compare(current, previous) {
   return Object.keys(METRICS).map((key) => {
     const now = current[key];
     const before = previous?.stats?.[key];
-    const changed = before ? now.min > before.max || now.max < before.min : false;
+    const changed =
+      !!before &&
+      (now.min > before.max || now.max < before.min) &&
+      Math.abs(now.median - before.median) >= MIN_CHANGE * before.median;
     return { key, ...now, before: before?.median ?? null, changed };
   });
 }
