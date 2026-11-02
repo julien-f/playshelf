@@ -276,15 +276,18 @@ morgan.token('url', (req) => {
   return /^\/auth\/steam\/callback\/?$/i.test(path) ? path : url;
 });
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
-// A route pattern, never the URL; the app shell's is the one RegExp path, named rather than shown.
-const routeKey = ({ method, baseUrl, route }) =>
-  route ? `${method} ${typeof route.path === 'string' ? baseUrl + route.path : '(app shell)'}` : '(no route)';
+// A route pattern, never the URL; the app shell's is the one RegExp path, named rather than shown. `mountPath`:
+// a router restores `baseUrl` when an error leaves it, before the reply closes.
+function routeKey({ method, baseUrl, mountPath = baseUrl, route }, status) {
+  if (!route) return status < 400 ? '(static)' : '(no route)';
+  return `${method} ${typeof route.path === 'string' ? mountPath + route.path : '(app shell)'}`;
+}
 // At `close`, so the details stream counts to its end and a client leaving early shows as aborted.
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('close', () =>
-    recordRequest(routeKey(req), {
-      status: res.statusCode,
+    recordRequest(routeKey(req, res.statusCode), {
+      status: res.headersSent ? res.statusCode : null,
       ms: Date.now() - start,
       bytes: Number(res.getHeader('content-length')) || 0,
       aborted: !res.writableFinished,
@@ -299,6 +302,10 @@ app.use((req, _res, next) => {
 });
 // Ahead of the global parser: its routes parse their own body, past the 100 KB default and only once signed in.
 const prefsRouter = express.Router();
+prefsRouter.use((req, _res, next) => {
+  req.mountPath = req.baseUrl; // see routeKey
+  next();
+});
 app.use('/api/me/prefs', prefsRouter);
 app.use(express.json());
 // Charges a request's outbound calls to its client's share (chargeBudget); after the body parser, whose stream

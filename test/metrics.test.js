@@ -11,6 +11,7 @@ const {
   recordDedupHit,
   recordCacheEvent,
   startEventLoopSampling,
+  recordRequest,
   getMetrics,
   _reset,
 } = require('../lib/metrics');
@@ -519,4 +520,21 @@ test('getMetrics: a live process snapshot in MB, with no db file sizes for an in
   assert.ok(proc.maxRssMb >= proc.rssMb - 1);
   assert.equal(proc.dbMb, null);
   assert.equal(proc.dbWalMb, null);
+});
+
+test('recordRequest: a route quiet for an hour leaves lastHour, without breaking getMetrics', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-02T10:00:00Z') });
+  recordRequest('GET /api/x', { status: 200, ms: 7, bytes: 10, aborted: false });
+  t.mock.timers.tick(2 * 60 * 60 * 1000);
+  const { sinceRestart, lastHour } = getMetrics();
+  assert.equal(sinceRestart.routes['GET /api/x'].requests, 1);
+  assert.equal(lastHour.routes['GET /api/x'], undefined);
+});
+
+test('recordRequest: a request left before any reply counts as aborted, in no status class', () => {
+  recordRequest('GET /api/x', { status: null, ms: 900, bytes: 0, aborted: true });
+  const entry = getMetrics().sinceRestart.routes['GET /api/x'];
+  assert.deepEqual(entry.statusCounts, {});
+  assert.equal(entry.aborted, 1);
+  assert.equal(entry.maxLatencyMs, 900);
 });

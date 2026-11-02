@@ -470,6 +470,15 @@ test('GET /api/metrics: times inbound requests per route pattern, never per URL'
   assert.ok(getMetrics().lastHour.routes['PUT /api/me/prefs/:key'].requests >= 1);
   await api.get('/lists/owned').expect(200);
   await until(() => routes()['GET (app shell)'], 'the app shell named');
+  // An error leaving a mounted router keeps the mount path in the key.
+  await agent.put('/api/me/prefs/region').set('Content-Type', 'application/json').send('{').expect(400);
+  await until(
+    () => routes()['PUT /api/me/prefs/:key']?.statusCounts['4xx'],
+    `the router error recorded: ${Object.keys(routes())}`,
+  );
+  assert.equal(routes()['PUT /:key'], undefined);
+  await api.get('/style.css').expect(200);
+  await until(() => routes()['(static)'], 'a static file recorded apart from 404s');
 });
 
 test('GET /api/metrics: includes semaphore, cache hit/entry, rate-limiter, and dedup stats', async (t) => {
