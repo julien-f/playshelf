@@ -15,7 +15,7 @@ const rateLimit = require('express-rate-limit');
 
 const { getCached, getCachedAt, isCached, capExpiry, getCacheEntryCounts } = require('./lib/cache');
 const { createDedup } = require('./lib/dedup');
-const { getMetrics, recordLimiterTrip, runAsClient, startedAt } = require('./lib/metrics');
+const { getMetrics, recordLimiterTrip, recordStream, runAsClient, startedAt } = require('./lib/metrics');
 const { getCircuitBreakers } = require('./lib/circuitBreaker');
 const {
   peekSteamId,
@@ -52,8 +52,8 @@ const {
   achievementRarityCacheKey,
   newsCacheKey,
 } = require('./lib/steam');
-const { getSemaphoreStats } = require('./lib/upstream');
-const { getHLTB, hltbCacheKey } = require('./lib/hltb');
+const { getSemaphoreStats, getWindowStats } = require('./lib/upstream');
+const { getHLTB, getHeldGames, hltbCacheKey } = require('./lib/hltb');
 const {
   getBundles,
   bundlesCacheKey,
@@ -556,6 +556,9 @@ app.get('/api/metrics', (_req, res) => {
     ...getMetrics(),
     circuitBreakers: getCircuitBreakers(),
     semaphores: getSemaphoreStats(),
+    windows: getWindowStats(),
+    heldGames: { hltb: getHeldGames() },
+    openStreams: streamsOpen,
     cacheEntries: getCacheEntryCounts(),
   });
 });
@@ -1257,6 +1260,7 @@ app.get('/api/achievements/:appid', achievementsLimit, async (req, res) => {
 // detailsLimit counts a stream once whatever its size, so this caps how many one client can have
 // open at once: otherwise parallel streams of uncached games fill the shared store queue.
 const openStreams = new Map(); // clientKey -> open stream count
+let streamsOpen = 0; // every client's, for GET /api/metrics
 
 app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
   const { games: gameList } = req.body;
@@ -1374,29 +1378,53 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
     demo: null,
     protondb: null,
   };
-  await Promise.all([
-    pool(
-      cachedFirst(validated, FAST_SOURCES).sort((a, b) => whole.has(b) - whole.has(a)),
-      STREAM_CONCURRENCY,
-      (appid) =>
-        whole.has(appid)
-          ? fetchGameDetails(appid)
-          : fetchFastDetails(appid).then((fast) => ({ part: 'fast', ...fast })),
-      (appid) =>
-        whole.has(appid)
-          ? { ...nullFast, meta: null }
-          : { part: 'fast', ...nullFast, failed: Object.keys(FAST_SOURCES) },
-    ),
-    pool(
-      cachedFirst(
-        validated.filter((appid) => !whole.has(appid)),
-        STORE_SOURCES,
+  const loadStart = Date.now();
+  const concurrent = ++streamsOpen;
+  let listedMs;
+  const fastUncached = validated.filter((appid) => !sourcesCached(FAST_SOURCES, appid)).length;
+  const storeUncached = validated.filter((appid) => !sourcesCached(STORE_SOURCES, appid)).length;
+  try {
+    await Promise.all([
+      pool(
+        cachedFirst(validated, FAST_SOURCES).sort((a, b) => whole.has(b) - whole.has(a)),
+        STREAM_CONCURRENCY,
+        (appid) =>
+          whole.has(appid)
+            ? fetchGameDetails(appid)
+            : fetchFastDetails(appid).then((fast) => ({ part: 'fast', ...fast })),
+        (appid) =>
+          whole.has(appid)
+            ? { ...nullFast, meta: null }
+            : { part: 'fast', ...nullFast, failed: Object.keys(FAST_SOURCES) },
+      ).then(() => (listedMs = Date.now() - loadStart)),
+      pool(
+        cachedFirst(
+          validated.filter((appid) => !whole.has(appid)),
+          STORE_SOURCES,
+        ),
+        STREAM_STORE_CONCURRENCY,
+        (appid) => fetchStoreDetails(appid).then((store) => ({ part: 'store', ...store })),
+        () => ({ part: 'store', meta: null, failed: Object.keys(STORE_SOURCES) }),
       ),
-      STREAM_STORE_CONCURRENCY,
-      (appid) => fetchStoreDetails(appid).then((store) => ({ part: 'store', ...store })),
-      () => ({ part: 'store', meta: null, failed: Object.keys(STORE_SOURCES) }),
-    ),
-  ]);
+    ]);
+  } finally {
+    streamsOpen--;
+  }
+  // Timings from loads that ran to the end with something to fetch; one the client left counts apart.
+  const cold = fastUncached + storeUncached > 0;
+  const doneMs = Date.now() - loadStart;
+  recordStream({
+    count: 1,
+    games: validated.length,
+    fastUncached,
+    storeUncached,
+    closedEarly: +closed,
+    closedEarlyCold: +(closed && cold),
+    limited: +limitedSent,
+    concurrentMax: concurrent,
+    ...(cold &&
+      !closed && { cold: 1, listedMsSum: listedMs, listedMsMax: listedMs, doneMsSum: doneMs, doneMsMax: doneMs }),
+  });
 
   send({ done: true });
   if (!res.writableEnded) out.end();

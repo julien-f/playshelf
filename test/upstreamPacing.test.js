@@ -165,3 +165,19 @@ test('createRetryingFetch: each retry of a 429 takes its own place in the window
   await settle();
   assert.equal(calls, 2);
 });
+
+test('createWindow: reports its live state, and the wait of each reservation that had to queue', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const waits = [];
+  const window = createWindow(1, 1000, 'stats-test', (ms) => waits.push(ms));
+  const granted = [];
+  for (let i = 0; i < 3; i++) void window.reserve().then((place) => granted.push(place));
+  await settle();
+  assert.deepEqual(window.getStats(), { max: 1, inWindow: 0, reserved: 1, waiting: 2, maxQueueSeen: 2 });
+  granted[0].send();
+  assert.deepEqual(window.getStats(), { max: 1, inWindow: 1, reserved: 0, waiting: 2, maxQueueSeen: 2 });
+  t.mock.timers.tick(1000);
+  await settle();
+  assert.deepEqual(waits, [1000], 'the first went at once, unrecorded; the second waited a full window');
+  assert.equal(window.getStats().waiting, 1);
+});

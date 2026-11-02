@@ -92,6 +92,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A bundle from IsThereAnyDeal with a mistyped field is repaired before caching, with a warning naming the field
 - Split the frontend developer doc into the core, the game table, and the panel and lightbox
 - `node scripts/accounts.js` lists the Steam accounts with a cached profile and those who signed in
+- GET /api/metrics shows how lists load (timings, uncached games, concurrent loads), the store details cap's waits and HLTB's held lookups
 
 ## [0.12.0] - 2026-10-30
 

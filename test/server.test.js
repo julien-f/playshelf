@@ -24,7 +24,7 @@ const { app } = require('../server');
 const { _reset, setCache, getCachedAt, getCacheEntryCounts } = require('../lib/cache');
 const { db } = require('../lib/db');
 const { PREFS_MAX_BYTES, SYNCED_PREF_KEYS, getUserPrefs, setUserPref } = require('../lib/auth');
-const { _resetAuth } = require('../lib/hltb');
+const { _resetAuth, getHLTB } = require('../lib/hltb');
 const { _resetTagNameMap } = require('../lib/steam');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
 const { SESSION_TTL_MS, MISS_CACHE_TTL_MS } = require('../lib/config');
@@ -485,6 +485,56 @@ test('GET /api/metrics: includes semaphore, cache hit/entry, rate-limiter, and d
   // Two accounts resolved in the same POST /api/common-games share the 'steam' dedup instance
   // for anything they both trigger concurrently — not asserted on an exact count here (that's
   // covered by lib/dedup.js's own unit tests), just that the field is wired through.
+});
+
+test('GET /api/metrics: a details stream records how its list loaded', async (t) => {
+  _reset();
+  _resetAuth();
+  setCache('rating:1001', { total_reviews: 10, total_positive: 9, review_score_desc: 'Positive' });
+  setCache('hltb:1001', []);
+  setCache('meta:1001', { name: 'Cached' });
+  setCache('browse:1001', { tagids: TAG_IDS });
+  setCache('protondb:1001', null);
+  setCache('tagnames:all', TAG_NAME_MAP);
+  t.mock.method(globalThis, 'fetch', makeDetailsFetch());
+  const server = app.listen(0);
+  t.after(() => new Promise((r) => server.close(r)));
+  await new Promise((r) => server.once('listening', r));
+
+  await ssePost(server.address().port, '/api/game-details/stream', { games: [{ appid: 1001 }] });
+  let { body } = await api.get('/api/metrics');
+  assert.equal(body.sinceRestart.streams.count, 1);
+  assert.equal(body.sinceRestart.streams.cold, undefined, 'a cached list adds no timing');
+  assert.equal(body.openStreams, 0);
+
+  await ssePost(server.address().port, '/api/game-details/stream', { games: [{ appid: 1001 }, { appid: 700 }] });
+  ({ body } = await api.get('/api/metrics'));
+  const streams = body.lastHour.streams;
+  assert.equal(streams.count, 2);
+  assert.equal(streams.games, 3);
+  assert.equal(streams.fastUncached, 1);
+  assert.equal(streams.storeUncached, 1);
+  assert.equal(streams.cold, 1);
+  assert.equal(streams.closedEarly, 0);
+  assert.equal(streams.concurrentMax, 1);
+  assert.equal(typeof streams.avgListedMs, 'number');
+  assert.ok(streams.maxDoneMs >= streams.maxListedMs);
+});
+
+test('GET /api/metrics: counts HLTB lookups its failed-lookup hold answered', async (t) => {
+  _reset();
+  _resetAuth();
+  t.mock.method(console, 'warn', () => {});
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('search/site/init'))
+      return { ok: true, json: async () => ({ token: 't', hpKey: 'k', hpVal: 'v' }) };
+    return { ok: false, status: 503 };
+  });
+  await getHLTB(5, 'Portal').catch(() => {});
+  await getHLTB(5, 'Portal').catch(() => {});
+  const { body } = await api.get('/api/metrics');
+  assert.equal(body.lastHour.heldLookups.hltb, 1);
+  assert.equal(body.heldGames.hltb, 1);
 });
 
 // ── POST /api/common-games — input validation ─────────────────────────────────
