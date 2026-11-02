@@ -20,10 +20,12 @@
 //   creator-capped a developer's/publisher's list is Steam's first page of 523 games
 //   tagless        no game has Steam tags
 //   client-limited this client spent its share of the outbound budgets: details say so once, achievements and prices 429
+//   big-library    the library also owns bigLibrary.ts's 1200 synthetic games (scripts/perf-measure.js)
 import type { Page } from '@playwright/test';
 import { PLAYERS, CATALOG, BUNDLE, PICK_BUNDLE, SIGNED_IN, signedInPrefs, game, type Player } from './fixtures.ts';
 import { flattenBundleGames, type Bundle } from '../public/bundleData.ts';
 import { streamEvent } from '../lib/streamEvent.mjs';
+import { BIG_LIBRARY_APPIDS, bigLibraryGame, withRealShape } from './bigLibrary.ts';
 
 // Fixed per worker, for dates that need no freshness; a "fetched" stamp takes the answer's own time: a worker outlives a minute.
 const NOW = Date.now();
@@ -132,8 +134,9 @@ function details(appid: number, states: ReadonlySet<string>) {
     fetchedAt: now,
     fetchedAts: { rating: now, hltb: now, meta: now, tags: now, protondb: now },
   };
+  const big = states.has('big-library') ? bigLibraryGame(appid) : undefined;
   // As server.js answers an appid with no store page: 200, every source empty rather than failed.
-  if (!CATALOG.some((g) => g.appid === appid))
+  if (!big && !CATALOG.some((g) => g.appid === appid))
     return {
       ...fetched,
       name: null,
@@ -145,8 +148,8 @@ function details(appid: number, states: ReadonlySet<string>) {
       demo: null,
       protondb: null,
     };
-  const g = game(appid);
-  return {
+  const g = big ?? game(appid);
+  const answer = {
     ...fetched,
     name: g.name,
     rating: {
@@ -165,7 +168,7 @@ function details(appid: number, states: ReadonlySet<string>) {
       genres: g.genres,
       categories: g.categories,
       ...creators(appid),
-      description: `${g.name}, a fixture game.`,
+      description: big?.description ?? `${g.name}, a fixture game.`,
       releaseDate: g.release,
       comingSoon: g.comingSoon ?? false,
       // An unfiltered Steam field: the panel must not link a javascript: URL.
@@ -181,7 +184,7 @@ function details(appid: number, states: ReadonlySet<string>) {
       website: appid === MEDIA_APPID ? 'https://example.com/' : null,
       achievementCount: appid === MEDIA_APPID ? ACHIEVEMENTS.length : 0,
       platforms: { windows: true, mac: false, linux: false },
-      languages: [],
+      languages: big?.languages ?? [],
       isFree: g.free ?? false,
       priceInitial: null,
     },
@@ -193,6 +196,7 @@ function details(appid: number, states: ReadonlySet<string>) {
     demo: DEMO_OF[appid] ?? null,
     protondb: g.protondb ? { tier: g.protondb, confidence: 'strong', total: 100 } : null,
   };
+  return big ? withRealShape(answer) : answer;
 }
 
 const ACHIEVEMENTS = [
@@ -354,12 +358,13 @@ export function respond(
     const missing = identifiers.find((_, i) => !players[i]);
     if (missing) return json({ error: `Cannot find Steam account: "${missing}"` }, 400);
     const members = players as Player[];
-    const appids = [...new Set(members.flatMap((p) => p.owned))];
+    const big = states.has('big-library');
+    const appids = [...new Set([...members.flatMap((p) => p.owned), ...(big ? BIG_LIBRARY_APPIDS : [])])];
     const playtime = Object.fromEntries(
       appids.map((a) => [a, Object.fromEntries(members.map((p) => [p.steamid, p.playtime?.[a] ?? 0]))]),
     );
     return json({
-      games: appids.map((a) => ({ appid: a, name: game(a).name })),
+      games: appids.map((a) => ({ appid: a, name: ((big && bigLibraryGame(a)) || game(a)).name })),
       players: members.map(playerJson),
       playtime,
       lastPlayed: {},
