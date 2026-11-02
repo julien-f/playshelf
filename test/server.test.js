@@ -1425,7 +1425,7 @@ test('GET /api/game-details/:appid: a request aborted mid-flight still caches, s
   assert.equal(counts.tags, 2, 'aborted request should have completed and cached tags');
 });
 
-test('GET /api/game-details/:appid: failed fetch is not cached, retried on next request', async (t) => {
+test('GET /api/game-details/:appid: failed fetch is not cached, held off, then retried', async (t) => {
   _reset();
   _resetAuth();
   let hltbCalls = 0;
@@ -1464,6 +1464,11 @@ test('GET /api/game-details/:appid: failed fetch is not cached, retried on next 
 
   const res2 = await api.get('/api/game-details/406');
   assert.equal(res2.status, 200);
+  assert.equal(hltbCalls, 1, 'held off: no new search for a while');
+  assert.ok(res2.body.failed.includes('hltb'), 'still reads as failed, not as no data');
+
+  _resetAuth(); // clears the hold-off, as its 10 minutes passing would
+  await api.get('/api/game-details/406');
   assert.equal(hltbCalls, 2, 'HLTB should be retried — failed fetch must not be cached');
 });
 
