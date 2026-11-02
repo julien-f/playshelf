@@ -170,6 +170,7 @@ import {
 import { STATUS_LABELS, getStatus } from './gameStatuses.ts';
 import { NewViewMenu, ViewTabs, viewHref } from './ViewTabs.tsx';
 import { etaSeconds, formatEta, type LoadSample } from './loadProgress.ts';
+import { measureLoadStep, startLoadTiming } from './loadTiming.ts';
 import { convert, formatWithEstimate } from './currency.ts';
 import {
   membershipColumn,
@@ -1575,6 +1576,7 @@ export default function ListRoute() {
       const now = Date.now();
       // Rows fill with the fast part; once all are in, what's left is the store part's columns.
       const part = answered.fast < total ? 'fast' : 'store';
+      if (part === 'store') measureLoadStep('list:listed');
       if (part !== samplePart) [samplePart, loadSamples] = [part, []];
       const done = answered[part];
       loadSamples = [...loadSamples.filter((s) => s.t >= now - 30_000), { t: now, loaded: done }];
@@ -1595,6 +1597,10 @@ export default function ListRoute() {
     }
     setStatusText('');
     setLoadFraction(null);
+    if (total > 0) {
+      measureLoadStep('list:listed');
+      measureLoadStep('list:done');
+    }
     if (!loadedRowsDue) return;
     loadedRowsDue = false;
     clearTimeout(loadedRowsTimer);
@@ -2321,6 +2327,7 @@ export default function ListRoute() {
     if (kind === 'compare' && !refresh && loadedCompareKeys.has(compareKey())) return;
 
     const gen = loadGuard.next();
+    startLoadTiming();
     const onFetchedAt = (at: number | null) => loadGuard.isStale(gen) || noteFetchedAt(at);
 
     // A ↻ refresh keeps the table, its rows' details and the selection on screen until the new
@@ -2975,6 +2982,7 @@ export default function ListRoute() {
         disposeView();
         disposeTableState();
       };
+      measureLoadStep('list:rows');
       bindLayout();
       // A tier filter (a max alone) restored from another bundle's draft or view, matching none of this one's tiers, goes.
       const tierRange = table.filter.ranges().tierPrice;
