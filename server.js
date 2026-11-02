@@ -276,11 +276,14 @@ morgan.token('url', (req) => {
   return /^\/auth\/steam\/callback\/?$/i.test(path) ? path : url;
 });
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
+// A route pattern, never the URL; the app shell's is the one RegExp path, named rather than shown.
+const routeKey = ({ method, baseUrl, route }) =>
+  route ? `${method} ${typeof route.path === 'string' ? baseUrl + route.path : '(app shell)'}` : '(no route)';
 // At `close`, so the details stream counts to its end and a client leaving early shows as aborted.
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('close', () =>
-    recordRequest(req.route ? `${req.method} ${req.baseUrl}${req.route.path}` : '(no route)', {
+    recordRequest(routeKey(req), {
       status: res.statusCode,
       ms: Date.now() - start,
       bytes: Number(res.getHeader('content-length')) || 0,

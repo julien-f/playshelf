@@ -468,6 +468,8 @@ test('GET /api/metrics: times inbound requests per route pattern, never per URL'
   assert.ok(routes()['(no route)'].statusCounts['4xx'] >= 1);
   assert.ok(!JSON.stringify(routes()).includes('no-such-route-123'));
   assert.ok(getMetrics().lastHour.routes['PUT /api/me/prefs/:key'].requests >= 1);
+  await api.get('/lists/owned').expect(200);
+  await until(() => routes()['GET (app shell)'], 'the app shell named');
 });
 
 test('GET /api/metrics: includes semaphore, cache hit/entry, rate-limiter, and dedup stats', async (t) => {
