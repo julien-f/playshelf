@@ -22,8 +22,8 @@ const WORDS =
     ' ',
   );
 const TAGS =
-  'Action Adventure RPG Strategy Simulation Indie Casual Puzzle Platformer Shooter Roguelike Survival Open World Sandbox Story Rich Atmospheric Pixel Graphics Co-op Multiplayer Singleplayer Fantasy Sci-fi Horror Exploration Crafting Building Management Turn-Based Tactical Card Game Deckbuilding Metroidvania Souls-like Hack and Slash Stealth Racing Sports Physics Funny Cute Relaxing Difficult Great Soundtrack Retro 2D 3D First-Person Third Person Top-Down Isometric Base Building Resource Management Procedural Generation Permadeath Choices Matter Multiple Endings Female Protagonist Post-apocalyptic Space Medieval Cyberpunk Steampunk Military Historical Mystery Detective Comedy Dark Psychological Horror'.split(
-    ' ',
+  'Action|Adventure|RPG|Strategy|Simulation|Indie|Casual|Puzzle|Platformer|Shooter|Roguelike|Survival|Open World|Sandbox|Story Rich|Atmospheric|Pixel Graphics|Co-op|Multiplayer|Singleplayer|Fantasy|Sci-fi|Horror|Exploration|Crafting|Building|Management|Turn-Based Tactics|Card Game|Deckbuilding|Metroidvania|Souls-like|Hack and Slash|Stealth|Racing|Sports|Physics|Funny|Cute|Relaxing|Difficult|Great Soundtrack|Retro|2D|3D|First-Person|Third Person|Top-Down|Isometric|Base Building|Resource Management|Procedural Generation|Permadeath|Choices Matter|Multiple Endings|Female Protagonist|Post-apocalyptic|Space|Medieval|Cyberpunk|Steampunk|Military|Historical|Mystery|Detective|Comedy|Dark|Psychological Horror'.split(
+    '|',
   );
 const GENRES = ['Action', 'Adventure', 'RPG', 'Strategy', 'Simulation', 'Indie', 'Casual', 'Sports', 'Racing'];
 const CATEGORIES = [

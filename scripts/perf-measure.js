@@ -6,10 +6,11 @@
 // Prints each metric's median and range, and the change since the last recorded run (.git/dev-metrics/perf.jsonl).
 
 const { spawn, execFileSync } = require('node:child_process');
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { portOf } = require('./ports');
-const { listening } = require('./e2e');
+const { claimPort, listening } = require('./e2e');
 const { record, history } = require('./dev-metrics');
 
 const ROOT = path.join(__dirname, '..');
@@ -44,6 +45,12 @@ function initScript(prefs) {
     sessionStorage.setItem('perf-seeded', '1');
   }
   performance.setResourceTimingBufferSize(2000);
+  // KB transferred by resources whose URL matches `pattern`, for both loads' figures.
+  window.perfKB = (pattern) =>
+    performance
+      .getEntriesByType('resource')
+      .filter((r) => new RegExp(pattern).test(r.name))
+      .reduce((sum, r) => sum + r.transferSize, 0) / 1024;
   window.perfLongTasks = [];
   new PerformanceObserver((list) => window.perfLongTasks.push(...list.getEntries())).observe({
     type: 'longtask',
@@ -104,11 +111,6 @@ async function measureRun(browser, base) {
       };
       const done = at('list:done');
       const tasks = window.perfLongTasks.filter((t) => t.startTime < done);
-      const kb = (match) =>
-        performance
-          .getEntriesByType('resource')
-          .filter((r) => match(r.name))
-          .reduce((sum, r) => sum + r.transferSize, 0) / 1024;
       return {
         startMs: performance.getEntriesByName('list:start')[0].startTime,
         rowsMs: at('list:rows'),
@@ -116,11 +118,12 @@ async function measureRun(browser, base) {
         doneMs: done,
         tbtMs: tasks.reduce((sum, t) => sum + Math.max(0, t.duration - 50), 0),
         longestTaskMs: Math.max(0, ...tasks.map((t) => t.duration)),
-        jsKB: kb((url) => url.endsWith('.js')),
-        apiKB: kb((url) => url.includes('/api/')),
+        jsKB: window.perfKB('\\.js$'),
+        apiKB: window.perfKB('/api/'),
       };
     });
 
+    const coldImageRequests = imageRequests;
     await goInApp(page, '/');
     await page.waitForFunction(() => location.pathname === '/' && !document.querySelector('.dt-table'));
     await page.evaluate(() => performance.clearResourceTimings());
@@ -129,13 +132,9 @@ async function measureRun(browser, base) {
     await waitForDone(page, revisitAt);
     const revisit = await page.evaluate(() => ({
       revisitDoneMs: performance.getEntriesByName('list:done')[0].duration,
-      revisitApiKB:
-        performance
-          .getEntriesByType('resource')
-          .filter((r) => r.name.includes('/api/'))
-          .reduce((sum, r) => sum + r.transferSize, 0) / 1024,
+      revisitApiKB: window.perfKB('/api/'),
     }));
-    return { ...cold, imageRequests, ...revisit };
+    return { ...cold, imageRequests: coldImageRequests, ...revisit };
   } finally {
     await context.close();
   }
@@ -184,28 +183,57 @@ function report(rows) {
 
 const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
 
+// Starts `vite preview` with the mock; rejects if it exits before listening (a crash, a port taken meanwhile).
+async function startPreview(outDir, port) {
+  const preview = spawn('npx', ['vite', 'preview', '--outDir', outDir, '--port', String(port), '--strictPort'], {
+    cwd: ROOT,
+    // Node strips mockApi.ts's types itself from 22.18; package.json allows 22.15.
+    env: {
+      ...process.env,
+      MOCK_API: '1',
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --experimental-strip-types`,
+    },
+    detached: true,
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
+  let exited = false;
+  preview.once('exit', () => (exited = true));
+  const stop = () => {
+    try {
+      process.kill(-preview.pid);
+    } catch {
+      // already gone
+    }
+  };
+  while (!(await listening(port))) {
+    if (exited) throw new Error('vite preview exited before listening');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return stop;
+}
+
 async function main() {
   const runsArg = process.argv.find((a) => a.startsWith('--runs='));
   const runs = runsArg ? Number(runsArg.slice('--runs='.length)) : DEFAULT_RUNS;
   if (!(runs >= 1)) throw new Error('--runs=N takes a positive number');
   const started = Date.now();
-  const port = portOf('perf');
-  if (await listening(port)) throw new Error(`port ${port} is busy (node scripts/ports.js perf)`);
-  const outDir = path.join(ROOT, 'node_modules/.cache/perf-dist', String(port));
-  console.log('Building…');
-  execFileSync('npx', ['vite', 'build', '--outDir', outDir, '--emptyOutDir'], { cwd: ROOT, stdio: 'ignore' });
-  const preview = spawn('npx', ['vite', 'preview', '--outDir', outDir, '--port', String(port), '--strictPort'], {
-    cwd: ROOT,
-    env: { ...process.env, MOCK_API: '1' },
-    detached: true,
-    stdio: 'ignore',
-  });
-  const base = `http://localhost:${port}`;
   const row = { profile: PROFILE, runs, commit: git('rev-parse', '--short', 'HEAD') };
+  let claimed;
+  let stopPreview;
   try {
     row.branch = git('branch', '--show-current');
     row.dirty = git('status', '--porcelain') !== '';
-    while (!(await listening(port))) await new Promise((resolve) => setTimeout(resolve, 100));
+    // Locked like e2e.js's port: a second run takes the next one, and its own build directory.
+    claimed = await claimPort(portOf('perf'), { fixed: Boolean(process.env.PERF_PORT) });
+    const { port } = claimed;
+    const outDir = path.join(ROOT, 'node_modules/.cache/perf-dist', String(port));
+    console.log('Building…');
+    execFileSync('npx', ['vite', 'build', '--outDir', outDir, '--emptyOutDir'], {
+      cwd: ROOT,
+      stdio: ['ignore', 'ignore', 'inherit'],
+    });
+    stopPreview = await startPreview(outDir, port);
+    const base = `http://localhost:${port}`;
     const { chromium } = require('@playwright/test');
     // No request leaves the machine: store art points at Steam's CDN, and the synthetic appids exist nowhere.
     const browser = await chromium.launch({ args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost'] });
@@ -235,7 +263,8 @@ async function main() {
     row.error = err.message;
     throw err;
   } finally {
-    process.kill(-preview.pid);
+    stopPreview?.();
+    if (claimed) fs.rmSync(claimed.file, { force: true });
     record('perf', { ...row, durationMs: Date.now() - started });
   }
 }

@@ -24,14 +24,14 @@ const mock = process.env.MOCK_API === '1';
 const MOCK_MODULE = path.join(__dirname, 'e2e/mockApi.ts');
 const mockMiddleware = (loadMock) => async (req, res, next) => {
   if (!req.url.startsWith('/api/')) return next();
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const { respond } = await loadMock();
   // `document.cookie = 'mock=no-itad,slow'` in the page picks mockApi.ts's states.
   const cookie = /(?:^|;\s*)mock=([^;]*)/.exec(req.headers.cookie ?? '');
   const states = new Set(cookie ? decodeURIComponent(cookie[1]).split(',') : []);
   let answer;
   try {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const { respond } = await loadMock();
     answer = respond(
       req.method,
       new URL(req.url, 'http://localhost'),
@@ -39,7 +39,7 @@ const mockMiddleware = (loadMock) => async (req, res, next) => {
       states,
     );
   } catch (err) {
-    // A fixture gap answers 500, as Express does a route's uncaught error, instead of killing the server.
+    // A fixture gap or a mock that won't load answers 500, as Express does a route's uncaught error.
     console.warn(`[mock-api] ${req.method} ${req.url}:`, err.message);
     answer = { status: 500, contentType: 'application/json', body: JSON.stringify({ error: err.message }) };
   }
