@@ -29,6 +29,7 @@ const {
   getStoreBrowseItem,
   resolveSteamTags,
   extractDemoAppid,
+  gameBasics,
   searchStoreGames,
   searchCreatorGames,
   getProtonDbStatus,
@@ -101,6 +102,8 @@ const ACHIEVEMENTS_RATE_LIMIT_MAX = Number(process.env.ACHIEVEMENTS_RATE_LIMIT_M
 const FRIENDS_RATE_LIMIT_MAX = Number(process.env.FRIENDS_RATE_LIMIT_MAX);
 const STREAM_MAX_GAMES = Number(process.env.STREAM_MAX_GAMES);
 const STREAM_CONCURRENCY = Number(process.env.STREAM_CONCURRENCY);
+// A stream's appdetails in flight: enough to keep up with Steam's store details cap, little of its shared queue.
+const STREAM_STORE_CONCURRENCY = 4;
 const STREAM_MAX_PER_IP = Number(process.env.STREAM_MAX_PER_IP);
 const BUNDLES_RATE_LIMIT_MAX = Number(process.env.BUNDLES_RATE_LIMIT_MAX);
 // Optional feature — see ITAD_API_KEY's comment in default.env. Checked once here rather than
@@ -392,20 +395,22 @@ const friendsLimit = namedRateLimit('friends', {
   },
 });
 
-// fetchGameDetails' cached sources: response field -> cache key.
-const DETAILS_SOURCES = {
+// Each details part's cached sources: response field -> cache key.
+const FAST_SOURCES = {
   rating: ratingCacheKey,
   hltb: hltbCacheKey,
-  meta: appDetailsCacheKey,
   tags: storeBrowseCacheKey,
   protondb: protonDbCacheKey,
 };
+const STORE_SOURCES = { meta: appDetailsCacheKey };
+const DETAILS_SOURCES = { ...FAST_SOURCES, ...STORE_SOURCES };
+const sourcesCached = (sources, appid) => Object.values(sources).every((cacheKey) => isCached(cacheKey(appid)));
 
 // The details limit exists to throttle upstream Steam/HLTB calls. Cache hits make
 // no upstream calls, so they must not count — otherwise a refresh of an already
 // loaded comparison (all cache hits) burns the budget and 429s itself.
 
-const allDetailsCached = (appid) => Object.values(DETAILS_SOURCES).every((cacheKey) => isCached(cacheKey(appid)));
+const allDetailsCached = (appid) => sourcesCached(DETAILS_SOURCES, appid);
 
 const detailsLimit = namedRateLimit('details', {
   max: DETAILS_RATE_LIMIT_MAX,
@@ -788,69 +793,60 @@ app.post('/api/friends', friendsLimit, async (req, res) => {
 // A result that one client's spent share left short (`limited`) is fetched again for another client.
 const dedupDetails = createDedup('details', { isRefused: (details) => !!details.limited });
 
-function fetchGameDetails(appid, { force = false } = {}) {
-  // Force-refresh gets its own lane here, so it's never handed a normal request's result, which
-  // may come straight from cache. Below this, lib/steam.js still lets it share a call to an
-  // upstream already under way: that call only exists because the cache missed, so it's current.
-  const dedupKey = force ? `details:force:${appid}` : `details:${appid}`;
-  return dedupDetails(dedupKey, () => {
-    const metaPromise = getAppDetails(appid, { force });
-    // The name used to search HLTB always comes from store metadata resolved from the
-    // appid itself, never from client input — this endpoint has no ownership check, so a
-    // client-supplied name would just be an unverified string. This costs a little latency
-    // versus searching HLTB in parallel with an already-known, trusted name (e.g. an owned
-    // game's name from Steam's library API) — that's the trade for not trusting the client.
-    // A meta failure fails HLTB too, so it reads as failed, not as "no data".
-    const hltbPromise = metaPromise.then((meta) => getHLTB(appid, meta?.name, { type: meta?.type, force }));
-    // Tags and the demo link both come from this one store browse item.
-    const browsePromise = getStoreBrowseItem(appid, { force });
+// appid is on every line: a stream fetches many games at once, so one game's failure must show apart from a whole batch's.
+// `.cause` carries the real reason behind fetch's generic "fetch failed"; an `isLogged` error was already warned.
+function logDetailsError(appid, label, err) {
+  if (err?.isLogged) return;
+  console.warn(`[game-details] ${label} (appid ${appid}):`, err?.message, err?.cause ?? '');
+}
 
+// The part's sources' `failed` names, refusal message and per-source ages, from its settled results.
+function settleSources(appid, sources, results) {
+  const failed = Object.keys(results).filter((source) => results[source].status === 'rejected');
+  // A source refused because this client spent its share: the stream says so once, not per game.
+  const refused = Object.values(results).find((r) => r.status === 'rejected' && r.reason?.isClientBudgetExhausted);
+  // Each source's own age: one untouched store page mustn't date the rating fetched yesterday.
+  const fetchedAts = Object.fromEntries(
+    Object.entries(sources).map(([source, cacheKey]) => [source, getCachedAt(cacheKey(appid)) ?? null]),
+  );
+  return { fetchedAts, ...(failed.length && { failed }), ...(refused && { limited: refused.reason.message }) };
+}
+
+const value = (res) => (res.status === 'fulfilled' ? res.value : null);
+
+// Everything but appdetails: these upstreams keep a faster pace than Steam's store details cap, so a list's rows fill ahead
+// of it. Force-refresh gets its own lane, never handed a normal request's possibly cached result.
+function fetchFastDetails(appid, { force = false } = {}) {
+  return dedupDetails(`details:fast:${force ? 'force:' : ''}${appid}`, () => {
+    const browsePromise = getStoreBrowseItem(appid, { force });
+    const basicsPromise = browsePromise.then((item) => gameBasics(item, appid));
+    // HLTB's name always comes from store data resolved from the appid, never from the client (no ownership
+    // check here). Without a confirmed name and type from the browse item, it waits for appdetails', unforced:
+    // a forced one would refetch what the store part just refreshed, and only the name is needed.
+    const hltbPromise = basicsPromise
+      .catch(() => null)
+      .then((basics) => (basics?.name && basics.type ? basics : getAppDetails(appid)))
+      .then((store) => getHLTB(appid, store?.name, { type: store?.type, force }));
+    const tagsPromise = resolveSteamTags(browsePromise);
+    const demoPromise = browsePromise.then(extractDemoAppid);
     return Promise.allSettled([
       getGameRating(appid, { force }),
       hltbPromise,
-      metaPromise,
-      resolveSteamTags(browsePromise),
-      browsePromise.then(extractDemoAppid),
+      tagsPromise,
+      demoPromise,
       getProtonDbStatus(appid, { force }),
-    ]).then(([ratingRes, hltbRes, metaRes, tagsRes, demoRes, protondbRes]) => {
-      // appid is included on every line — fetchGameDetails runs once per appid, often many in
-      // parallel via the SSE stream endpoint, so without it there's no way to tell a one-game
-      // failure apart from every game in a batch failing the same way (e.g. an upstream block).
-      // logErr also appends `.cause` when present: Node's fetch throws a generic "fetch failed"
-      // TypeError for any network-level failure (DNS, connection reset, timeout, ...) and buries
-      // the actual reason in `.cause` — without it every such failure looks identical and gives
-      // no signal about what actually went wrong. Skips `isLogged` errors (a circuit trip, a spent
-      // budget, HLTB's throttled warning), already warned where they were thrown — same reasoning
-      // as routeErrorStatus's own skip: a batch load hits this once per field per appid, so
-      // without the skip a single already-logged circuit trip would print potentially hundreds
-      // of near-identical lines here alone (meta goes through fetchStoreApi).
-      const logErr = (label, err) => {
-        if (err?.isLogged) return;
-        console.warn(`[game-details] ${label} (appid ${appid}):`, err?.message, err?.cause ?? '');
-      };
-      if (ratingRes.status === 'rejected') logErr('rating', ratingRes.reason);
-      if (hltbRes.status === 'rejected' && hltbRes.reason !== metaRes.reason) logErr('hltb', hltbRes.reason);
-      if (metaRes.status === 'rejected') logErr('meta', metaRes.reason);
-      if (tagsRes.status === 'rejected') logErr('tags', tagsRes.reason);
-      if (demoRes.status === 'rejected' && demoRes.reason !== tagsRes.reason) logErr('demo', demoRes.reason);
-      if (protondbRes.status === 'rejected') logErr('protondb', protondbRes.reason);
-      // A null field is "no data" unless named here — the client marks these as failed, not empty.
-      const failed = Object.entries({
-        rating: ratingRes,
-        hltb: hltbRes,
-        meta: metaRes,
-        tags: tagsRes,
-        protondb: protondbRes,
-      })
-        .filter(([, r]) => r.status === 'rejected')
-        .map(([source]) => source);
-      // A source refused because this client spent its share: the stream says so once, not per game.
-      const refused = [ratingRes, hltbRes, metaRes, tagsRes, demoRes, protondbRes].find(
-        (r) => r.status === 'rejected' && r.reason?.isClientBudgetExhausted,
-      );
+      basicsPromise,
+    ]).then(([ratingRes, hltbRes, tagsRes, demoRes, protondbRes, basicsRes]) => {
+      if (ratingRes.status === 'rejected') logDetailsError(appid, 'rating', ratingRes.reason);
+      if (hltbRes.status === 'rejected') logDetailsError(appid, 'hltb', hltbRes.reason);
+      if (tagsRes.status === 'rejected') logDetailsError(appid, 'tags', tagsRes.reason);
+      if (demoRes.status === 'rejected' && demoRes.reason !== tagsRes.reason)
+        logDetailsError(appid, 'demo', demoRes.reason);
+      if (protondbRes.status === 'rejected') logDetailsError(appid, 'protondb', protondbRes.reason);
+      const basics = value(basicsRes);
       // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times; those misses
       // expire like any other miss, so they fill in after release instead of a year later.
-      if (metaRes.value?.comingSoon) {
+      if (basics?.comingSoon) {
         for (const [cacheKey, res] of [
           [ratingCacheKey, ratingRes],
           [protonDbCacheKey, protondbRes],
@@ -859,30 +855,50 @@ function fetchGameDetails(appid, { force = false } = {}) {
           if (res.status === 'fulfilled' && res.value == null) capExpiry(cacheKey(appid), MISS_CACHE_TTL_MS);
         }
       }
-      // Age of the oldest of this game's cached sources, which is what the panel's ↻ shows — plus
-      // each source's own age behind it. The aggregate alone was misleading: these tiers run for
-      // months and are cached per source, so one untouched store page dates the whole readout,
-      // and "5 months ago" says nothing about the rating fetched yesterday. The panel puts the
-      // breakdown in the button's tooltip so the visible figure stays one number.
-      const fetchedAts = Object.fromEntries(
-        Object.entries(DETAILS_SOURCES).map(([source, cacheKey]) => [source, getCachedAt(cacheKey(appid)) ?? null]),
-      );
+      const tags = value(tagsRes);
       return {
-        fetchedAt: oldestOf(Object.values(fetchedAts)),
-        fetchedAts,
-        rating: ratingRes.status === 'fulfilled' ? ratingRes.value : null,
-        hltb: hltbRes.status === 'fulfilled' ? hltbRes.value : null,
-        meta: metaRes.status === 'fulfilled' ? metaRes.value : null,
-        tags: tagsRes.status === 'fulfilled' ? tagsRes.value.map((t) => t.name) : null,
-        tagWeights:
-          tagsRes.status === 'fulfilled' ? Object.fromEntries(tagsRes.value.map((t) => [t.name, t.weight])) : null,
-        demo: demoRes.status === 'fulfilled' ? demoRes.value : null,
-        protondb: protondbRes.status === 'fulfilled' ? protondbRes.value : null,
-        ...(failed.length && { failed }),
-        ...(refused && { limited: refused.reason.message }),
+        basics,
+        rating: value(ratingRes),
+        hltb: value(hltbRes),
+        tags: tags && tags.map((t) => t.name),
+        tagWeights: tags && Object.fromEntries(tags.map((t) => [t.name, t.weight])),
+        demo: value(demoRes),
+        protondb: value(protondbRes),
+        ...settleSources(appid, FAST_SOURCES, {
+          rating: ratingRes,
+          hltb: hltbRes,
+          tags: tagsRes,
+          protondb: protondbRes,
+        }),
       };
     });
   });
+}
+
+// Appdetails alone, under Steam's store details cap (lib/steam.js).
+function fetchStoreDetails(appid, { force = false } = {}) {
+  return dedupDetails(`details:store:${force ? 'force:' : ''}${appid}`, () =>
+    Promise.allSettled([getAppDetails(appid, { force })]).then(([metaRes]) => {
+      if (metaRes.status === 'rejected') logDetailsError(appid, 'meta', metaRes.reason);
+      return { meta: value(metaRes), ...settleSources(appid, STORE_SOURCES, { meta: metaRes }) };
+    }),
+  );
+}
+
+// Both parts as one reply: GET /api/game-details and a stream's fully cached games.
+async function fetchGameDetails(appid, options) {
+  const [fast, store] = await Promise.all([fetchFastDetails(appid, options), fetchStoreDetails(appid, options)]);
+  const fetchedAts = { ...fast.fetchedAts, ...store.fetchedAts };
+  const failed = [...(fast.failed ?? []), ...(store.failed ?? [])];
+  const limited = fast.limited ?? store.limited;
+  return {
+    ...fast,
+    meta: store.meta,
+    fetchedAt: oldestOf(Object.values(fetchedAts)),
+    fetchedAts,
+    failed: failed.length ? failed : undefined,
+    limited,
+  };
 }
 
 // Backs the "look up any game" search box (both pages) — resolves a typed name to a short
@@ -1304,44 +1320,67 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
     }
   };
 
-  // A bounded worker pool, not `validated.map(...)`. Mapping dispatched every appid
-  // synchronously, which made the `closed` check useless (nothing can have closed yet at that
-  // instant) and queued the whole request — up to STREAM_MAX_GAMES, each fanning out to rating +
-  // metadata + tags + demo + ProtonDB + HLTB — onto lib/steam.js's semaphores up front. Two
-  // consequences, both real: navigating away left every remaining fetch to run to completion for
-  // nobody, and one request could park thousands of items in a shared FIFO queue that every other
-  // user's requests then waited behind. Pulling from a shared cursor instead means at most
-  // STREAM_CONCURRENCY appids are ever in flight for one request, and `closed` is re-checked
-  // before each one — so a disconnect stops the work within one appid per worker.
-  // Fully cached games first: behind the uncached ones, they'd wait on the upstreams' pace for nothing.
-  const cachedFirst = Map.groupBy(validated, allDetailsCached);
-  const ordered = [...(cachedFirst.get(true) ?? []), ...(cachedFirst.get(false) ?? [])];
-  let next = 0;
+  // Bounded worker pools pulling from shared cursors, not `validated.map(...)`: at most a pool's
+  // size of appids is in flight for one request, so a disconnect stops the work within one appid
+  // per worker, and one request can't park thousands of jobs in the semaphores' shared FIFO
+  // queues that every other user's requests then wait behind.
+  // A game cached throughout goes out as one event; any other as a fast part, ahead, and a store part, behind,
+  // since appdetails runs under Steam's store details cap (lib/steam.js). Cached games lead each pool.
+  const whole = new Set(validated.filter(allDetailsCached));
+  const cachedFirst = (appids, sources) => {
+    const groups = Map.groupBy(appids, (appid) => sourcesCached(sources, appid));
+    return [...(groups.get(true) ?? []), ...(groups.get(false) ?? [])];
+  };
   // Said once per stream; the workers go on, since cached games still fill in.
   let limitedSent = false;
-  const worker = async () => {
-    while (!closed) {
-      const i = next++;
-      if (i >= ordered.length) return;
-      const appid = ordered[i];
-      try {
-        const { limited, ...result } = await fetchGameDetails(appid);
-        if (limited && !limitedSent) {
-          limitedSent = true;
-          send({ limited });
+  const pool = (appids, size, fetchEvent, fallback) => {
+    let next = 0;
+    const worker = async () => {
+      while (!closed) {
+        const i = next++;
+        if (i >= appids.length) return;
+        const appid = appids[i];
+        try {
+          const { limited, ...result } = await fetchEvent(appid);
+          if (limited && !limitedSent) {
+            limitedSent = true;
+            send({ limited });
+          }
+          send(streamEvent({ appid, ...result }));
+        } catch (err) {
+          // fetchGameDetails resolves every sub-fetch via Promise.allSettled internally and should never itself
+          // reject: a defensive backstop, logged so it can't vanish without a trace.
+          console.error(`[bug:stream]`, `appid ${appid}:`, err.stack || err.message);
+          send({ appid, ...fallback(appid) });
         }
-        send(streamEvent({ appid, ...result }));
-      } catch (err) {
-        // fetchGameDetails resolves every sub-fetch via Promise.allSettled internally and should
-        // never itself reject — this is a defensive backstop, not an expected path, so unlike
-        // the per-field failures it already logs (see logErr above) this used to vanish with
-        // no trace at all if it ever did fire.
-        console.error(`[bug:stream]`, `appid ${appid}:`, err.stack || err.message);
-        send({ appid, rating: null, hltb: null, meta: null, tags: null, tagWeights: null, demo: null, protondb: null });
       }
-    }
+    };
+    return Promise.allSettled(Array.from({ length: Math.min(size, appids.length) }, worker));
   };
-  await Promise.allSettled(Array.from({ length: Math.min(STREAM_CONCURRENCY, validated.length) }, worker));
+  const nullFast = { basics: null, rating: null, hltb: null, tags: null, tagWeights: null, demo: null, protondb: null };
+  await Promise.all([
+    pool(
+      cachedFirst(validated, FAST_SOURCES).sort((a, b) => whole.has(b) - whole.has(a)),
+      STREAM_CONCURRENCY,
+      (appid) =>
+        whole.has(appid)
+          ? fetchGameDetails(appid)
+          : fetchFastDetails(appid).then((fast) => ({ part: 'fast', ...fast })),
+      (appid) =>
+        whole.has(appid)
+          ? { ...nullFast, meta: null }
+          : { part: 'fast', ...nullFast, failed: Object.keys(FAST_SOURCES) },
+    ),
+    pool(
+      cachedFirst(
+        validated.filter((appid) => !whole.has(appid)),
+        STORE_SOURCES,
+      ),
+      STREAM_STORE_CONCURRENCY,
+      (appid) => fetchStoreDetails(appid).then((store) => ({ part: 'store', ...store })),
+      () => ({ part: 'store', meta: null, failed: Object.keys(STORE_SOURCES) }),
+    ),
+  ]);
 
   send({ done: true });
   if (!res.writableEnded) out.end();

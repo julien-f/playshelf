@@ -4801,6 +4801,38 @@ test('D2 edge: a details stream cut short marks the games it never sent failed',
   await expect(page.locator('.list-status')).not.toContainText('/ 6 games loaded');
 });
 
+// The server sends an uncached game as a fast part, then a store part under Steam's store details cap.
+test("D2 edge: a game's store part, in either order or cut off, fails only the Steam store", async ({ page }) => {
+  const BASICS = ['name', 'type', 'capsule', 'thumb', 'banner', 'description', 'releaseDate', 'comingSoon'] as const;
+  await page.route('**/api/game-details/stream', (route) => {
+    const req = route.request();
+    const full = respond(req.method(), new URL(req.url()), req.postData());
+    const lines = full.body.split('\n\n').flatMap((line: string) => {
+      if (!line.startsWith('data: ')) return [line];
+      const { meta, fetchedAts, failed, ...event } = JSON.parse(line.slice(6));
+      if (!event.appid) return [line];
+      const basics = meta && Object.fromEntries(BASICS.map((key) => [key, meta[key]]));
+      const fast = { ...event, part: 'fast', basics, failed: failed?.filter((s: string) => s !== 'meta') };
+      const store = { appid: event.appid, part: 'store', meta };
+      // Portal 2's store part first; Hades' never comes: the connection dropped before it.
+      const parts = event.appid === 1145360 ? [fast] : event.appid === 620 ? [store, fast] : [fast, store];
+      return parts.map((part) => `data: ${JSON.stringify(part)}`);
+    });
+    return route.fulfill({
+      ...full,
+      body: lines.filter((line: string) => !line.includes('"done"')).join('\n\n') + '\n\n',
+    });
+  });
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(6);
+  await expect(page.locator('.list-status')).toContainText("Steam store didn't answer for 1 game");
+  await expect(row(page, 'Hades').getByTitle(/HowLongToBeat didn't answer/)).toHaveCount(0);
+  await expect(row(page, 'Portal 2').getByTitle(/didn't answer/)).toHaveCount(0);
+  await row(page, 'Portal 2').getByText('Portal 2').click();
+  await expect(page.locator('.panel-glance')).not.toContainText('still loading');
+});
+
 test("F1 edge: the Price card shows no bundles while the next game's are loading", async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=620');

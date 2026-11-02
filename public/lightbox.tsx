@@ -16,7 +16,7 @@ import { urlWithoutShot } from './urlState.ts';
 import { buildMediaItems, resolveShotIndex, preferredShotIndex, mediaLabel } from './mediaItems.ts';
 import type { MediaItem, ShotKind } from './mediaItems.ts';
 import type { Game, ReadonlyGame } from './types.ts';
-import { detailsPending, fmtTime, MEDIA_FAILED } from './utils.ts';
+import { detailsPending, fmtTime, MEDIA_FAILED, metaOrBasics } from './utils.ts';
 import { loadedWhen, morph } from './viewTransition.ts';
 import { decideSwipeAxis, resolveSwipe, LB_SWIPE_RESISTANCE } from './lightboxSwipe.ts';
 import type { SwipeAxis } from './lightboxSwipe.ts';
@@ -62,7 +62,7 @@ const [lbIdx, setIdx] = createSignal(0);
 // its own `createRoot` (see the effect at the foot of this file) to cache two array spreads.
 const shots = () => {
   const g = lbGame();
-  return g ? buildMediaItems(g.appid, g.details?.meta) : [];
+  return g ? buildMediaItems(g.appid, metaOrBasics(g.details)) : [];
 };
 // Clamped on read: a refresh can shrink the list under a valid index (fewer screenshots), and
 // every read of `shots()[idx()]` (the render, the caption, the leave-memory) must stay in bounds.
@@ -1636,7 +1636,7 @@ export function openLightbox(game: Game, idxOrShotId: number | string) {
   // inside the lightbox itself, so closing would restore focus to something already hidden.
   if (!isLightboxOpen()) _lbPrevFocus = document.activeElement;
   pushOverlayEntry('lightbox', closeLightbox, urlWithoutShot);
-  const newShots = buildMediaItems(game.appid, game.details?.meta);
+  const newShots = buildMediaItems(game.appid, metaOrBasics(game.details));
   // Batched: setLbGame alone would otherwise let the render effect below run once with the new
   // game's (possibly shorter) media list but the previous game's stale idx, indexing past the
   // end of the new list.
@@ -1710,7 +1710,7 @@ export function repointLightboxGame(game: ReadonlyGame) {
   // A pending latch's kind carries on through a game still loading: its lone banner is no Cover.
   const leaving: ShotKind =
     untrack(awaitingMedia) ?? (left?.shotId === 'banner' && shots().length > 1 ? 'cover' : (left?.type ?? 'image'));
-  const next = buildMediaItems(game.appid, game.details?.meta);
+  const next = buildMediaItems(game.appid, metaOrBasics(game.details));
   const target = landingIndex(game.appid, next, leaving);
   // A lone banner means this row's media are still loading — there is nothing else to show
   // *yet*. Latch the intent so the first real media to arrive is taken (see the effect at the

@@ -24,6 +24,7 @@ const {
   resolveSteamPackageAppids,
   resolveSteamBundleAppids,
   searchStoreGames,
+  gameBasics,
   searchCreatorGames,
   getProtonDbStatus,
   getGameSchema,
@@ -2362,4 +2363,58 @@ test('resolveSteamId: caches a failed lookup and re-throws it without a second u
   await assert.rejects(() => resolveSteamId('nope'), /Cannot find Steam account/);
   await assert.rejects(() => resolveSteamId('nope'), /Cannot find Steam account/);
   assert.equal(calls, 1, 'the cached miss answered the second call');
+});
+
+const browseItem = (fields) => ({ success: 1, name: 'Game', type: 0, basic_info: {}, assets: {}, ...fields });
+
+test('gameBasics: converts a browse item to appdetails shapes', () => {
+  const basics = gameBasics(
+    browseItem({
+      basic_info: { short_description: 'Desc', developers: [{ name: 'Dev' }], publishers: [{ name: 'Pub' }] },
+      release: { steam_release_date: 1303186800 },
+      platforms: { windows: true, mac: true, steamos_linux: true },
+      assets: { asset_url_format: 'steam/apps/620/${FILENAME}?t=1', small_capsule: 'a/c.jpg', header: 'h.jpg' },
+    }),
+    620,
+  );
+  assert.deepEqual(basics, {
+    name: 'Game',
+    type: 'game',
+    capsule: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/620/a/c.jpg?t=1',
+    thumb: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/620/a/c.jpg?t=1',
+    banner: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/620/h.jpg?t=1',
+    description: 'Desc',
+    releaseDate: 'Apr 18, 2011', // Steam's Pacific date; Apr 19 in UTC
+    comingSoon: false,
+    platforms: ['Windows', 'Mac', 'Linux'],
+    developers: ['Dev'],
+    publishers: ['Pub'],
+  });
+});
+
+test('gameBasics: an unconfirmed type and a coming-soon date short of a full one stay null', () => {
+  const basics = gameBasics(
+    browseItem({
+      type: 7,
+      release: { steam_release_date: 1830000000, is_coming_soon: true, coming_soon_display: 'date_quarter' },
+    }),
+    1,
+  );
+  assert.equal(basics.type, null);
+  assert.equal(basics.releaseDate, null);
+  assert.equal(basics.comingSoon, true);
+});
+
+test('gameBasics: an item cached before basics were requested falls back to cached appdetails, never fetching', (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('should not fetch');
+  });
+  assert.equal(gameBasics({ success: 1, tagids: [] }, 640), null);
+  setCache('meta:640', { name: 'Cached', type: 'game', release_date: { date: 'Jan 1, 2020' }, developers: ['D'] });
+  const basics = gameBasics({ success: 1, tagids: [] }, 640);
+  assert.equal(basics.name, 'Cached');
+  assert.equal(basics.releaseDate, 'Jan 1, 2020');
+  assert.deepEqual(basics.developers, ['D']);
+  assert.equal('genres' in basics, false);
 });

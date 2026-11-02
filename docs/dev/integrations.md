@@ -75,11 +75,15 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 
 `resolveSteamTags` (`lib/steam.js`) reads the user tags shown on the game's own store page (and so on SteamDB and ITAD), not SteamSpy's separate dataset, which is sparse for niche or recent games. Two undocumented, key-less endpoints:
 
-- `https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json={"ids":[{"appid":N}],"context":{"language":"english","country_code":"US"},"data_request":{"include_tag_count":30}}` — the app's whole store browse item.
+- `https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json={"ids":[{"appid":N}],"context":{"language":"english","country_code":"US"},"data_request":{"include_tag_count":30,"include_basic_info":true,"include_release":true,"include_platforms":true,"include_assets":true}}` — the app's whole store browse item.
   - `tagids` are already ordered by relevance, as the store page shows them; all are shown (20 at most, whatever `include_tag_count` asks).
   - `tags: [{tagid, weight}]` gives the votes behind that order, in the same order. `resolveSteamTags` sends each weight relative to the game's top tag (raw counts don't compare across games, and some top tags are capped at 10000), as `tagWeights` on `/api/game-details`.
   - `extractDemoAppid` reads `related_items.demo_appid` from the same item, shown as the panel's "🎮 Try the Free Demo" banner (`.panel-demo-banner`) rather than in ⋯ More, since a demo is a call to action.
-  - The **whole raw item** is cached (`browse:{appid}`), so a new field from it needs only a new extractor, no new request; `fetchGameDetails` reads it once for both.
+  - The **whole raw item** is cached (`browse:{appid}`), so a new field from it needs only a new extractor, no new request; `fetchFastDetails` reads it once for all of them.
+  - `extractBrowseBasics` reads the part of a list row's store metadata it carries, so rows fill before appdetails (under Steam's store details cap): `name`, `type`, `basic_info.short_description/developers/publishers`, `release.steam_release_date` (unix s) and `is_coming_soon`, `platforms.windows/mac/steamos_linux`, `assets` (file names under `asset_url_format`, served from `https://shared.akamai.steamstatic.com/store_item_assets/`). Confirmed 2026-11-02 on released and coming-soon games.
+  - Not in it: genres, Metacritic, achievements, DLC, languages, price; categories only as ids. Those stay appdetails'.
+  - The date is formatted in Pacific time, as appdetails' string (Portal 2: Apr 18, Apr 19 in UTC); a coming-soon date short of a full one (`coming_soon_display` other than `date_full`) waits for appdetails' wording.
+  - An item cached before these fields were requested has none: its basics come from cached appdetails, never fetched for it, until the row's next refresh.
 - `https://store.steampowered.com/actions/ajaxgetstoretags?l=english` — tagid → name, one near-static list of ~430, cached once (`tagnames:all`); the parsed map stays in memory until that row is rewritten or expires. A reply without a non-empty `tags` array fails and isn't cached; after a failure the map isn't refetched for 30 s (`tagNameHoldOff`, `lib/steam.js`).
 - A cache key whose value shape changes gets a new prefix rather than reusing the old one: a shape check can't tell an old value from a new one of the same JS type (an empty array, say). Retired keys age out with the TTL sweep.
 

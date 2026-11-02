@@ -1,5 +1,5 @@
 import { prefersReducedMotion } from './motion.ts';
-import type { Game, GameDetailsReply } from './types.ts';
+import type { Game, GameBasics, GameDetails, GameDetailsReply, GameMeta } from './types.ts';
 
 // The custom-URL name in a Steam profile URL ('https://steamcommunity.com/id/gaben/' → 'gaben'),
 // or null for anything else — a `/profiles/<steam64>` URL is Steam's own fallback form, which
@@ -443,8 +443,18 @@ export const steamAppAsset = (appid: number | string, file: string) =>
   `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/${file}`;
 
 // Details are in and the store answered that it has no page for this game (delisted, region-locked…).
-export function noStorePage(game: Pick<Game, 'details' | 'failedSources'>): boolean {
-  return !!game.details && !game.details.meta && !game.failedSources?.includes('meta');
+export function noStorePage(game: Pick<Game, 'details' | 'failedSources' | 'pendingSources'>): boolean {
+  return (
+    !!game.details &&
+    !game.details.meta &&
+    !game.failedSources?.includes('meta') &&
+    !game.pendingSources?.includes('meta')
+  );
+}
+
+// Store metadata, or while it's still coming, the part of it the store browse item gave.
+export function metaOrBasics(details: GameDetails | null | undefined): GameBasics | GameMeta | null {
+  return details?.meta ?? details?.basics ?? null;
 }
 
 // What a /api/game-details reply sets on a game outside a list's table (ListRoute's rows: applyDetailsEvent).
@@ -463,6 +473,9 @@ export function detailsFields(
 // The detail sources a /api/game-details reply can name as `failed` (server.js's fetchGameDetails).
 export const DETAIL_SOURCES = ['rating', 'hltb', 'meta', 'tags', 'protondb'] as const;
 export type DetailSource = (typeof DETAIL_SOURCES)[number];
+// Each stream part's sources (server.js's FAST_SOURCES and STORE_SOURCES).
+export const FAST_DETAIL_SOURCES: readonly DetailSource[] = ['rating', 'hltb', 'tags', 'protondb'];
+export const STORE_DETAIL_SOURCES: readonly DetailSource[] = ['meta'];
 export const NO_DETAILS = { rating: null, hltb: null, meta: null, tags: null, demo: null, protondb: null };
 
 // A lookup that didn't answer at all: every source failed, so the panel says so and offers ↻.
@@ -470,7 +483,7 @@ export function failedLookupFields(): ReturnType<typeof detailsFields> {
   return detailsFields({ ...NO_DETAILS, failed: [...DETAIL_SOURCES] });
 }
 
-type MediaState = Pick<Game, 'details' | 'failedSources' | 'mediaFailed'>;
+type MediaState = Pick<Game, 'details' | 'failedSources' | 'pendingSources' | 'mediaFailed'>;
 
 // Its media are loading (the details stream leaves them out); a failed load gives up until the game is opened again.
 export function mediaPending(game: MediaState): boolean {
@@ -485,5 +498,10 @@ export const MEDIA_FAILED =
 // No media to show yet, and some may come: details not in, the store's metadata failed (↻ retries it),
 // or its media loading.
 export function detailsPending(game: MediaState): boolean {
-  return !game.details || !!game.failedSources?.includes('meta') || mediaPending(game);
+  return (
+    !game.details ||
+    !!game.failedSources?.includes('meta') ||
+    !!game.pendingSources?.includes('meta') ||
+    mediaPending(game)
+  );
 }
