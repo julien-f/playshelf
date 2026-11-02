@@ -532,7 +532,7 @@ test('GET /api/metrics: a details stream records how its list loaded', async (t)
   await ssePost(server.address().port, '/api/game-details/stream', { games: [{ appid: 1001 }] });
   let { body } = await api.get('/api/metrics');
   assert.equal(body.sinceRestart.streams.count, 1);
-  assert.equal(body.sinceRestart.streams.cold, undefined, 'a cached list adds no timing');
+  assert.equal(body.sinceRestart.streams.cold, 0, 'a cached list adds no timing');
   assert.equal(body.openStreams, 0);
 
   await ssePost(server.address().port, '/api/game-details/stream', { games: [{ appid: 1001 }, { appid: 700 }] });

@@ -12,6 +12,7 @@ const {
   recordCacheEvent,
   startEventLoopSampling,
   recordRequest,
+  recordStream,
   getMetrics,
   _reset,
 } = require('../lib/metrics');
@@ -504,11 +505,12 @@ test('startEventLoopSampling: records one sample per minute under eventLoop, abs
     t.mock.timers.tick(60 * 1000);
     const { sinceRestart, lastHour } = getMetrics();
     assert.deepEqual(lastHour.eventLoop, sinceRestart.eventLoop);
-    const { minutes, utilization, maxP99DelayMs, maxDelayMs } = sinceRestart.eventLoop;
+    const { minutes, busyPercent, maxP99DelayMs, maxDelayMs, maxDelayAt } = sinceRestart.eventLoop;
     assert.equal(minutes, 2);
-    assert.ok(utilization >= 0 && utilization <= 1, `utilization ${utilization}`);
+    assert.ok(busyPercent >= 0 && busyPercent <= 100, `busyPercent ${busyPercent}`);
     assert.ok(Number.isInteger(maxP99DelayMs) && Number.isInteger(maxDelayMs));
     assert.ok(maxP99DelayMs <= maxDelayMs);
+    assert.ok(['2026-11-02T10:01:30.000Z', '2026-11-02T10:02:30.000Z'].includes(maxDelayAt), maxDelayAt);
   } finally {
     stop();
   }
@@ -537,4 +539,19 @@ test('recordRequest: a request left before any reply counts as aborted, in no st
   assert.deepEqual(entry.statusCounts, {});
   assert.equal(entry.aborted, 1);
   assert.equal(entry.maxLatencyMs, 900);
+});
+
+test('recordStream: with no cold stream, cold is 0 and every timing null', () => {
+  recordStream({ count: 1, games: 3, fastUncached: 0, storeUncached: 0 });
+  const { cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs } = getMetrics().sinceRestart.streams;
+  assert.deepEqual(
+    { cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs },
+    {
+      cold: 0,
+      avgListedMs: null,
+      maxListedMs: null,
+      avgDoneMs: null,
+      maxDoneMs: null,
+    },
+  );
 });

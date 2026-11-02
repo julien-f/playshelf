@@ -19,7 +19,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
                   heldLookups:  { hltb: count },
                   streams:      { count, games, fastUncached, storeUncached, closedEarly, closedEarlyCold, limited,
                                   concurrentMax, cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs },
-                  eventLoop:    { minutes, utilization, maxP99DelayMs, maxDelayMs } },
+                  eventLoop:    { minutes, busyPercent, maxP99DelayMs, maxDelayMs, maxDelayAt } },
   lastHour:     { …same shape as sinceRestart… },
   budgets:         { [group]: { hourUsed, hourMax, hourTopClient, dayUsed, dayMax, dayTopClient } },
   process:         { rssMb, maxRssMb, heapUsedMb, externalMb, dbMb, dbWalMb },
@@ -68,7 +68,7 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
   - `fastUncached`/`storeUncached`: games each part had to fetch (each pool's own cachedness), so ms per uncached game is derivable for each pool.
   - `closedEarly`: the client left before the end; `closedEarlyCold` of those, ones with something to fetch — the slowest loads, missing from the timings.
   - `concurrentMax`: streams open (every client's) when one started, the largest; `openStreams` is the live count.
-  - Timings only from `cold` streams (something to fetch, ran to the end): `listed` when every game's fast part was sent (all rows listed), `done` at the end (store parts too). Absent from `lastHour` with no stream in it.
+  - Timings only from `cold` streams (something to fetch, ran to the end): `listed` when every game's fast part was sent (all rows listed), `done` at the end (store parts too). `null` with no cold stream. Absent from `lastHour` with no stream in it.
 - `windowWaits`: reservations that queued for a rolling cap's place (`createWindow`, `lib/upstream.js`), and how long. Counted per attempt: a 429's retry reserves again. Waits with no 429s on `getAppDetails` mean the cap, not Steam, is the limit; 429s with no waits, a cap too high.
 - `heldLookups.hltb`: lookups HLTB's failed-lookup hold answered without a request; `heldGames.hltb`, games held now.
 - Already answered elsewhere: appdetails 429s (`groups['steam-store'].getAppDetails.statusCounts`), whether `UPSTREAM_MIN_INTERVAL_MS` is the limit (`semaphores`' queues and the labels' latency).
@@ -77,7 +77,7 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
 
 - Is the server slow because of its own synchronous work (parsing cache rows, `node:sqlite`'s calls, gzip) rather than an upstream? An upstream's wait never blocks the loop.
 - Sampled once a minute by `startEventLoopSampling` (`lib/metrics.js`), started once the server listens; absent before the first sample.
-- `utilization`: share of the time the loop was busy (`eventLoopUtilization`), 0–1. `maxP99DelayMs`: the worst minute's p99 timer delay (`monitorEventLoopDelay`); `maxDelayMs`: the single worst delay. A high delay with high utilization = one long blocking task.
+- `busyPercent`: share of the time the loop was busy (`eventLoopUtilization`), 0–100, one decimal. `maxP99DelayMs`: the worst minute's p99 timer delay (`monitorEventLoopDelay`); `maxDelayMs`: the single worst delay, `maxDelayAt` the end of the minute that held it (one near `since` is startup). A high delay with a high `busyPercent` = one long blocking task.
 
 ### Daily — `daily`
 
