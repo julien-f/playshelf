@@ -800,8 +800,14 @@ function fetchGameDetails(appid, { force = false } = {}) {
     // client-supplied name would just be an unverified string. This costs a little latency
     // versus searching HLTB in parallel with an already-known, trusted name (e.g. an owned
     // game's name from Steam's library API) — that's the trade for not trusting the client.
+    // A delisted game has no store page, but its achievement schema still names it.
+    const namePromise = metaPromise.then(async (meta) =>
+      meta ? meta.name : ((await getGameSchema(appid, { force })).name ?? null),
+    );
     // A meta failure fails HLTB too, so it reads as failed, not as "no data".
-    const hltbPromise = metaPromise.then((meta) => getHLTB(appid, meta?.name, { type: meta?.type, force }));
+    const hltbPromise = Promise.all([metaPromise, namePromise]).then(([meta, name]) =>
+      getHLTB(appid, name, { type: meta?.type, force }),
+    );
     // Tags and the demo link both come from this one store browse item.
     const browsePromise = getStoreBrowseItem(appid, { force });
 
@@ -812,7 +818,8 @@ function fetchGameDetails(appid, { force = false } = {}) {
       resolveSteamTags(browsePromise),
       browsePromise.then(extractDemoAppid),
       getProtonDbStatus(appid, { force }),
-    ]).then(([ratingRes, hltbRes, metaRes, tagsRes, demoRes, protondbRes]) => {
+      namePromise,
+    ]).then(([ratingRes, hltbRes, metaRes, tagsRes, demoRes, protondbRes, nameRes]) => {
       // appid is included on every line — fetchGameDetails runs once per appid, often many in
       // parallel via the SSE stream endpoint, so without it there's no way to tell a one-game
       // failure apart from every game in a batch failing the same way (e.g. an upstream block).
@@ -870,6 +877,7 @@ function fetchGameDetails(appid, { force = false } = {}) {
       return {
         fetchedAt: oldestOf(Object.values(fetchedAts)),
         fetchedAts,
+        name: nameRes.status === 'fulfilled' ? nameRes.value : null,
         rating: ratingRes.status === 'fulfilled' ? ratingRes.value : null,
         hltb: hltbRes.status === 'fulfilled' ? hltbRes.value : null,
         meta: metaRes.status === 'fulfilled' ? metaRes.value : null,
@@ -1156,8 +1164,8 @@ app.get('/api/achievements/:appid', achievementsLimit, async (req, res) => {
     // Sequenced rather than batched with the calls below: even when appdetails didn't confirm
     // zero (meta missing/failed, or achievementCount unknown), don't fire rarity/per-player
     // calls until schema itself confirms there's something to annotate.
-    const schema = await getGameSchema(appid, { force });
-    if (!schema || schema.length === 0) {
+    const schema = (await getGameSchema(appid, { force })).achievements;
+    if (schema.length === 0) {
       return res.json(none);
     }
 

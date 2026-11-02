@@ -774,7 +774,7 @@ function applyDetailsEvent(row: Game, event: DetailsEvent) {
   // No store metadata: guess the CDN art, as lib/steam.js's extractAppDetails does for a missing capsule.
   row.capsule = event.meta ? event.meta.capsule : steamAppAsset(row.appid, 'capsule_sm_120.jpg');
   row.thumb = event.meta ? event.meta.thumb : steamAppAsset(row.appid, 'capsule_231x87.jpg');
-  if (!row.name) row.name = event.meta?.name || row.bundlePackage?.title || '';
+  if (!row.name) row.name = event.name || row.bundlePackage?.title || '';
   row.score = event.rating?.score ?? null;
   row.positivePct =
     event.rating?.positive != null && event.rating?.total
@@ -813,6 +813,7 @@ function applyDetailsEvent(row: Game, event: DetailsEvent) {
   });
   row.loading = false;
   row.details = {
+    name: event.name,
     rating: event.rating,
     hltb: event.hltb,
     meta: event.meta,
@@ -1832,13 +1833,13 @@ export default function ListRoute() {
         appid,
         produce((draft) => {
           Object.assign(draft, detailsFields(data));
-          if (data.meta?.name) draft.name = data.meta.name;
+          if (data.name) draft.name = data.name;
         }),
       );
-      // `data.meta?.name`, not `game.name` — the latter falls back to panel.tsx's own
+      // `data.name`, not `game.name` — the latter falls back to panel.tsx's own
       // `App <appid>` placeholder, which must never reach the stored recents list as if it were
       // a real title (see load()'s recents mapping below).
-      addRecentGame(appid, data.meta?.name || '', data.meta?.capsule || null);
+      addRecentGame(appid, data.name || '', data.meta?.capsule || null);
       restorePendingShot();
     } catch (err) {
       if (token !== standaloneLookupToken) return;
@@ -2086,7 +2087,7 @@ export default function ListRoute() {
           produce((draft) => applyDetailsEvent(draft, data)),
         );
         // A lookup that failed lands only now.
-        if (unresolved && data.meta) addRecentGame(game.appid, data.meta.name || '', data.meta.capsule || null);
+        if (unresolved && data.name) addRecentGame(game.appid, data.name, data.meta?.capsule || null);
       }
       restorePendingShot();
     } catch (err) {

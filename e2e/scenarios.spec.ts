@@ -4757,6 +4757,27 @@ test('D2 edge: a game with no store page keeps its CDN thumbnail and the panel s
   await expect(page.locator('.panel-no-data', { hasText: 'No Steam store page' })).toBeVisible();
 });
 
+test('D2 edge: a looked-up game with no store page is named from its achievement schema', async ({ page }) => {
+  await page.route('**/api/game-details/stream', (route) => {
+    const req = route.request();
+    const full = respond(req.method(), new URL(req.url()), req.postData());
+    const body = full.body
+      .split('\n\n')
+      .map((line: string) => {
+        if (!line.startsWith('data: ')) return line;
+        const event = JSON.parse(line.slice(6));
+        return event.appid === 1145360
+          ? `data: ${JSON.stringify({ ...event, meta: null, name: 'Hades Schema Name' })}`
+          : line;
+      })
+      .join('\n\n');
+    return route.fulfill({ ...full, body });
+  });
+  await page.goto('/game/1145360');
+  await expect(page.locator('#panel-title')).toHaveText('Hades Schema Name');
+  await expect(page.locator('.panel-no-data', { hasText: 'No Steam store page' })).toBeVisible();
+});
+
 test("D2 edge: a game the details stream refused shows no age, and its link's screenshot waits for ↻", async ({
   page,
 }) => {

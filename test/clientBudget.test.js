@@ -265,7 +265,7 @@ const playerIds = (from, n) => Array.from({ length: n }, (_, i) => String(765611
 
 function cacheAchievementGame(appid) {
   setCache(`meta:${appid}`, { name: 'Game' });
-  setCache(`schema:${appid}`, [{ apiname: 'A', name: 'A' }]);
+  setCache(`gameschema:${appid}`, { name: 'A', achievements: [{ apiname: 'A', name: 'A' }] });
   setCache(`achrarity:${appid}`, {});
 }
 
@@ -299,7 +299,7 @@ test('a route with a JSON body is charged to its client', async (t) => {
 test('a refused rarity lookup logs no [achievements] line', async (t) => {
   const { warn } = setup(t, steamApi);
   setCache('meta:11', { name: 'Game' });
-  setCache('schema:11', [{ apiname: 'A', name: 'A' }]);
+  setCache('gameschema:11', { name: 'A', achievements: [{ apiname: 'A', name: 'A' }] });
   for (let i = 0; i < 8; i++) await createTrackedFetch('steam-api')('spend', 'https://example.com/');
   const res = await api.get('/api/achievements/11').set('X-Forwarded-For', '203.0.113.4');
   assert.equal(res.status, 200);

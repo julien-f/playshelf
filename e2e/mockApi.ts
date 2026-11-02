@@ -134,10 +134,21 @@ function details(appid: number, states: ReadonlySet<string>) {
   };
   // As server.js answers an appid with no store page: 200, every source empty rather than failed.
   if (!CATALOG.some((g) => g.appid === appid))
-    return { ...fetched, rating: null, hltb: null, meta: null, tags: [], tagWeights: {}, demo: null, protondb: null };
+    return {
+      ...fetched,
+      name: null,
+      rating: null,
+      hltb: null,
+      meta: null,
+      tags: [],
+      tagWeights: {},
+      demo: null,
+      protondb: null,
+    };
   const g = game(appid);
   return {
     ...fetched,
+    name: g.name,
     rating: {
       score: g.score,
       desc: 'Very Positive',

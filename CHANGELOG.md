@@ -71,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Bundles: add-on tiers no longer count as part of the tiers, and a pressed tier is no longer saved into every bundle's layout
 - Fanatical Build Your Own bundles no longer vanish from Bundles, or show as ended, while still on sale
 - A game delisted from the Steam store shows its thumbnail again, and its panel says it has no store page instead of looking empty
+- A game with no Steam store page is named from its achievement data, and gets its HowLongToBeat times
 
 ### Development
 

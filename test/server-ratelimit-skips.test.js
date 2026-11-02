@@ -143,7 +143,7 @@ test('achievements limiter: counts cache misses but never counts cache hits', as
   const PLAYER = '76561198000000099';
   // Not part of the skip: a cached positive count just keeps the route off the store API.
   for (const appid of [500, 501, 502, 510]) setCache(`meta:${appid}`, { name: 'Game', achievementCount: 1 });
-  setCache('schema:510', [{ apiname: 'A', name: 'A', hidden: false }]);
+  setCache('gameschema:510', { name: 'A', achievements: [{ apiname: 'A', name: 'A', hidden: false }] });
   setCache('achrarity:510', { A: 50 });
   setCache(`playerach:${PLAYER}:510`, []);
   setCache('achrarity:500', { A: 50 });

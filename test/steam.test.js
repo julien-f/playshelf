@@ -2007,12 +2007,13 @@ test('searchCreatorGames: throws isUpstream when fetch fails', async (t) => {
 
 // ── getGameSchema ─────────────────────────────────────────────────────────────
 
-test('getGameSchema: extracts achievement fields', async (t) => {
+test('getGameSchema: extracts the game name and achievement fields', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({
       game: {
+        gameName: 'Deus Ex Human Revolution',
         availableGameStats: {
           achievements: [
             {
@@ -2029,22 +2030,25 @@ test('getGameSchema: extracts achievement fields', async (t) => {
     }),
   }));
   const result = await getGameSchema(400);
-  assert.deepEqual(result, [
-    {
-      apiname: 'ACH_WIN',
-      name: 'Winner',
-      description: 'Win a match',
-      icon: 'a.jpg',
-      icongray: 'a_gray.jpg',
-      hidden: false,
-    },
-  ]);
+  assert.deepEqual(result, {
+    name: 'Deus Ex Human Revolution',
+    achievements: [
+      {
+        apiname: 'ACH_WIN',
+        name: 'Winner',
+        description: 'Win a match',
+        icon: 'a.jpg',
+        icongray: 'a_gray.jpg',
+        hidden: false,
+      },
+    ],
+  });
 });
 
-test('getGameSchema: returns empty array when game has no achievements', async (t) => {
+test('getGameSchema: returns no name and no achievements for an empty schema', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ game: {} }) }));
-  assert.deepEqual(await getGameSchema(400), []);
+  assert.deepEqual(await getGameSchema(400), { name: null, achievements: [] });
 });
 
 test('getGameSchema: caches result — second call skips fetch', async (t) => {
@@ -2064,16 +2068,16 @@ test('getGameSchema: throws isUpstream when fetch fails', async (t) => {
   );
 });
 
-test('getGameSchema: returns an empty array (not throw) on a 403 with a JSON body — no schema published for this appid', async (t) => {
+test('getGameSchema: returns no achievements (not throw) on a 403 with a JSON body — no schema published for this appid', async (t) => {
   _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: false,
     status: 403,
     text: async () => '{"game":{}}',
   }));
-  assert.deepEqual(await getGameSchema(400), []);
+  assert.deepEqual(await getGameSchema(400), { name: null, achievements: [] });
   // Cached, so an unreleased game doesn't cost an upstream call on every panel open.
-  assert.deepEqual(await getGameSchema(400), []);
+  assert.deepEqual(await getGameSchema(400), { name: null, achievements: [] });
   assert.equal(fetchMock.mock.callCount(), 1);
 });
 

@@ -67,9 +67,23 @@ const TAG_NAME_MAP = { 1001: 'Action', 1002: 'Co-op' };
 // tagids above — see the `tagsOk` flag below, which gates both.
 const DEMO_APPID = 999900;
 
-// `media`: the store page lists a screenshot and a trailer.
-function makeDetailsFetch({ ratingOk = true, metaOk = true, tagsOk = true, type, media = false } = {}) {
+// `media`: the store page lists a screenshot and a trailer. `delisted`: no store page, but the
+// achievement schema still names the game.
+function makeDetailsFetch({
+  ratingOk = true,
+  metaOk = true,
+  tagsOk = true,
+  type,
+  media = false,
+  delisted = false,
+} = {}) {
   return async (url) => {
+    if (url.includes('GetSchemaForGame')) {
+      return {
+        ok: true,
+        json: async () => ({ game: { gameName: 'Portal', availableGameStats: { achievements: [] } } }),
+      };
+    }
     if (url.includes('GetAppReviews')) {
       if (!ratingOk) return { ok: false, status: 503 };
       return {
@@ -100,6 +114,7 @@ function makeDetailsFetch({ ratingOk = true, metaOk = true, tagsOk = true, type,
     if (url.includes('appdetails')) {
       if (!metaOk) return { ok: false, status: 503 };
       const appid = url.match(/appids=(\d+)/)?.[1];
+      if (delisted) return { ok: true, json: async () => ({ [appid]: { success: false } }) };
       return {
         ok: true,
         json: async () => ({
@@ -893,6 +908,7 @@ test('GET /api/game-details/:appid: 200 from cache without fetching', async (t) 
   assert.equal(res.status, 200);
   assert.equal(res.body.rating?.total, 1000);
   assert.equal(res.body.rating?.desc, 'Very Positive');
+  assert.equal(res.body.name, 'Portal');
   assert.equal(res.body.hltb?.main, 10);
   assert.deepEqual(res.body.meta?.genres, ['Action']);
   assert.deepEqual(res.body.tags, ['Action', 'Co-op']);
@@ -1041,6 +1057,18 @@ test("GET /api/game-details/:appid: a soundtrack's skipped HLTB lookup is cached
   const later = Date.now() + MISS_CACHE_TTL_MS + 1;
   t.mock.method(Date, 'now', () => later);
   assert.equal(getCachedAt('hltb:413'), undefined);
+});
+
+test('GET /api/game-details/:appid: a delisted game takes its name from the achievement schema, and HLTB searches it', async (t) => {
+  _reset();
+  _resetAuth();
+  t.mock.method(globalThis, 'fetch', makeDetailsFetch({ delisted: true }));
+
+  const res = await api.get('/api/game-details/414').expect(200);
+  assert.equal(res.body.meta, null);
+  assert.equal(res.body.name, 'Portal');
+  assert.equal(res.body.hltb?.main, 10);
+  assert.equal(res.body.failed, undefined);
 });
 
 test('GET /api/game-details/:appid: 200 with null rating when reviews fetch fails', async (t) => {

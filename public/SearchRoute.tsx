@@ -173,8 +173,8 @@ export default function SearchRoute() {
     try {
       const data = await fetchJson<GameDetailsReply>(`/api/game-details/${appid}`, undefined, 'Lookup failed');
       if (token !== lookupToken) return; // a newer pick has since taken over
-      setGames(appid, { ...detailsFields(data), name: data.meta?.name || name });
-      addRecentGame(appid, data.meta?.name || name, data.meta?.capsule || tinyImage);
+      setGames(appid, { ...detailsFields(data), name: data.name || name });
+      addRecentGame(appid, data.name || name, data.meta?.capsule || tinyImage);
     } catch (err) {
       if (token !== lookupToken) return;
       setGames(appid, failedLookupFields());
@@ -191,7 +191,7 @@ export default function SearchRoute() {
         undefined,
         'Refresh failed',
       );
-      const name = data.meta?.name || game.name;
+      const name = data.name || game.name;
       setGames(game.appid, { ...detailsFields(data), name });
       setStatusText('');
       // A lookup that failed lands only now.

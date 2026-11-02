@@ -108,7 +108,7 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 
 Documented endpoints whose "no data" answers are error statuses, treated as answers rather than failures:
 
-- **`GetSchemaForGame/v2`** (key): a 403 with a **JSON** body means no achievements (cached as `[]`, on the short miss TTL since a game gets them at release); a 403 with an **HTML** body is a rejected key, a real failure.
+- **`GetSchemaForGame/v2`** (key): a 403 with a **JSON** body means no achievements (cached as none, on the short miss TTL since a game gets them at release); a 403 with an **HTML** body is a rejected key, a real failure. `game.gameName` survives a delisting, so it names a game appdetails has no page for (observed: 28050 → `Deus Ex Human Revolution`, the store title without its colon).
 - **`GetPlayerAchievements/v1`** (key): **400** means no stats, **403** a private profile; both cached as `null`, like a reply without `playerstats.success`.
 - **`GetGlobalAchievementPercentagesForApp/v2`**: **no key** needed. A 403 with an empty body answers both "no achievements" and "unknown appid", cached as `null` on the short miss TTL. `percent` is a numeric string.
 

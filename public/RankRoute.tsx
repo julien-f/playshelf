@@ -125,7 +125,7 @@ export default function RankRoute() {
     );
   }
   function setDetails(appid: number, data: GameDetailsReply): void {
-    setGames(appid, { ...detailsFields(data), name: data.meta?.name || `App ${appid}` });
+    setGames(appid, { ...detailsFields(data), name: data.name || `App ${appid}` });
   }
 
   // Cached per appid for this mount; the server's own cache makes a repeat cheap anyway.

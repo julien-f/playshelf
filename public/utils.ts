@@ -463,7 +463,7 @@ export function detailsFields(
 // The detail sources a /api/game-details reply can name as `failed` (server.js's fetchGameDetails).
 export const DETAIL_SOURCES = ['rating', 'hltb', 'meta', 'tags', 'protondb'] as const;
 export type DetailSource = (typeof DETAIL_SOURCES)[number];
-export const NO_DETAILS = { rating: null, hltb: null, meta: null, tags: null, demo: null, protondb: null };
+export const NO_DETAILS = { name: null, rating: null, hltb: null, meta: null, tags: null, demo: null, protondb: null };
 
 // A lookup that didn't answer at all: every source failed, so the panel says so and offers ↻.
 export function failedLookupFields(): ReturnType<typeof detailsFields> {

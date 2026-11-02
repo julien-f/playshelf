@@ -61,6 +61,7 @@ export interface ProtonDb {
 }
 
 export interface GameDetails {
+  name: string | null; // the store's, else the achievement schema's (a delisted game)
   rating: Rating | null;
   hltb: Hltb | null;
   meta: GameMeta | null;
