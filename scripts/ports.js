@@ -2,7 +2,7 @@
 
 // Each local server's port: the main checkout (and CI) keeps the base, a worktree draws its own from
 // its path, so agents running servers in parallel worktrees don't collide. An env var overrides.
-//   node scripts/ports.js e2e|mock   prints this checkout's port
+//   node scripts/ports.js e2e|mock|perf   prints this checkout's port
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -10,7 +10,12 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 // e2e below Linux's ephemeral range (see playwright.config.ts); mock where `dev:mock` always was.
-const PORTS = { e2e: { base: 28992, env: 'E2E_PORT' }, mock: { base: 58993, env: 'MOCK_PORT' } };
+// perf: scripts/perf-measure.js's preview, below e2e's worktree range (28993–30992).
+const PORTS = {
+  e2e: { base: 28992, env: 'E2E_PORT' },
+  mock: { base: 58993, env: 'MOCK_PORT' },
+  perf: { base: 26991, env: 'PERF_PORT' },
+};
 
 function portOf(name, root = ROOT, env = process.env) {
   const { base, env: key } = PORTS[name];
