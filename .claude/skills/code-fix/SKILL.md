@@ -21,7 +21,7 @@ Above about five items, run them as a parallel batch: [BATCH.md](BATCH.md).
 - A test in `test/*.test.js` (backend, shared frontend logic) or `e2e/` (behaviour in the browser) that fails for the reason the item describes; run it alone and confirm it fails.
 - **cleanup** items change no behaviour: the existing tests must pass before and after, no new test.
 - **docs** items: the doc edit is the fix, no test; re-read the code it describes to confirm the new text, and `npm run check` covers the rest.
-- **perf** items: measure before and after (build sizes, outbound call counts from `GET /api/metrics`, a timing) and put the numbers in the commit body.
+- **perf** items: measure before and after (build sizes, outbound call counts from `GET /api/metrics`, a timing; for a list load, `node scripts/perf-measure.js`, [testing.md](../../../docs/dev/testing.md#measuring-performance)) and put the numbers in the commit body.
 
 ## 2. Fix
 
