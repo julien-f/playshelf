@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const { getProtonDbStatus, getStoreBrowseItem } = require('../lib/steam');
 const { getHLTB, _resetAuth } = require('../lib/hltb');
 const { _reset } = require('../lib/cache');
-const { createRetryingFetch } = require('../lib/upstream');
+const { createRetryingFetch, createSemaphore, createWindow } = require('../lib/upstream');
 
 const flush = () => new Promise((r) => setImmediate(r));
 
@@ -94,4 +94,74 @@ test('createRetryingFetch: without a retry count, a 429 fails instead of being r
   for (let i = 0; i < 10; i++) await flush();
   assert.equal(settled, 'rejected');
   assert.equal(calls, 1);
+});
+
+const settle = async () => {
+  for (let i = 0; i < 10; i++) await flush();
+};
+
+test('createWindow: past `max` sends in the window, the next waits until the oldest send leaves it', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const window = createWindow(2, 1000);
+  const granted = [];
+  for (let i = 0; i < 3; i++) void window.reserve().then((place) => granted.push(place));
+  await settle();
+  assert.equal(granted.length, 2);
+  granted[0].send();
+  t.mock.timers.tick(500);
+  granted[1].send();
+  t.mock.timers.tick(499);
+  await settle();
+  assert.equal(granted.length, 2, 'the first send is still in the window');
+  t.mock.timers.tick(1);
+  await settle();
+  assert.equal(granted.length, 3);
+});
+
+test('createWindow: a place released without being sent frees at once', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const window = createWindow(1, 1000);
+  const granted = [];
+  for (let i = 0; i < 2; i++) void window.reserve().then((place) => granted.push(place));
+  await settle();
+  granted[0].release();
+  await settle();
+  assert.equal(granted.length, 2);
+});
+
+test('createRetryingFetch: a call waiting on its window holds no slot of the shared limit', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const limit = createSemaphore(1, 0, 'window-test');
+  const urls = [];
+  const trackedFetch = async (label, url) => (urls.push(url), { status: 200 });
+  const windowed = createRetryingFetch({ limit, window: createWindow(1, 1000), trackedFetch, name: 'Test' });
+  const other = createRetryingFetch({ limit, trackedFetch, name: 'Test' });
+  void windowed('label', 'w1');
+  void windowed('label', 'w2');
+  void other('label', 'o1');
+  await settle();
+  assert.deepEqual(urls, ['w1', 'o1']);
+  t.mock.timers.tick(1000);
+  await settle();
+  assert.deepEqual(urls, ['w1', 'o1', 'w2']);
+});
+
+test('createRetryingFetch: each retry of a 429 takes its own place in the window', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  let calls = 0;
+  const retryingFetch = createRetryingFetch({
+    window: createWindow(1, 10000),
+    trackedFetch: async () =>
+      ++calls === 1 ? { status: 429, headers: new Headers({ 'retry-after': '1' }) } : { status: 200 },
+    name: 'Test',
+    retries: 1,
+  });
+  void retryingFetch('label', 'https://example.test/');
+  await settle();
+  t.mock.timers.tick(1000);
+  await settle();
+  assert.equal(calls, 1, 'the retry waits for the window, not only Retry-After');
+  t.mock.timers.tick(9000);
+  await settle();
+  assert.equal(calls, 2);
 });

@@ -221,10 +221,59 @@ for (const [label, body] of [
       return { ok: true, status: 200, json: async () => body };
     });
     await assert.rejects(() => getHLTB(1, 'Portal'), /HLTB/);
-    await assert.rejects(() => getHLTB(1, 'Portal'), /HLTB/);
+    assert.equal(getCached('hltb:1'), undefined);
+    await assert.rejects(() => getHLTB(1, 'Portal', { force: true }), /HLTB/);
     assert.equal(searches, 2);
   });
 }
+
+test('getHLTB: a failed lookup holds that game off for 10 minutes, unless forced', async (t) => {
+  _reset();
+  _resetAuth();
+  t.after(_resetAuth);
+  t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+  let searches = 0;
+  let status = 503;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('search/site/init')) return makeInitResponse();
+    searches++;
+    return status === 200 ? makeSearchResponse([]) : { ok: false, status };
+  });
+  await assert.rejects(() => getHLTB(1, 'Portal'));
+  await assert.rejects(
+    () => getHLTB(1, 'Portal'),
+    (err) => err.isLogged,
+  );
+  assert.equal(searches, 1, 'held: no new search');
+  await getHLTB(2, 'Half-Life').catch(() => {});
+  assert.equal(searches, 2, 'other games still search');
+
+  status = 200;
+  t.mock.timers.tick(10 * 60 * 1000 - 1);
+  await assert.rejects(() => getHLTB(1, 'Portal'));
+  t.mock.timers.tick(1);
+  assert.equal(await getHLTB(1, 'Portal'), null);
+  assert.equal(searches, 3);
+});
+
+test("getHLTB: a client's budget refusal doesn't hold the game off for others", async (t) => {
+  _reset();
+  _resetAuth();
+  t.after(_resetAuth);
+  let refuse = true;
+  let searches = 0;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('search/site/init')) return makeInitResponse();
+    searches++;
+    if (refuse) throw Object.assign(new Error('budget'), { isBudgetExhausted: true });
+    return makeSearchResponse([]);
+  });
+  await assert.rejects(() => getHLTB(1, 'Portal'));
+  refuse = false;
+  assert.equal(await getHLTB(1, 'Portal'), null);
+  assert.equal(searches, 2);
+});
 
 const badSearchReply = { ok: true, status: 200, json: async () => ({ data: 'blocked' }) };
 

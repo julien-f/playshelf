@@ -17,6 +17,7 @@ import {
   fmtReleaseDate,
   MEDIA_FAILED,
   noStorePage,
+  metaOrBasics,
 } from './utils.ts';
 import { openLightbox, openLightboxFrom, lightboxShot, lightboxOpen } from './lightbox.tsx';
 import { isMorphUpdating, loadedWhen, morph } from './viewTransition.ts';
@@ -685,7 +686,7 @@ function panelGoBack() {
 
 function getPanelItems() {
   const g = panelGame();
-  return g ? buildMediaItems(g.appid, g.details?.meta) : [];
+  return g ? buildMediaItems(g.appid, metaOrBasics(g.details)) : [];
 }
 
 // dir: -1 (previous) or 1 (next). wrap: true for keyboard arrow navigation
@@ -999,11 +1000,15 @@ function GlanceGrid(props: { game: ReadonlyGame }): JSX.Element {
   const details = () => props.game.details;
   const reviewsUrl = () => `https://store.steampowered.com/app/${props.game.appid}/#app_reviews_hash`;
   const protondbUrl = () => `https://www.protondb.com/app/${props.game.appid}`;
+  // Its stream part hasn't arrived yet: "…", not "no data".
+  const pendingChip = (source: string, label: string) =>
+    props.game.pendingSources?.includes(source) ? <GlanceChip value="…" label={label} detail="still loading" /> : null;
   // The source errored (server.js's `failed`): said apart from "no data", ↻ above retries it.
   const failedChip = (source: string, label: string, href: string) =>
-    props.game.failedSources?.includes(source) ? (
+    pendingChip(source, label) ??
+    (props.game.failedSources?.includes(source) ? (
       <GlanceChip href={href} value={<TriangleAlert />} color="var(--warn)" label={label} detail="didn't answer" />
-    ) : null;
+    ) : null);
 
   // Every chip stays in the grid even when its source has no data for this game — a missing
   // weighted rating or ProtonDB tier is itself informative, and a chip that vanishes instead makes
@@ -1047,7 +1052,7 @@ function GlanceGrid(props: { game: ReadonlyGame }): JSX.Element {
         detail="critic score"
       />
     ) : (
-      <GlanceChip value="—" label="Metacritic" detail="no score" />
+      (pendingChip('meta', 'Metacritic') ?? <GlanceChip value="—" label="Metacritic" detail="no score" />)
     );
   };
 
@@ -2236,8 +2241,8 @@ function sameNames(a: string[], b: string[]): boolean {
 function TagCloudSection(props: { game: ReadonlyGame }): JSX.Element {
   const meta = () => props.game.details?.meta;
   const groups = createMemo(() => {
-    const devs = meta()?.developers || [];
-    const pubs = meta()?.publishers || [];
+    const devs = metaOrBasics(props.game.details)?.developers || [];
+    const pubs = metaOrBasics(props.game.details)?.publishers || [];
     const sameDevPub = sameNames(devs, pubs);
     return [
       { kind: 'tags' as const, dim: 'tags', items: props.game.details?.tags, weights: props.game.details?.tagWeights },
@@ -2259,7 +2264,9 @@ const SIMILAR_SHOWN = 5;
 const steamMoreLikeUrl = (appid: number): string => `https://store.steampowered.com/recommended/morelike/app/${appid}/`;
 
 // Each name once with every role it has here; a developer that also publishes opens as developer.
-function gameCreators(meta: GameMeta | null | undefined): { name: string; role: CreatorRole; label: string }[] {
+function gameCreators(
+  meta: Pick<GameMeta, 'developers' | 'publishers'> | null | undefined,
+): { name: string; role: CreatorRole; label: string }[] {
   const devs = meta?.developers ?? [];
   const pubs = meta?.publishers ?? [];
   return [
@@ -2276,7 +2283,7 @@ function gameCreators(meta: GameMeta | null | undefined): { name: string; role: 
 
 function MoreFrom(props: { game: ReadonlyGame }): JSX.Element {
   const location = useLocation();
-  const creators = createMemo(() => gameCreators(props.game.details?.meta));
+  const creators = createMemo(() => gameCreators(metaOrBasics(props.game.details)));
   const isOpen = (role: CreatorRole, name: string) =>
     location.pathname === `/lists/${role}` && new URLSearchParams(location.search).get('name')?.trim() === name;
   return (
@@ -2324,7 +2331,7 @@ function SimilarSection(props: { game: ReadonlyGame }): JSX.Element {
   });
   return (
     // A tagless game still gets its More from line.
-    <Show when={!props.game.loading && (hasTags() || gameCreators(props.game.details?.meta).length)}>
+    <Show when={!props.game.loading && (hasTags() || gameCreators(metaOrBasics(props.game.details)).length)}>
       <section class="panel-section" id="panel-section-similar">
         <div class="panel-section-title">
           <h3>{shown() ? `Similar in ${accountDisplayLabel(account()!)}'s library` : 'Similar games'}</h3>{' '}
@@ -2694,7 +2701,7 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
   // rendering the decoded *text* (never raw markup/innerHTML) is what the original file did too;
   // preserved verbatim here since JSX interpolation is already exactly as safe as that
   // plain-text insert was.
-  const description = () => meta()?.description;
+  const description = () => metaOrBasics(g.details)?.description;
   const decodedDescription = () => {
     const d = description();
     return d ? new DOMParser().parseFromString(d, 'text/html').body.textContent || '' : '';
@@ -2716,7 +2723,7 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
   // the rendered element's own truthiness (a `<Component/>` call is truthy regardless of what it
   // renders to, including `null`) so the separator and the link itself can never disagree about
   // whether there's a base game to show.
-  const releaseDate = () => meta()?.releaseDate;
+  const releaseDate = () => metaOrBasics(g.details)?.releaseDate;
   const hasBaseGame = () => !g.loading && !!meta()?.fullgame;
   // On this line, which has room: the action row below has none on a phone.
   const statusShown = () => !!panelData.ownership()?.inLibrary && showingMyAccount();

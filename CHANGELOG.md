@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Requires Node.js 22.15 or later.
 - On a phone, game thumbnails are smaller so a bundle's Best Deal stays in view
 - Taste fit stays hidden until the account's taste is known on this device, instead of a column of dashes
+- Large lists load faster when several people use the app at once: names, ratings, tags, ProtonDB and HLTB fill in before genres, Metacritic and achievements
 
 ### Fixed
 
@@ -72,6 +73,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Fanatical Build Your Own bundles no longer vanish from Bundles, or show as ended, while still on sale
 - A game delisted from the Steam store shows its thumbnail again, and its panel says it has no store page instead of looking empty
 - A game with no Steam store page is named from its achievement data, and gets its HowLongToBeat times
+- A game whose HLTB lookup failed is no longer searched again on every list load for the next 10 minutes
 
 ### Development
 

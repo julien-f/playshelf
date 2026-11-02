@@ -822,6 +822,7 @@ const COLUMN_SOURCE: Record<string, string> = {
   platforms: 'meta',
   achievementCount: 'meta',
   dlcCount: 'meta',
+  productionTier: 'meta',
   tags: 'tags',
   steamRegular: 'prices',
   bestDealPrice: 'prices',
@@ -835,7 +836,7 @@ const COLUMN_SOURCE: Record<string, string> = {
 const sourceFailed = (row: Row, source: string) =>
   source === 'prices' ? !!row.pricesFailed : !!row.failedSources?.includes(source);
 
-// A source that errored shows ⚠ rather than "—", which means it has no data for the game.
+// A source that errored shows ⚠ rather than "—", which means it has no data for the game; one still coming, "…".
 function markFailedSources(columns: ColumnDef<Row>[]): ColumnDef<Row>[] {
   return columns.map((col) => {
     const source = COLUMN_SOURCE[col.key];
@@ -845,6 +846,8 @@ function markFailedSources(columns: ColumnDef<Row>[]): ColumnDef<Row>[] {
       // Store-page lists are [] when missing, not null.
       const raw = (row as Record<string, unknown>)[col.key];
       const missing = raw == null || (Array.isArray(raw) && raw.length === 0);
+      // Its stream part hasn't arrived: "…", as for a row still loading, not "—" (no data).
+      if (missing && row.pendingSources?.includes(source)) return document.createTextNode('…');
       if (missing && sourceFailed(row, source)) {
         const mark = document.createElement('span');
         mark.className = 'cell-failed';

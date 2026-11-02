@@ -362,9 +362,11 @@ test('the stream says once that this client is past its share, and still ends', 
   const limited = events.filter((e) => e.limited);
   assert.equal(limited.length, 1);
   assert.match(limited[0].limited, /your network/);
-  const rows = events.filter((e) => e.appid);
-  assert.equal(rows.length, 3);
-  assert.ok(rows.every((e) => !('limited' in e) && e.failed.includes('meta')));
+  const stores = events.filter((e) => e.part === 'store');
+  assert.deepEqual(stores.map((e) => e.appid).sort(), [30, 31, 32]);
+  assert.equal(events.filter((e) => e.part === 'fast').length, 3);
+  assert.ok(events.filter((e) => e.appid).every((e) => !('limited' in e)));
+  assert.ok(stores.every((e) => e.failed.includes('meta')));
   assert.equal(events.at(-1).done, true);
   assert.deepEqual(
     warn.mock.calls.map((c) => c.arguments[0]).filter((l) => /\[game-details\]/.test(l)),

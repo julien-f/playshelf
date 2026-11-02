@@ -51,6 +51,13 @@ export interface GameMeta {
   priceInitial: number | null;
 }
 
+// The part of a game's store metadata Steam's store browse item also carries (server.js's fetchFastDetails), so a
+// list row fills before its appdetails, which runs under Steam's store details cap.
+export type GameBasics = Pick<
+  GameMeta,
+  'name' | 'type' | 'thumb' | 'description' | 'releaseDate' | 'comingSoon' | 'platforms' | 'developers' | 'publishers'
+> & { capsule: string | null; banner: string | null };
+
 export interface ProtonDb {
   // A human-readable tier word straight from ProtonDB's API ("borked"/"bronze"/.../"native"),
   // or a `provisionalTier` when `pending` is set (too few reports to be confident).
@@ -65,6 +72,7 @@ export interface GameDetails {
   rating: Rating | null;
   hltb: Hltb | null;
   meta: GameMeta | null;
+  basics?: GameBasics | null; // absent from a reply without a fast part
   tags: string[] | null;
   tagWeights?: Record<string, number | null> | null; // relative to the game's top tag, 0–1
   protondb: ProtonDb | null;
@@ -94,7 +102,8 @@ export interface Game extends PriceFields {
   // One field per sortable/filterable/groupable column (see gameColumns.ts's own `key`s, plus
   // each list kind's own columns in ListRoute.tsx) — `details` itself is nested, and the table
   // addresses a row by flat key. All written in one place, applyDetailsEvent (ListRoute.tsx), so
-  // they're `undefined` until that row's details have streamed in and never partially filled.
+  // they're `undefined` until that row's details have streamed in; a source still in `pendingSources`
+  // leaves its fields empty (or filled from `details.basics`) until its part arrives.
   // These used to be undeclared, covered by an `[key: string]: unknown` index signature on this
   // interface: that made every one of them an `unknown` read *and* made a typo'd write
   // (`row.hltbMian = …`) compile silently. Declaring them is what turns both into typecheck
@@ -165,6 +174,8 @@ export interface Game extends PriceFields {
   detailsFetchedAts?: DetailsAges | null;
   // Detail sources that errored on the last fetch (server.js's `failed`), as opposed to having no data.
   failedSources?: string[];
+  // Detail sources whose stream part hasn't arrived yet (the store part trails the fast one).
+  pendingSources?: string[];
   // Its screenshots and trailers didn't load (GET /api/game-meta failed): opening the game again retries.
   mediaFailed?: boolean;
 }

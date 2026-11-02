@@ -58,11 +58,11 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 - `chargeBudget(group)` runs at the top of `trackedFetch` and caps calls per service per hour and per day (`OUTBOUND_HOURLY_MAX`/`OUTBOUND_DAILY_MAX`, see [configuration.md](../user/configuration.md); `0` disables).
 - The only limit that isn't per client: it protects a key's quota from all clients together, and from the app's own retry loops.
 - Past a ceiling it throws an `isUpstream` error, so routes answer 502 with no new error path. Refused calls aren't counted as requests.
-- **Client share**: within each window, one client may spend `OUTBOUND_CLIENT_SHARE_PERCENT` of the ceiling (at least 1), so one IP can't spend it for everyone. Past it, the error also carries `isClientBudgetExhausted` and routes answer 429 with a message for the user. `fetchGameDetails` marks a result it left short as `limited`, and the details stream sends that message once as a `{ limited }` event; its workers go on, since cached games still fill in.
+- **Client share**: within each window, one client may spend `OUTBOUND_CLIENT_SHARE_PERCENT` of the ceiling (at least 1), so one IP can't spend it for everyone. Past it, the error also carries `isClientBudgetExhausted` and routes answer 429 with a message for the user. Each details part (`fetchFastDetails`, `fetchStoreDetails`) marks a result it left short as `limited`, and the details stream sends that message once as a `{ limited }` event; its workers go on, since cached games still fill in.
   - A client is `clientKey(req)` in `server.js`: the rate limiters' key (an IPv4 address or an IPv6 /56), so it needs `TRUST_PROXY` behind a proxy.
   - The request's client rides an `AsyncLocalStorage` (`runAsClient`, set by a middleware after the body parser). `createSemaphore` binds each queued job to its caller's context, since another job's release runs it. Any new queue shared across requests must do the same.
   - A call outside any request context (every call while tests bypass the limiters) counts only against the global ceiling.
-  - Shared state keeps one client's refusal from reaching others: `createDedup` retries once in a waiter's own context when it rode on another client's refused call (or, for `fetchGameDetails`, a `limited` result); an HLTB login or the Fanatical feed refused for one client isn't recorded as a failure.
+  - Shared state keeps one client's refusal from reaching others: `createDedup` retries once in a waiter's own context when it rode on another client's refused call (or, for a details part, a `limited` result); an HLTB login or the Fanatical feed refused for one client isn't recorded as a failure.
   - `hourTopClient`/`dayTopClient` in `budgets`: the most one client spent in the current window.
 - Fixed windows, not sliding: it runs on every call and stays O(1). A window starts at the group's first call once the previous one has ended; reading `budgets` never starts one.
 
@@ -76,7 +76,7 @@ Logged at the moment they happen, once per event rather than once per affected r
 - **`[semaphore:<name>] queue saturated …`** — every rejection, unthrottled: it should never fire, so each one matters.
 - **`[HLTB] search failed …`** — throttled to one per `HLTB_SEARCH_WARN_THROTTLE_MS` (30 s); the searches themselves still run and fail normally. `[HLTB] init failed` is throttled by the auth retry backoff.
 
-All are `console.warn`: degraded but recoverable. An error marked `isLogged` is not logged again by `routeErrorStatus` or `fetchGameDetails`: it's set where the warning was printed — `assertClosed` while a breaker is open, `chargeBudget` past a budget, and HLTB's errors repeating the failure the last `[HLTB]` line warned about, or an auth hold whose cause was already logged. Without it, one open breaker or spent budget logs a line per game in a large load.
+All are `console.warn`: degraded but recoverable. An error marked `isLogged` is not logged again by `routeErrorStatus` or the details parts (`logDetailsError`): it's set where the warning was printed — `assertClosed` while a breaker is open, `chargeBudget` past a budget, and HLTB's errors repeating the failure the last `[HLTB]` line warned about, or an auth hold whose cause was already logged. Without it, one open breaker or spent budget logs a line per game in a large load.
 
 Deliberately not done:
 

@@ -95,8 +95,6 @@ import {
   compareDateMissingLast,
   halfDecadeBucket,
   formatHalfDecadeBucket,
-  protonDbValue,
-  TYPE_LABELS,
   priceTierGroup,
   compareNumMissingLast,
   OWNERSHIP_STATUS_COLUMN,
@@ -105,13 +103,12 @@ import {
 } from './gameColumns.ts';
 import {
   ApiError,
-  computeSteamdbRating,
-  computeProductionTier,
   detailsFields,
   detailsPending,
   failedLookupFields,
   NO_DETAILS,
-  DETAIL_SOURCES,
+  FAST_DETAIL_SOURCES,
+  STORE_DETAIL_SOURCES,
   fetchJson,
   fmtAge,
   fmtLastPlayed,
@@ -125,7 +122,6 @@ import {
   fmtLocalDate,
   smoothScroll,
   refusalMessage,
-  steamAppAsset,
 } from './utils.ts';
 import {
   shareTableView,
@@ -260,6 +256,7 @@ import { encodeListFormula, decodeListFormula, shareListUrl, inMemoryDynamicList
 import { copyWithFeedback } from './clipboard.ts';
 import { setBaseTitle } from './pageTitle.ts';
 import type { AccountSlot, GameDetailsReply, Game, GameList, GameMeta, CombineOp, ListRef } from './types.ts';
+import { applyDetailsEvent, type DetailsEvent } from './detailsEvent.ts';
 import {
   getList,
   getLists,
@@ -738,13 +735,6 @@ const RANKED_DEFAULT_SORT: SortEntry[] = [{ key: 'rank', dir: 'asc' }];
 const DEFAULT_SORT: SortEntry[] = [{ key: 'steamdbRating', dir: 'desc' }];
 const MAX_PRICE_LOOKUP_GAMES = 500; // mirrors the server's own cap — see loadPrices below
 
-// The shape of one `data:` line in /api/game-details/stream's SSE response.
-interface DetailsEvent extends GameDetailsReply {
-  appid: number;
-  done?: boolean;
-  limited?: string; // its own event, with no appid: see detailsLimited
-}
-
 const PLAYS_MOSTLY_SHOWN = 6;
 const PLAYER_TAGS_SHOWN = 3;
 const LATELY_SHOWN = 3; // a Players card's Playing lately games
@@ -765,63 +755,6 @@ function syncLeadColumn(t: TableState<Game>, key: string, active: boolean): void
     if (shown) t.columns.toggleVisibility(key);
     if (t.filter.ranges()[key]) t.filter.clearColumn(key, 'range');
   }
-}
-
-function applyDetailsEvent(row: Game, event: DetailsEvent) {
-  row.detailsFetchedAt = event.fetchedAt; // absent on a row the stream never answered: no age
-  row.detailsFetchedAts = event.fetchedAts ?? null;
-  row.failedSources = event.failed ?? [];
-  // No store metadata: guess the CDN art, as lib/steam.js's extractAppDetails does for a missing capsule.
-  row.capsule = event.meta ? event.meta.capsule : steamAppAsset(row.appid, 'capsule_sm_120.jpg');
-  row.thumb = event.meta ? event.meta.thumb : steamAppAsset(row.appid, 'capsule_231x87.jpg');
-  if (!row.name) row.name = event.name || row.bundlePackage?.title || '';
-  row.score = event.rating?.score ?? null;
-  row.positivePct =
-    event.rating?.positive != null && event.rating?.total
-      ? Math.round((event.rating.positive / event.rating.total) * 100)
-      : null;
-  row.steamdbRating = computeSteamdbRating(event.rating?.positive ?? 0, event.rating?.total ?? 0);
-  row.reviewsTotal = event.rating?.total ?? null;
-  row.hltbMain = event.hltb?.main ?? null;
-  row.hltbExtra = event.hltb?.extra ?? null;
-  row.hltbCompletionist = event.hltb?.completionist ?? null;
-  row.hltbAll = event.hltb?.all ?? null;
-  row.metacritic = event.meta?.metacritic?.score ?? null;
-  row.releaseDate = event.meta?.releaseDate ?? null;
-  row.comingSoon = event.meta?.comingSoon ?? false;
-  row.genres = event.meta?.genres ?? [];
-  row.developers = event.meta?.developers ?? [];
-  row.publishers = event.meta?.publishers ?? [];
-  row.categories = event.meta?.categories ?? [];
-  row.tags = event.tags ?? [];
-  row.protondb = protonDbValue(event.protondb?.tier);
-  row.protondbPending = event.protondb?.pending ?? false;
-  row.achievementCount = event.meta?.achievementCount ?? null;
-  row.dlcCount = event.meta?.dlc?.length ?? null;
-  row.platforms = event.meta?.platforms ?? [];
-  row.languages = event.meta?.languages ?? [];
-  row.hasDemo = event.demo != null;
-  row.type =
-    (TYPE_LABELS as Record<string, string>)[event.meta?.type ?? ''] ?? (event.meta?.type ? event.meta.type : null);
-  row.productionTier = computeProductionTier({
-    isFree: event.meta?.isFree ?? false,
-    priceInitial: event.meta?.priceInitial ?? null,
-    reviewsTotal: event.rating?.total ?? null,
-    hasMetacritic: event.meta?.metacritic != null,
-    isDlc: event.meta?.fullgame != null,
-    type: event.meta?.type ?? null,
-  });
-  row.loading = false;
-  row.details = {
-    name: event.name,
-    rating: event.rating,
-    hltb: event.hltb,
-    meta: event.meta,
-    tags: event.tags,
-    tagWeights: event.tagWeights,
-    demo: event.demo,
-    protondb: event.protondb,
-  };
 }
 
 export default function ListRoute() {
@@ -1528,8 +1461,11 @@ export default function ListRoute() {
     showSelectionStatus(`Removed ${appids.length} game${appids.length === 1 ? '' : 's'} from "${list.name}".`);
   }
   let total = 0;
-  let loaded = 0;
+  let loaded = 0; // games with both stream parts in
+  // Games with each part in: the store part trails, under Steam's store details cap.
+  const answered = { fast: 0, store: 0 };
   let loadSamples: LoadSample[] = [];
+  let samplePart: 'fast' | 'store' = 'fast';
   // Owned/Wishlist with no account at all: the status links to Home, and there's no "Games 0".
   const [needsAccount, setNeedsAccount] = createSignal(false);
   let slowLoad = false;
@@ -1637,13 +1573,23 @@ export default function ListRoute() {
   function updateStatus(): void {
     if (total > 0 && loaded < total) {
       const now = Date.now();
-      loadSamples = [...loadSamples.filter((s) => s.t >= now - 30_000), { t: now, loaded }];
+      // Rows fill with the fast part; once all are in, what's left is the store part's columns.
+      const part = answered.fast < total ? 'fast' : 'store';
+      if (part !== samplePart) [samplePart, loadSamples] = [part, []];
+      const done = answered[part];
+      loadSamples = [...loadSamples.filter((s) => s.t >= now - 30_000), { t: now, loaded: done }];
       const eta = etaSeconds(loadSamples, total);
-      // Past a minute, say why — and keep saying it for this load, rather than flicker at 60 s.
-      if (eta != null && eta >= 60) slowLoad = true;
-      const why = slowLoad ? ' — details for games not seen before are fetched a few at a time' : '';
-      setStatusText(`${loaded} / ${total} games loaded${eta != null ? ` · ${formatEta(eta)}` : '…'}${why}`);
-      setLoadFraction(loaded / total);
+      const etaText = eta != null ? ` · ${formatEta(eta)}` : '…';
+      if (part === 'fast') {
+        // Past a minute, say why — and keep saying it for this load, rather than flicker at 60 s.
+        if (eta != null && eta >= 60) slowLoad = true;
+        const why = slowLoad ? ' — details for games not seen before are fetched a few at a time' : '';
+        setStatusText(`${done} / ${total} games loaded${etaText}${why}`);
+      } else
+        setStatusText(
+          `All ${total} games listed · genres, Metacritic, achievements still coming: ${done} / ${total}${etaText} — Steam limits these lookups`,
+        );
+      setLoadFraction(done / total);
       loadedRowsDue = true;
       return;
     }
@@ -1769,7 +1715,9 @@ export default function ListRoute() {
   function loadMedia(appid: number, retry: boolean): void {
     const row = rowStore.getRow(appid);
     const meta = row?.details?.meta;
-    if (!meta || meta.screenshots || mediaLoading.has(appid)) return; // no meta: none, or failed (↻ retries)
+    // Its store part still coming: the same answer fills it now, ahead of the stream's queue.
+    const metaPending = !!row?.pendingSources?.includes('meta');
+    if (!row || (!meta && !metaPending) || meta?.screenshots || mediaLoading.has(appid)) return; // no meta: none, or failed (↻ retries)
     if (row.mediaFailed && !retry) return;
     mediaLoading.add(appid);
     if (row.mediaFailed) rowStore.mutateRow(appid, (draft) => void (draft.mediaFailed = false));
@@ -1778,6 +1726,10 @@ export default function ListRoute() {
     fetchJson<{ meta: GameMeta | null }>(`/api/game-meta/${appid}`, undefined, "Steam store didn't answer")
       .then(({ meta: loaded }) => {
         ours((draft) => {
+          if (draft.pendingSources?.includes('meta')) {
+            applyDetailsEvent(draft, { appid, part: 'store', meta: loaded });
+            return;
+          }
           const details = draft.details;
           if (!details?.meta || details.meta.screenshots) return; // a ↻ landed first
           const media = { screenshots: loaded?.screenshots ?? [], movies: loaded?.movies ?? [] };
@@ -1927,7 +1879,8 @@ export default function ListRoute() {
       const row = rowStore.mutateRow(event.appid, (draft) => applyDetailsEvent(draft, event));
       if (!row) return;
       const capsule = (row as { capsule?: string | null }).capsule ?? null;
-      if (pendingRecentFocus === event.appid) {
+      // Recorded once it has a name, or nothing more is coming to give it one.
+      if (pendingRecentFocus === event.appid && (row.name || !row.pendingSources?.includes('meta'))) {
         addRecentGame(row.appid, row.name, capsule);
         pendingRecentFocus = null;
         if (kind === 'recent') restampLookedUp();
@@ -1956,7 +1909,11 @@ export default function ListRoute() {
   });
 
   async function streamGameDetails(games: { appid: number }[], gen: number): Promise<void> {
-    const unanswered = new Set(games.map((g) => g.appid));
+    // Per part: a game counts as loaded once neither is missing.
+    const unanswered = {
+      fast: new Set(games.map((g) => g.appid)),
+      store: new Set(games.map((g) => g.appid)),
+    };
     let failure: string | null = null;
     try {
       const resp = await fetch('/api/game-details/stream', {
@@ -1995,18 +1952,27 @@ export default function ListRoute() {
             if (!loadGuard.isStale(gen)) setDetailsLimited(event.limited);
             continue;
           }
-          unanswered.delete(event.appid);
+          const parts = event.part ? [event.part] : (['fast', 'store'] as const);
+          const wasLoading = unanswered.fast.has(event.appid) || unanswered.store.has(event.appid);
+          for (const part of parts) if (unanswered[part].delete(event.appid)) answered[part]++;
           detailBatcher.push(event, gen);
-          loaded++;
+          if (wasLoading && !unanswered.fast.has(event.appid) && !unanswered.store.has(event.appid)) loaded++;
         }
       }
     } catch (err) {
       failure = (err as Error).message;
     }
     if (loadGuard.isStale(gen)) return;
-    // Rows the stream never answered (refused, dropped, cut short) would otherwise stay loading.
-    for (const appid of unanswered) {
-      detailBatcher.push({ appid, ...NO_DETAILS, failed: [...DETAIL_SOURCES] }, gen);
+    // Rows the stream never answered (refused, dropped, cut short) would otherwise stay loading: only the
+    // missing part's sources fail.
+    for (const appid of new Set([...unanswered.fast, ...unanswered.store])) {
+      const fast = unanswered.fast.has(appid);
+      const store = unanswered.store.has(appid);
+      const failed = [...(fast ? FAST_DETAIL_SOURCES : []), ...(store ? STORE_DETAIL_SOURCES : [])];
+      const part = fast && store ? undefined : fast ? 'fast' : 'store';
+      if (fast) answered.fast++;
+      if (store) answered.store++;
+      detailBatcher.push({ appid, ...NO_DETAILS, basics: null, part, failed }, gen);
       loaded++;
     }
     detailBatcher.flushNow();
@@ -2369,6 +2335,7 @@ export default function ListRoute() {
     setEmptyText('');
     total = 0;
     loaded = 0;
+    answered.fast = answered.store = 0;
     loadedRowsDue = true;
     loadSamples = [];
     slowLoad = false;
@@ -2820,7 +2787,7 @@ export default function ListRoute() {
     if (kept) {
       clearTable();
       initialRows = initialRows.map((row) => withKept(row, kept.get(row.appid)));
-      loaded = initialRows.filter((row) => kept.has(row.appid)).length;
+      loaded = answered.fast = answered.store = initialRows.filter((row) => kept.has(row.appid)).length;
     }
     setRowsStore(initialRows);
     rowStore.load(initialRows);

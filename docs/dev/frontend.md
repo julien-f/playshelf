@@ -111,6 +111,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `gameColumns.ts` — every game-table column definition and its render/format/compare/bucket helpers (see [game-table.md](game-table.md)).
 - `rowStore.ts` — `createRowStore`: the appid→index bookkeeping and the `getRow`/`mutateRow` pair over a route's Solid store array.
 - `streamBatcher.ts` — batches a high-frequency mutation stream into one `batch()` per flush.
+- `detailsEvent.ts` — `applyDetailsEvent`: merges one details-stream part into a row and flattens it into the table's fields.
 - `staleGuard.ts` — generation counters for "a newer load superseded this one".
 - `loadProgress.ts` — the details stream's progress bar and time left.
 - `priceLoading.ts` — the `POST /api/prices` call and the row-field mapping/fallbacks around it.
@@ -167,6 +168,9 @@ Still deliberately imperative: the subnav scroll-spy (measures section positions
 ## Rows, streaming, and stale loads
 
 - **Load progress**: while details stream in, the status line shows a bar and a time left from the last 20 s of progress (`loadProgress.ts`) — cached games arrive in a burst, uncached ones at the upstreams' throttled pace, so an overall average would promise far too little. Past a minute it also says why, for the rest of that load.
+  - It counts fast parts first; once every row has one, it counts store parts ("genres, Metacritic, achievements still coming"), whose pace is Steam's store details cap.
+  - `loaded` (both parts in) still gates what waits for the whole list — taste fit, group fit, the profile — so those move at the store part's pace.
+- **Two stream parts** (`detailsEvent.ts`'s `applyDetailsEvent`): an uncached game's fast part and store part arrive separately, in either order; each event changes only its own fields and sources. `pendingSources` lists what hasn't arrived: a missing value of a pending source renders "…" (`markFailedSources`), the panel's chip says "still loading", and `noStorePage`/`detailsPending` don't read a pending `meta` as final. While `meta` is pending, `metaOrBasics` fills name, art, date, platforms, developers and publishers from the browse item's `basics`; the production tier stays null (it needs the price). Opening such a game loads its appdetails at once (`loadMedia`), ahead of the stream's queue.
 - **Rows are a Solid store** (`createStore`) owned by the route; Solid's dev mode blocks a direct `row.field = x` on a store proxy, so:
   - Every mutation goes through `createRowStore`'s (`rowStore.ts`) `mutateRow(appid, fn)`, which applies `fn` via `produce(fn)`. That's why the mutate-in-place helpers (`applyDetailsEvent`, `priceLoading.ts`'s `applyPriceInfo`/`nullMissingPriceFields`) take a plain draft.
   - `@vates/data-table-solid` renders each `<td>` as a reactive insertion reading `row[column.key]`, so a field write re-renders exactly that cell — no new object reference needed.

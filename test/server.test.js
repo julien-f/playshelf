@@ -923,7 +923,14 @@ test('GET /api/game-details/:appid: a warm request reads each cached meta-tier r
   for (const appid of [403, 404]) {
     setCache(`hltb:${appid}`, []);
     setCache(`meta:${appid}`, { name: 'X' });
-    setCache(`browse:${appid}`, { tagids: TAG_IDS, related_items: { demo_appid: [1] } });
+    setCache(`browse:${appid}`, {
+      name: 'X',
+      type: 0,
+      basic_info: {},
+      assets: {},
+      tagids: TAG_IDS,
+      related_items: { demo_appid: [1] },
+    });
     setCache(`protondb:${appid}`, null);
   }
   setCache('tagnames:all', TAG_NAME_MAP);
@@ -938,7 +945,7 @@ test('GET /api/game-details/:appid: a warm request reads each cached meta-tier r
   const res = await api.get('/api/game-details/404');
   assert.deepEqual(res.body.tags, ['Action', 'Co-op']);
   assert.equal(res.body.demo, 1);
-  // hltb, meta, browse and protondb: the browse row serves tags and demo, the tag names stay parsed
+  // hltb, meta, browse and protondb: the browse row serves tags, demo and the HLTB name, the tag names stay parsed
   assert.equal(metaHits() - before, 4);
 });
 
@@ -1453,7 +1460,7 @@ test('GET /api/game-details/:appid: a request aborted mid-flight still caches, s
   assert.equal(counts.tags, 2, 'aborted request should have completed and cached tags');
 });
 
-test('GET /api/game-details/:appid: failed fetch is not cached, retried on next request', async (t) => {
+test('GET /api/game-details/:appid: failed fetch is not cached, held off, then retried', async (t) => {
   _reset();
   _resetAuth();
   let hltbCalls = 0;
@@ -1492,6 +1499,11 @@ test('GET /api/game-details/:appid: failed fetch is not cached, retried on next 
 
   const res2 = await api.get('/api/game-details/406');
   assert.equal(res2.status, 200);
+  assert.equal(hltbCalls, 1, 'held off: no new search for a while');
+  assert.ok(res2.body.failed.includes('hltb'), 'still reads as failed, not as no data');
+
+  _resetAuth(); // clears the hold-off, as its 10 minutes passing would
+  await api.get('/api/game-details/406');
   assert.equal(hltbCalls, 2, 'HLTB should be retried — failed fetch must not be cached');
 });
 
@@ -1503,6 +1515,16 @@ function parseSseEvents(body) {
     .filter((c) => c.startsWith('data: '))
     .map((c) => JSON.parse(c.slice(6)));
 }
+
+// Each game's stream events, its fast and store parts merged, in the order games first appear.
+function streamedGames(body) {
+  const games = new Map();
+  for (const { part, ...event } of parseSseEvents(body).filter((e) => e.appid))
+    games.set(event.appid, { ...games.get(event.appid), ...event });
+  return games;
+}
+
+const appidsInOrder = (events) => [...new Set(events.map((e) => e.appid))];
 
 function ssePost(port, path, body) {
   return new Promise((resolve, reject) => {
@@ -1562,7 +1584,7 @@ for (const encoding of ['gzip', 'identity']) {
     assert.equal(res.headers['content-encoding'], encoding === 'gzip' ? 'gzip' : undefined);
     const text = (encoding === 'gzip' ? zlib.gunzipSync(res.body) : res.body).toString();
     const events = parseSseEvents(text);
-    assert.deepEqual(events.map((e) => e.appid).sort(), [400, 401, undefined]);
+    assert.deepEqual(appidsInOrder(events).sort(), [400, 401, undefined]);
     assert.equal(events.at(-1).done, true);
   });
 }
@@ -1613,10 +1635,7 @@ test(
       req.on('error', reject);
       req.end(JSON.stringify({ games: [{ appid: 400 }, { appid: SLOW }] }));
     });
-    assert.deepEqual(
-      parseSseEvents(text).map((e) => e.appid),
-      [400, SLOW, undefined],
-    );
+    assert.deepEqual(appidsInOrder(parseSseEvents(text)), [400, SLOW, undefined]);
   },
 );
 
@@ -1693,12 +1712,88 @@ test('POST /api/game-details/stream: fetches fresh details and streams them', as
   const res = await ssePost(server.address().port, '/api/game-details/stream', { games: [{ appid: 700 }] });
 
   assert.equal(res.status, 200);
-  const events = parseSseEvents(res.body);
-  const gameEvent = events.find((e) => e.appid === 700);
+  const gameEvent = streamedGames(res.body).get(700);
   assert.ok(gameEvent, 'must emit an event for the requested appid');
   assert.equal(typeof gameEvent.rating?.score, 'number');
   assert.equal(gameEvent.hltb?.main, 10);
   assert.deepEqual(gameEvent.meta?.genres, ['Action']);
+});
+
+// Appdetails runs under Steam's store details cap: everything else, name and art included, must not wait on it.
+test("POST /api/game-details/stream: a game's fast part arrives while its store details are still pending", async (t) => {
+  _reset();
+  _resetAuth();
+  const { promise: storeGate, resolve: releaseStore } = Promise.withResolvers();
+  t.after(() => releaseStore());
+  const detailsFetch = makeDetailsFetch();
+  const hltbQueries = [];
+  t.mock.method(globalThis, 'fetch', async (url, opts) => {
+    if (url.includes('appdetails')) await storeGate;
+    if (url.includes('IStoreBrowseService'))
+      return {
+        ok: true,
+        json: async () => ({
+          response: {
+            store_items: [
+              {
+                success: 1,
+                name: 'Portal 2',
+                type: 0,
+                basic_info: { developers: [{ name: 'Valve' }] },
+                release: { steam_release_date: 1303186800 },
+                platforms: { windows: true, steamos_linux: true },
+                assets: { asset_url_format: 'steam/apps/700/${FILENAME}', small_capsule: 'capsule_231x87.jpg' },
+                tagids: TAG_IDS,
+              },
+            ],
+          },
+        }),
+      };
+    if (url.includes('search/site') && !url.includes('init')) hltbQueries.push(JSON.parse(opts.body).searchTerms);
+    return detailsFetch(url, opts);
+  });
+  const server = app.listen(0);
+  t.after(() => new Promise((r) => server.close(r)));
+  await new Promise((r) => server.once('listening', r));
+
+  const events = [];
+  const done = new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: server.address().port,
+        path: '/api/game-details/stream',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      },
+      (r) => {
+        let body = '';
+        r.on('data', (c) => {
+          body += c;
+          events.splice(0, events.length, ...parseSseEvents(body));
+          if (events.some((e) => e.part === 'fast')) releaseStore();
+        });
+        r.on('end', resolve);
+      },
+    );
+    req.on('error', reject);
+    req.end(JSON.stringify({ games: [{ appid: 700 }] }));
+  });
+  await done;
+
+  const [fast, store] = [events.find((e) => e.part === 'fast'), events.find((e) => e.part === 'store')];
+  assert.ok(events.indexOf(fast) < events.indexOf(store), 'the fast part goes out before the store part');
+  assert.equal('meta' in fast, false);
+  assert.equal(fast.basics.name, 'Portal 2');
+  assert.equal(fast.basics.releaseDate, 'Apr 18, 2011');
+  assert.deepEqual(fast.basics.platforms, ['Windows', 'Linux']);
+  assert.match(fast.basics.thumb, /store_item_assets\/steam\/apps\/700\/capsule_231x87\.jpg$/);
+  assert.equal(typeof fast.rating.score, 'number');
+  assert.deepEqual(hltbQueries, [['Portal', '2']], "HLTB searched with the browse item's name");
+  assert.deepEqual(store.meta.genres, ['Action']);
+  assert.deepEqual(Object.keys(fast.fetchedAts).sort(), ['hltb', 'protondb', 'rating', 'tags']);
+  assert.deepEqual(Object.keys(store.fetchedAts), ['meta']);
+  assert.equal(events.at(-1).done, true);
 });
 
 test('POST /api/game-details/stream: leaves out screenshots and trailers, keeps the banner', async (t) => {
@@ -1710,7 +1805,7 @@ test('POST /api/game-details/stream: leaves out screenshots and trailers, keeps 
   await new Promise((r) => server.once('listening', r));
 
   const res = await ssePost(server.address().port, '/api/game-details/stream', { games: [{ appid: 400 }] });
-  const { meta } = parseSseEvents(res.body).find((e) => e.appid === 400);
+  const { meta } = streamedGames(res.body).get(400);
   assert.equal(meta.name, 'Portal');
   assert.match(meta.banner, /header\.jpg/);
   assert.equal('screenshots' in meta, false);
@@ -1743,7 +1838,7 @@ test('POST /api/game-details/stream: a GET /api/game-details sharing its fetch k
   assert.equal(storeCalls, 1); // one fetch, shared
   assert.equal(one.body.meta.screenshots.length, 1);
   assert.equal(one.body.meta.movies.length, 1);
-  assert.equal('screenshots' in parseSseEvents(streamed.body).find((e) => e.appid === 400).meta, false);
+  assert.equal('screenshots' in streamedGames(streamed.body).get(400).meta, false);
 });
 
 test('POST /api/game-details/stream: then GET /api/game-meta answers the media from cache', async (t) => {
@@ -1828,8 +1923,7 @@ test('POST /api/game-details/stream: resolves HLTB name from store metadata', as
   const res = await ssePost(server.address().port, '/api/game-details/stream', { games: [{ appid: 701 }] });
 
   assert.equal(res.status, 200);
-  const events = parseSseEvents(res.body);
-  const gameEvent = events.find((e) => e.appid === 701);
+  const gameEvent = streamedGames(res.body).get(701);
   assert.ok(gameEvent, 'must emit an event for the requested appid');
   assert.equal(gameEvent.meta?.name, 'Portal');
   assert.equal(hltbSearchCalls, 1, 'HLTB should have been searched using the name resolved from store metadata');
@@ -1875,7 +1969,7 @@ test('POST /api/game-details/stream: does not log [game-details] for meta blocke
   // Another game while the circuit is still open — its meta call is immediately an
   // circuit-open error and must not log its own [game-details] line.
   const res = await ssePost(server.address().port, '/api/game-details/stream', { games: [{ appid: 901 }] });
-  const gameEvent = parseSseEvents(res.body).find((e) => e.appid === 901);
+  const gameEvent = streamedGames(res.body).get(901);
   assert.equal(gameEvent.meta, null);
   assert.equal(warnMock.mock.calls.filter((c) => /\[game-details\]/.test(c.arguments[0])).length, 0);
 });
@@ -3321,7 +3415,7 @@ test('POST /api/game-details/stream: fully cached games come first, ahead of unc
     events.slice(0, cached.length).map((e) => e.appid),
     cached,
   );
-  assert.equal(events.length, uncached.length + cached.length);
+  assert.equal(events.length, uncached.length * 2 + cached.length, 'an uncached game sends a fast and a store part');
   // Only the order changes: the same games reach the upstreams.
   assert.equal(
     fetchMock.mock.calls.filter(({ arguments: [url] }) => String(url).includes('GetAppReviews')).length,

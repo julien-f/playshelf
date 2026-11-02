@@ -11,7 +11,7 @@ export interface MediaItem {
 }
 export function buildMediaItems(
   appid: number | string,
-  details: Pick<GameMeta, 'banner' | 'movies' | 'screenshots'> | null | undefined,
+  details: (Partial<Pick<GameMeta, 'movies' | 'screenshots'>> & { banner?: string | null }) | null | undefined, // metaOrBasics()
 ): MediaItem[] {
   // `details.banner` (see extractAppDetails in lib/steam.js) is Steam's own header image
   // for this specific game, resolved once store metadata has loaded — before that (the
