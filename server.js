@@ -15,7 +15,14 @@ const rateLimit = require('express-rate-limit');
 
 const { getCached, getCachedAt, isCached, capExpiry, getCacheEntryCounts } = require('./lib/cache');
 const { createDedup } = require('./lib/dedup');
-const { getMetrics, recordLimiterTrip, recordStream, runAsClient, startedAt } = require('./lib/metrics');
+const {
+  getMetrics,
+  recordLimiterTrip,
+  recordStream,
+  runAsClient,
+  startEventLoopSampling,
+  startedAt,
+} = require('./lib/metrics');
 const { getCircuitBreakers } = require('./lib/circuitBreaker');
 const {
   peekSteamId,
@@ -1716,6 +1723,7 @@ if (require.main === module) {
       process.exit(1);
     }
     console.log(`\nPlayshelf → http://${HOST}:${PORT}\n`);
+    startEventLoopSampling();
   });
 }
 

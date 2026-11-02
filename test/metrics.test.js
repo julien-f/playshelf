@@ -10,6 +10,7 @@ const {
   recordLimiterTrip,
   recordDedupHit,
   recordCacheEvent,
+  startEventLoopSampling,
   getMetrics,
   _reset,
 } = require('../lib/metrics');
@@ -469,4 +470,24 @@ test('getMetrics: daily drops days older than 30 at the first call of a day', as
     getMetrics().daily.map((r) => r.day),
     [daysAgo(29), daysAgo(0)],
   );
+});
+
+test('startEventLoopSampling: records one sample per minute under eventLoop, absent before the first', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: Date.parse('2026-11-02T10:00:30Z') });
+  const stop = startEventLoopSampling();
+  try {
+    assert.equal(getMetrics().sinceRestart.eventLoop, undefined);
+    assert.equal(getMetrics().lastHour.eventLoop, undefined);
+    t.mock.timers.tick(60 * 1000);
+    t.mock.timers.tick(60 * 1000);
+    const { sinceRestart, lastHour } = getMetrics();
+    assert.deepEqual(lastHour.eventLoop, sinceRestart.eventLoop);
+    const { minutes, utilization, maxP99DelayMs, maxDelayMs } = sinceRestart.eventLoop;
+    assert.equal(minutes, 2);
+    assert.ok(utilization >= 0 && utilization <= 1, `utilization ${utilization}`);
+    assert.ok(Number.isInteger(maxP99DelayMs) && Number.isInteger(maxDelayMs));
+    assert.ok(maxP99DelayMs <= maxDelayMs);
+  } finally {
+    stop();
+  }
 });

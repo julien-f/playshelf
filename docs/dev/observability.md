@@ -15,7 +15,8 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
                   windowWaits:  { 'store-details': { waits, avgWaitMs, maxWaitMs } },
                   heldLookups:  { hltb: count },
                   streams:      { count, games, fastUncached, storeUncached, closedEarly, closedEarlyCold, limited,
-                                  concurrentMax, cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs } },
+                                  concurrentMax, cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs },
+                  eventLoop:    { minutes, utilization, maxP99DelayMs, maxDelayMs } },
   lastHour:     { …same shape as sinceRestart… },
   budgets:         { [group]: { hourUsed, hourMax, hourTopClient, dayUsed, dayMax, dayTopClient } },
   circuitBreakers: { 'steam-store' | hltb | protondb: { blockedUntil, tripCount, consecutive403s } },
@@ -60,6 +61,12 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
 - `windowWaits`: reservations that queued for a rolling cap's place (`createWindow`, `lib/upstream.js`), and how long. Counted per attempt: a 429's retry reserves again. Waits with no 429s on `getAppDetails` mean the cap, not Steam, is the limit; 429s with no waits, a cap too high.
 - `heldLookups.hltb`: lookups HLTB's failed-lookup hold answered without a request; `heldGames.hltb`, games held now.
 - Already answered elsewhere: appdetails 429s (`groups['steam-store'].getAppDetails.statusCounts`), whether `UPSTREAM_MIN_INTERVAL_MS` is the limit (`semaphores`' queues and the labels' latency).
+
+### Event loop — `eventLoop`
+
+- Is the server slow because of its own synchronous work (parsing cache rows, `node:sqlite`'s calls, gzip) rather than an upstream? An upstream's wait never blocks the loop.
+- Sampled once a minute by `startEventLoopSampling` (`lib/metrics.js`), started once the server listens; absent before the first sample.
+- `utilization`: share of the time the loop was busy (`eventLoopUtilization`), 0–1. `maxP99DelayMs`: the worst minute's p99 timer delay (`monitorEventLoopDelay`); `maxDelayMs`: the single worst delay. A high delay with high utilization = one long blocking task.
 
 ### Daily — `daily`
 
