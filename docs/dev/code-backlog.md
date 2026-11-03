@@ -25,6 +25,7 @@ Last audited: simplify 2026-10-11 · correctness 2026-10-11 · security 2026-10-
 - **C192 · cleanup · M** — the combine op set is stated three times: `OP_LABELS` (`public/listLabels.ts`), `COMBINE_OPS` in `public/listsStore.ts` (for `isCombineOp`) and a differently shaped `COMBINE_OPS` in `public/CombineForm.tsx`. Move the op table to a small module both stores import (`public/listLabels.ts` importing `public/listsStore.ts` rules out the direct way).
 - **C193 · cleanup · M** — the panel's More links menu hand-rolls window-capture Esc, outside-click and focus-leave closing (`public/panel.tsx`), a second copy of what `bindNavPopover` (`public/navPopover.ts`) does, already diverged. Make it a native popover bound with `bindNavPopover`.
 - **C268 · cleanup · S** — `isGamePassCached` (`lib/gamepass.js`) repeats `getGamePass`'s walk (catalog → `catalogGids` → `splitEntries` → title keys) over the cache; only the key builders are shared, so a change to the walk must be made twice. One walk parameterized by "fetch" vs. "peek the cache" would state it once.
+- **C298 · cleanup · S** — the refresh flag is spelled two ways: body `refresh: true` on common-games, wishlist and friends (`isBodyRefresh`, `server.js`), `?refresh=1` on every GET and on `POST /api/prices`. One spelling, frontend included.
 
 ## Correctness
 
@@ -33,11 +34,19 @@ Last audited: simplify 2026-10-11 · correctness 2026-10-11 · security 2026-10-
 - **C201 · minor · S** — the Demo column's filter list labels both values "Demo": the checklist formats the stringified raw value, and `format` (`public/gameColumns.ts:1145`) treats the truthy string `'false'` as a demo. Compare against `'true'` there, or give the column a `value` getter returning its label.
 - **C236 · minor · S** — the tag-name map (`fetchTagNameMap`, `lib/steam.js`) is kept for the meta TTL (365 days), so tags Steam adds meanwhile are dropped by `resolveSteamTags` for up to a year. Refetch on a cooldown when a browse item has an unknown tagid.
 - **C273 · minor · S** — list labels (`createDefaultNaming`) and the Taste fit source are read when `ListRoute` loads, so an account renamed meanwhile shows its new persona only on the next load.
+- **C289 · minor · S** — an unknown `/api/*` path or a wrong method (`GET /api/common-games`) gets Express's HTML "Cannot GET", not `{ error }`: no `/api` 404 handler before the SPA fallback, and the fallback regex (`server.js`) serves the shell for `/api` and `/API/…`. Add `app.use('/api', …)` answering 404 `{ error }`, and make the regex case-insensitive with `api(?:\/|$)`.
+- **C290 · minor · M** — every unknown page path answers 200 with the shell: `/nope`, `/game/abc` (a NaN appid shows Recently Looked Up), `/lists/bundle/abc`, `/lists/owned/rank`, so crawlers and chat apps treat them as real pages (adds to C271). A router match filter (`/^\d+$/`) on `/game/:appid?` and `/lists/bundle/:bundleId` so they reach Page not found; a server-side 404 status for paths matching no route needs a route list mirroring `AppRoot.tsx`.
+- **C291 · minor · S** — pre-SPA links get a 404 in production: the fallback skips paths with an extension, and old CHANGELOG entries show the app handing out `/library.html?u=…` links. 301 `/library.html` → `/lists/owned` (keeping `u`, dropping the old table-state `view`), `/bundles.html` → `/bundles`, `/about.html` → `/about`. Inferred from code, not run on a production build.
+- **C292 · cleanup · S** — `PARAM_ORDER` (`public/urlState.ts`) lacks `f`, `name` and `view`, so the param naming the list sorts after `game`/`tv`; and any rewrite through `urlWithParams` (opening a game) re-encodes `?f=`'s `:;(),`, so a shared formula stops reading as text (frontend.md admits it only for `?u=`). Add them ahead of `game`; keep those characters literal.
 
 ## Security
 
 - **C181 · minor · S** — no Content-Security-Policy, so any XSS through upstream text runs uncontained; the other headers come from the live proxy ([architecture.md](architecture.md#build-and-serving)). Set a strict CSP (`script-src 'self'`, Steam CDN images) in `server.js`, checking what inline styles, the Steam/ITAD images and the HLS video hosts need.
 - **C182 · minor · S** — `GET /api/me` (`server.js:1249`) has no rate limit and `getSessionUser` parses the account's whole prefs (up to `PREFS_MAX_BYTES`) on every call: a signed-in client hammering it blocks the event loop. Put it behind a limiter; have auth read only the session row and load prefs only where returned.
+- **C293 · minor · S** — another site can sign a visitor out: a cross-site form `POST /auth/logout` carries no `sid` (SameSite=Lax), but its response's `Set-Cookie` still clears it. Reject `Sec-Fetch-Site: cross-site` (or a foreign `Origin`).
+- **C294 · minor · S** — `sid`'s `Secure` flag is `req.protocol === 'https'` (`server.js`): behind a proxy without `TRUST_PROXY` it's issued without it. Derive it from `PUBLIC_ORIGIN`'s scheme instead, or use the `__Host-` prefix.
+- **C295 · minor · S** — `GET /api/metrics` publicly shows live budget use (`hourTopClient`) and open breakers, telling an abuser when to push; observability.md calls it nothing sensitive. Put the budget and breaker detail behind a token, keep `/api/health` public.
+- **C296 · minor · S** — link previews' absolute `og:image` (`sendAppShell`) and `/opensearch.xml` still build the origin from the `Host` header; escaped, so it only matters behind a shared cache. Use `PUBLIC_ORIGIN` when set.
 
 ## Performance
 
@@ -81,6 +90,7 @@ Baseline for these items (2026-10-28, a 1196-game account, warm cache, real dev 
 - **C221 · minor · S** — `getProtonDbStatus` is called for every appid (`server.js:737`), DLC, soundtracks and hardware included; the cache holds `null` for all 49 such rows, so ~2% of calls to an undocumented upstream are certain misses. Chain it off the meta lookup like HLTB and skip non-played types — once confirmed ProtonDB never has reports for them (inferred from the cache), recorded in integrations.md.
 - **C40 · minor · S** — players `GetPlayerSummaries` omits are never cached (`lib/steam.js` `fetchPlayerBatch`), so a deleted or invalid account in a friends list is re-requested on every load. Cache the omission briefly once it's confirmed Steam omits only ids that really don't exist (not transiently); record that in integrations.md.
 - **C288 · minor · M** — `daily` shows 429 storms the pacing didn't prevent: HLTB `search` on 2026-10-23 and 10-26, Steam `getAppDetails` on 10-26 despite `STORE_DETAILS_MAX_PER_5_MIN`. Find what drove them (one large cold load, several clients, retries) from `daily` and the logs, then tighten the pacing or the cap.
+- **C297 · minor · M** — `refresh=1` has no minimum age: forcing a game seconds after it was fetched still costs about five upstream calls (reviews, HLTB, ProtonDB, browse, appdetails), each counted once, so two clients can spend a service's hourly budget. Ignore a force when `getCachedAt` is under ~10 min old, so the limiter's cache-hit skip applies to it too.
 
 ## Tests
 

@@ -19,6 +19,10 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U172 · minor · S3, B1, I3** — a dead link to a list (`/lists/<unknown id>`) or a bundle (`/lists/bundle/<unknown id>`) shows one bare status line: no h1, no way back, and the bundle's reads "Error: Bundle not found". Page not found has a heading and Go to Home; give these the same, with All bundles for a bundle.
 - **U229 · minor · R3, L1, S1** — manual and ranked lists can't be shared by link ("my top 10 co-op games"); the share grammar has no token for a list of appids or an order ([lists-and-accounts.md](lists-and-accounts.md#ranked-lists)). A snapshot token (appids in order), read-only on arrival. From the Backloggd study (2026-10-30).
 - **U239 · polish · S3** — a reload with `?game=` reopens the game only on list routes and `/search`: Home, `/bundles` and `/about` register no route handler with the shell and the rank screen only `refreshGame`, so `/?game=440` doesn't reopen. Rarely reachable: a lookup from those routes goes to `/game/:appid`.
+- **U240 · polish · S1, S2** — link previews have no `og:url` or `<link rel="canonical">` (without `game`/`shot`/`tv`), no card for `/lists/shared?f=` ("A combined Steam list") or `/search?q=`, a `?game=` card only on `/lists/*`, and `/index.html` and `/present.html` are served as static files without tags.
+- **U241 · polish · S3** — a copied `/lists/owned?view=<id>` link tells the recipient "This view no longer exists", as if deleted, though it was never in their browser. Say it isn't saved in this browser, like the user-list message.
+- **U242 · polish · Y1, S3** — a missing list says lists "live in the browser that created them", wrong for a signed-in user whose lists sync: a second device opening the link before the first sync lands is told it doesn't exist. Wait for the first sync, or reword.
+- **U243 · polish · Y1** — on an instance without `PUBLIC_ORIGIN`, the account chip still offers Sign in with Steam, which opens a bare "isn't available" text page. Hide it and say why, as the ITAD surfaces do (`/api/health`'s `itadConfigured`).
 
 ## Loading and feedback
 
