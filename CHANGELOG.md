@@ -76,7 +76,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A game delisted from the Steam store shows its thumbnail again, and its panel says it has no store page instead of looking empty
 - A game with no Steam store page is named from its achievement data, and gets its HowLongToBeat times
 - A game whose HLTB lookup failed is no longer searched again on every list load for the next 10 minutes
-- Steam sign-in now needs `PUBLIC_ORIGIN` set to the site's address, and no longer trusts the request's Host header
+- Steam sign-in checks Steam's reply against `PUBLIC_ORIGIN` (the site's address) and no longer trusts the request's Host header
 - Signing in on a device with many saved settings no longer leaves some of them unsynced or blocks the next sign-in
 - A list address with a trailing slash or other letter case (`/lists/owned/`) opens that list instead of saying it isn't in this browser
 - Behind a proxy without `TRUST_PROXY`, sign-in cookies are still marked Secure on an https site, and signing in from another host name (`www.`) works
