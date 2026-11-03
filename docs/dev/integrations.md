@@ -170,6 +170,10 @@ Bundle browsing (`/bundles`, `/lists/bundle/:bundleId`) and every price column c
   - appid → gid reuses `resolveItadIds`; cached raw per (gid, country) as `itad-gamebundles:`.
   - Each line shows the cheapest tier holding the game; a pick-and-mix tier shows its best quantity rate ("from €1.17/game", `withPickAndMix`), "Varies" when Fanatical's feed lacks it.
   - Assumption: a game ITAD maps only via a Steam sub counts as in the bundle — ITAD matches by gid, passed through.
+- **Humble Choice end date** (`lib/humbleChoice.js`): a Choice bundle (`page.name` `Humble Bundle`, `url` wrapping `humblebundle.com/membership/<month>-<year>`) gets Humble's schedule as `expiry` — the first Tuesday of the next month, 10:00 `America/Los_Angeles` — on every route and the link preview, with no upstream call.
+  - Why: ITAD's ran early. October 2026's ended at `2026-11-03T17:00:00+01:00` (16:00Z) on ITAD, which then moved it to `expired=true`; humblebundle.com sold it until 18:00Z (its countdown and the end date in its /membership page's data). Regular Humble bundles' ITAD dates matched Humble's pages.
+  - Schedule source: Humble's monthly reveal, first Tuesday 10 AM PT (press coverage, e.g. Gamewatcher's monthly lists). Seen on one month only; a PDT month is unconfirmed.
+  - The Choice on sale now is pulled back from ITAD's expired pages like a Fanatical bundle ([Bundles ITAD expired early](#fanatical--pick-and-mix-tier-prices)), the walk reaching back to its month's start minus 7 days.
 
 ### Resolving bundle games to Steam
 
@@ -222,7 +226,7 @@ Bundle games carry only an ITAD id (uuid), slug and title. `resolveSteamAppIds` 
 - **Matching**: exact, by slug. ITAD's purchase `url` for these bundles is an affiliate redirect wrapping `fanatical.com/<lang>/pick-and-mix/<slug>` (`pickAndMixSlug`). Only bundles whose `page.name` is `Fanatical` and that have a null-price tier are enriched; a bundle Fanatical has stopped selling drops out of the feed and stays "Varies".
 - **End date**: an enriched bundle's `expiry` becomes the feed's `valid_until` when it has one (20 of 32 on 2026-11-01), the link preview included (`withCachedPickAndMix`, cached feed only).
   - Why: ITAD's runs early — ~16 h on 11 of 12 bundles, and Build Your Own Killer Bundle (Fall 2026) ended 2026-11-01T00:58 on ITAD while fanatical.com sold it until 2026-11-13T23:59Z (its page's countdown matched `valid_until`). The previous Killer edition also ended at `…T00:58`, maybe ITAD's placeholder when it has no date.
-- **Bundles ITAD expired early** (`findEarlyExpired`): a games pick-and-mix (`type: 'bundle'`) live by the feed's dates but missing from ITAD's active list is looked up on ITAD's `expired=true` pages and listed with the feed's end date.
+- **Bundles ITAD expired early** (`findEarlyExpired`, `lib/earlyExpired.js`): a games pick-and-mix (`type: 'bundle'`) live by the feed's dates, or the [Humble Choice](#bundles) on sale now, missing from ITAD's active list is looked up on ITAD's `expired=true` pages and listed with the real end date.
   - `GET /api/bundles`: only on an active first page holding the whole list (fewer than `limit`), so the client's paging, which stops there, never repeats one. An active list of 50 or more gets none.
   - The walk reads 50-bundle `-publish` pages, the same cached pages as `findBundleById` and "Include expired", and stops once all are found, at a page older than the oldest missing `validFrom` minus 7 days (ITAD may list a bundle before it goes live), or after 6 pages. `?refresh=1` doesn't force them.
   - `GET /api/game-bundles/:appid` adds the found ones holding the game, from cached pages only: ITAD's per-game list has current bundles only.

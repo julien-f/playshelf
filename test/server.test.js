@@ -2619,6 +2619,8 @@ test('GET /api/bundles: 200 with bundle list, defaults applied', async (t) => {
   process.env.ITAD_API_KEY = 'test-itad-key';
   const bundles = [{ id: 1, title: 'Test Bundle' }];
   t.mock.method(globalThis, 'fetch', async (url) => {
+    // No Humble Choice listed: findEarlyExpired looks for it on the expired pages.
+    if (/expired=true/.test(url)) return { ok: true, json: async () => [] };
     assert.match(url, /\/bundles\/v1\?/);
     assert.match(url, /country=US/);
     assert.match(url, /offset=0/);
@@ -3322,7 +3324,7 @@ test('GET /api/bundles: a country outside the region list falls back to US', asy
   });
   await api.get('/api/bundles?country=zz').expect(200);
   await api.get('/api/bundles?country=de').expect(200);
-  const itad = urls.filter((u) => u.startsWith('https://api.isthereanydeal.com/'));
+  const itad = urls.filter((u) => u.startsWith('https://api.isthereanydeal.com/') && /expired=false/.test(u));
   assert.match(itad[0], /country=US/);
   assert.match(itad[1], /country=DE/);
 });

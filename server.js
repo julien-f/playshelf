@@ -79,7 +79,9 @@ const {
   gameBundlesCacheKey,
   extractGameBundles,
 } = require('./lib/itad');
-const { withPickAndMix, withCachedPickAndMix, findEarlyExpired } = require('./lib/fanatical');
+const { withPickAndMix, withCachedPickAndMix } = require('./lib/fanatical');
+const { findEarlyExpired } = require('./lib/earlyExpired');
+const { withChoiceEnd } = require('./lib/humbleChoice');
 const { streamEvent } = require('./lib/streamEvent.mjs');
 const { catalogCacheKey, getGamePass, isGamePassCached } = require('./lib/gamepass');
 const {
@@ -981,7 +983,7 @@ app.get('/api/bundles', bundlesListLimit, requireItad, async (req, res) => {
     // a bundle going live or expiring is exactly what that button is for, and that question is
     // unanswerable without knowing how old the list on screen is.
     res.json({
-      bundles: await withPickAndMix(bundles),
+      bundles: await withPickAndMix(withChoiceEnd(bundles)),
       offset,
       limit,
       fetchedAt: getCachedAt(bundlesCacheKey({ country, offset, limit, sort, expired })) ?? null,
@@ -1012,7 +1014,7 @@ app.get('/api/bundles/:id', bundlesByIdLimit, requireItad, async (req, res) => {
     // Age of the cached list page this bundle was found on — the same page cache GET /api/bundles
     // reports for the browse list. There's no forcing it (see this route's own note above), so
     // this is stated rather than actionable: it says how old the tiers/dates on screen are.
-    const [bundle] = await withPickAndMix([found.bundle], { names: true });
+    const [bundle] = await withPickAndMix(withChoiceEnd([found.bundle]), { names: true });
     res.json({ bundle, fetchedAt: getCachedAt(found.cacheKey) ?? null });
   } catch (err) {
     sendRouteError(res, 'bundles-by-id', err);
@@ -1129,7 +1131,7 @@ app.get('/api/game-bundles/:appid', gameBundlesLimit, requireItad, async (req, r
             (b.tiers || []).some((t) => (t.games || []).some((g) => g.id === gid)),
         )
       : [];
-    res.json({ bundles: extractGameBundles(await withPickAndMix([...current, ...revived]), gid) });
+    res.json({ bundles: extractGameBundles(await withPickAndMix(withChoiceEnd([...current, ...revived])), gid) });
   } catch (err) {
     sendRouteError(res, 'game-bundles', err);
   }
@@ -1603,7 +1605,7 @@ function gamePreview(appid) {
 async function bundlePreview(id) {
   const cached = await findCachedBundle(id, REGION_CODES);
   if (!cached) return {};
-  const bundle = withCachedPickAndMix(cached);
+  const [bundle] = withChoiceEnd([withCachedPickAndMix(cached)]);
   const games = bundle.counts?.games;
   const expiry = bundle.expiry && new Date(bundle.expiry);
   const ends =
