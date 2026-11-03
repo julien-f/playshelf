@@ -277,24 +277,18 @@ test('bundle-by-id limiter: counts every request, twice the bundles budget', asy
   assert.equal((await api.get('/api/bundles/abc')).status, 429);
 });
 
-test('auth limiter: login and callback share one budget, which pref writes leave alone', async () => {
+test('auth limiter: login and callback share one budget', async () => {
   for (let i = 0; i < 20; i++) assert.equal((await api.get('/auth/steam/login')).status, 302);
   assert.equal((await api.get('/auth/steam/callback')).status, 429);
-  assert.equal((await api.put('/api/me/prefs/myAccount').send({ value: null, updatedAt: 1 })).status, 401);
 });
 
-// A first sign-in pushes every local key at once: those writes mustn't spend sign-in's budget.
-test('prefs limiter: counts each signed-in account apart', async () => {
-  const cookieFor = (steamid) => {
-    upsertUser(steamid);
-    return `${SESSION_COOKIE}=${createSession(steamid)}`;
-  };
-  const alice = cookieFor('76561198000000601');
-  const bob = cookieFor('76561198000000602');
+// After the test above spent sign-in's budget: a first sign-in pushes every local key at once.
+test('prefs limiter: counts every write, signed in or not, apart from sign-in', async () => {
+  upsertUser('76561198000000601');
+  const alice = `${SESSION_COOKIE}=${createSession('76561198000000601')}`;
   const put = (cookie) => api.put('/api/me/prefs/myAccount').set('Cookie', cookie).send({ value: null, updatedAt: 1 });
 
   assert.equal((await put(alice)).status, 200);
-  assert.equal((await put(alice)).status, 200);
-  assert.equal((await put(alice)).status, 429);
-  assert.equal((await put(bob)).status, 200, "another account's writes have their own budget");
+  assert.equal((await put(`${SESSION_COOKIE}=forged`)).status, 401);
+  assert.equal((await put(alice)).status, 429, 'a write without a session counts too');
 });

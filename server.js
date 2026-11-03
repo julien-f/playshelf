@@ -1540,9 +1540,9 @@ app.get('/api/me', (req, res) => {
 // `updatedAt` (the device's own clock) is stored with the value, never checked: the write always wins.
 // The 1 KB covers the { value, updatedAt } around a value prefFits can accept.
 const prefsBody = express.json({ limit: PREFS_MAX_BYTES + 1024 });
-// Per account, after requireAuth: a first sign-in pushes every local key at once.
-const prefsLimit = namedRateLimit('prefs', { max: PREFS_RATE_LIMIT_MAX, keyGenerator: (req) => req.user.steamid });
-prefsRouter.put('/:key', requireAuth, prefsLimit, prefsBody, (req, res) => {
+// Apart from sign-in's: a first sign-in pushes every local key at once.
+const prefsLimit = namedRateLimit('prefs', { max: PREFS_RATE_LIMIT_MAX });
+prefsRouter.put('/:key', prefsLimit, requireAuth, prefsBody, (req, res) => {
   const { value, updatedAt } = req.body;
   if (!('value' in req.body) || typeof updatedAt !== 'number') {
     return res.status(400).json({ error: 'body must be { value, updatedAt }' });

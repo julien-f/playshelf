@@ -64,7 +64,7 @@ The dedup map, semaphores, breakers and metrics are process-local: correct for t
 Rate limits ([observability.md](observability.md), [data.md](data.md)):
 
 - Every route that can reach an upstream, plus the auth routes and the prefs write, is behind a named `express-rate-limit` instance.
-- Most `skip` requests they can answer from cache. Always counting: `bundlesById` (a looser budget instead), `auth` (a fixed `max: 20` in `server.js`, login and callback), `prefs` (keyed by signed-in account, not client), and the stream route (its array body defeats `details`' per-appid skip).
+- Most `skip` requests they can answer from cache. Always counting: `bundlesById` (a looser budget instead), `auth` (a fixed `max: 20` in `server.js`, login and callback), `prefs` (apart from `auth`), and the stream route (its array body defeats `details`' per-appid skip).
 - A middleware after the JSON body parser runs each request under its client's key (`clientKey`, the limiters' key) in an `AsyncLocalStorage`, so the outbound calls it makes are charged to that client's share of the outbound budgets ([observability.md](observability.md#outbound-budgets)).
 - No limiter: health, metrics, `GET /api/me`, logout, `/opensearch.xml` and the SPA shell (cache-only, no upstream call).
 
