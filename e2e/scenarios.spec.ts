@@ -701,7 +701,7 @@ test('F3 edge: Owned says which tags the account plays most, each filtering the 
   await expect(coop).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('A5: Favourite studios names the studios behind 2+ played games, each opening its list', async ({
+test('A5: Favourite studios names the studios behind 2+ played games, each filtering Owned or opening its list', async ({
   page,
 }, testInfo) => {
   await asPlayer(page, ALICE);
@@ -713,23 +713,33 @@ test('A5: Favourite studios names the studios behind 2+ played games, each openi
     return route.fulfill({ json: body });
   });
   await page.goto('/lists/owned?u=alice');
+  await expect(rows(page)).toHaveCount(6);
   const tile = page.locator('.profile-creators');
   const developers = tile.getByRole('list', { name: 'Developers' });
   const publishers = tile.getByRole('list', { name: 'Publishers' });
   // Supergiant Games publishes its own game: shown once, as a developer; Feral publishes only one.
   if (testInfo.project.name === 'phone') {
-    await expect(developers.getByRole('link').filter({ visible: true })).toHaveText(['Test Studio']);
+    await expect(developers.getByRole('button').filter({ visible: true })).toHaveText(['Test Studio']);
   } else {
-    await expect(developers.getByRole('link')).toHaveText(['Test Studio', 'Supergiant Games']);
+    await expect(developers.getByRole('button')).toHaveText(['Test Studio', 'Supergiant Games']);
   }
-  await expect(publishers.getByRole('link')).toHaveText(['Test Publisher']);
+  await expect(publishers.getByRole('button')).toHaveText(['Test Publisher']);
   await expect(developers.getByRole('listitem').first()).toContainText('3 games');
 
   await page.locator('.profile').getByRole('button', { name: 'Why these?' }).click();
-  await expect(developers.getByRole('listitem').nth(1).getByRole('button')).toHaveCount(2);
-  const supergiant = developers.getByRole('link', { name: 'Supergiant Games' });
-  await expect(supergiant).toHaveAttribute('href', /[?&]u=alice/);
-  await supergiant.click();
+  const supergiant = developers.getByRole('listitem').nth(1);
+  await expect(supergiant.locator('.profile-chip')).toHaveCount(2);
+
+  const filter = supergiant.getByRole('button', { name: 'Supergiant Games', exact: true });
+  await filter.click();
+  await expect(rows(page)).toHaveCount(2);
+  await expect(filter).toHaveAttribute('aria-pressed', 'true');
+  await filter.click();
+  await expect(rows(page)).toHaveCount(6);
+
+  const link = supergiant.getByRole('link', { name: 'Games by Supergiant Games →' });
+  await expect(link).toHaveAttribute('href', /[?&]u=alice/);
+  await link.click();
   await expect(page).toHaveURL(/\/lists\/developer\?.*name=Supergiant\+Games/);
   await expect(page.locator('.list-hero-title')).toHaveText('Games by Supergiant Games');
   await page.goBack();

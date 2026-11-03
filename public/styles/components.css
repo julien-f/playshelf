@@ -919,14 +919,41 @@
     list-style: none;
     font-size: var(--fs-meta);
   }
-  .profile-creator {
-    display: inline-flex;
+  .profile-creators li {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    gap: 0 8px;
+  }
+  .profile-creators .profile-bar-games {
+    flex-basis: 100%;
+  }
+  .profile-creator {
     min-height: 24px;
+    padding: 2px 6px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-1);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+  .profile-creator:hover {
+    background: var(--line);
+  }
+  .profile-creator.active {
+    border-color: var(--accent);
     color: var(--accent);
   }
   .profile-creator-count {
     color: var(--muted);
+  }
+  .profile-creator-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    margin-left: auto;
+    color: var(--accent);
   }
   @media (max-width: 768px) {
     .profile--tiles {

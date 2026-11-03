@@ -3980,6 +3980,8 @@ export default function ListRoute() {
         story={profileFacts().story}
         creators={creators()}
         creatorHref={(role, name) => withAccountParam(creatorListPath(role, name))}
+        isCreatorActive={(role, name) => tableReady() && isTagActive(`${role}s`, name)}
+        onCreator={(role, name) => onTagClick(`${role}s`, name)}
         unplayed={unplayed()}
         playNextHours={PLAY_NEXT_MAX_HOURS}
         backlogShown={backlogShown()}

@@ -8,7 +8,7 @@ import Play from 'lucide-solid/icons/play';
 import Swords from 'lucide-solid/icons/swords';
 import Users from 'lucide-solid/icons/users';
 import { STATUS_LABELS, type GameStatus } from './gameStatuses.ts';
-import type { CreatorRole } from './creatorData.ts';
+import { creatorTitle, type CreatorRole } from './creatorData.ts';
 import type { Archetype, Creator, StoryGames } from './playerProfile.ts';
 import type { PlayedTag } from './tagTaste.ts';
 import { fadeInOnLoad, fmtHours, roundHours } from './utils.ts';
@@ -155,11 +155,14 @@ const CREATOR_ROLES = [
 
 export type FavouriteCreators = Record<'developers' | 'publishers', Creator[]>;
 
-// Each studio links to its list of games; Why these? adds the played games behind it.
+// Each studio filters the table, as the panel's pills do, beside a link to its list of games (More from's);
+// Why these? adds the played games behind it.
 function CreatorsTile(props: {
   creators: FavouriteCreators;
   whyOpen: boolean;
   href: (role: CreatorRole, name: string) => string;
+  isActive: (role: CreatorRole, name: string) => boolean;
+  onFilter: (role: CreatorRole, name: string) => void;
   game: (appid: number) => ProfileGameInfo | undefined;
   onGame: (appid: number) => void;
 }): JSX.Element {
@@ -178,10 +181,20 @@ function CreatorsTile(props: {
               <For each={props.creators[r.key]}>
                 {(creator) => (
                   <li>
-                    <a href={props.href(r.role, creator.name)} class="profile-creator">
+                    <button
+                      type="button"
+                      class="profile-creator"
+                      classList={{ active: props.isActive(r.role, creator.name) }}
+                      aria-pressed={props.isActive(r.role, creator.name)}
+                      title={`Filter Owned by ${creator.name}`}
+                      onClick={() => props.onFilter(r.role, creator.name)}
+                    >
                       {creator.name}
-                    </a>{' '}
-                    <span class="profile-creator-count">{creator.appids.length} games</span>
+                    </button>{' '}
+                    <span class="profile-creator-count">{creator.appids.length} games</span>{' '}
+                    <a href={props.href(r.role, creator.name)} class="profile-creator-link">
+                      {creatorTitle(r.role, creator.name)} →
+                    </a>
                     <Show when={props.whyOpen}>
                       <div class="profile-bar-games">
                         <For each={creator.appids.slice(0, CREATOR_GAMES_SHOWN)}>
@@ -265,6 +278,8 @@ export function OwnedProfile(props: {
   story: StoryGames | null;
   creators: FavouriteCreators;
   creatorHref: (role: CreatorRole, name: string) => string;
+  isCreatorActive: (role: CreatorRole, name: string) => boolean;
+  onCreator: (role: CreatorRole, name: string) => void;
   unplayed: number; // games played `playNextHours` or less
   playNextHours: number;
   backlogShown: boolean;
@@ -380,6 +395,8 @@ export function OwnedProfile(props: {
                 creators={props.creators}
                 whyOpen={props.whyOpen}
                 href={props.creatorHref}
+                isActive={props.isCreatorActive}
+                onFilter={props.onCreator}
                 game={props.game}
                 onGame={props.onGame}
               />
