@@ -1472,18 +1472,22 @@ function requireAuth(req, res, next) {
 // Shown to visitors; the setup hint goes to the startup log instead (see app.listen below).
 const requireSignIn = (_req, res, next) =>
   PUBLIC_ORIGIN ? next() : res.status(503).send("Sign-in isn't available on this instance.");
+// The scheme visitors see: req.protocol is the proxy hop's without TRUST_PROXY.
+const signInCookieSecure = () => PUBLIC_ORIGIN.startsWith('https:');
 
 app.get('/auth/steam/login', authLimit, requireSignIn, (req, res) => {
+  // The state cookie must be set on the host Steam sends the visitor back to.
+  if (req.get('host') !== new URL(PUBLIC_ORIGIN).host) return res.redirect(`${PUBLIC_ORIGIN}/auth/steam/login`);
   const state = crypto.randomBytes(16).toString('hex');
   res.setHeader(
     'Set-Cookie',
-    serializeCookie(STATE_COOKIE, state, { maxAgeMs: 5 * 60 * 1000, secure: req.protocol === 'https' }),
+    serializeCookie(STATE_COOKIE, state, { maxAgeMs: 5 * 60 * 1000, secure: signInCookieSecure() }),
   );
   res.redirect(buildLoginUrl(PUBLIC_ORIGIN, state));
 });
 
 app.get('/auth/steam/callback', authLimit, requireSignIn, async (req, res) => {
-  const secure = req.protocol === 'https';
+  const secure = signInCookieSecure();
   const clearState = serializeCookie(STATE_COOKIE, '', {});
   const { [STATE_COOKIE]: expectedState } = parseCookies(req.headers.cookie);
   if (!expectedState || req.query.state !== expectedState) {

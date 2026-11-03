@@ -79,6 +79,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Steam sign-in now needs `PUBLIC_ORIGIN` set to the site's address, and no longer trusts the request's Host header
 - Signing in on a device with many saved settings no longer leaves some of them unsynced or blocks the next sign-in
 - A list address with a trailing slash or other letter case (`/lists/owned/`) opens that list instead of saying it isn't in this browser
+- Behind a proxy without `TRUST_PROXY`, sign-in cookies are still marked Secure on an https site, and signing in from another host name (`www.`) works
 
 ### Development
 

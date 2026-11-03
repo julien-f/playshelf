@@ -3,7 +3,7 @@
 // Set env before requiring the app so module-level reads see test values.
 process.env.STEAM_API_KEY = 'test-key';
 process.env.NODE_ENV = 'test';
-process.env.PUBLIC_ORIGIN = 'https://app.example';
+process.env.PUBLIC_ORIGIN = 'http://app.example';
 // Force the in-memory DB regardless of how this file is invoked — `npm test`
 // already does this via a shell-level `DB_FILE=`, but running this file
 // directly (e.g. `node --test test/server.test.js`, an IDE test runner) would
@@ -3563,17 +3563,23 @@ function steamAssertion(steamid, returnTo) {
 }
 
 test('GET /auth/steam/login: redirects to Steam with a return_to and state, and sets a state cookie', async () => {
-  const res = await api.get('/auth/steam/login').expect(302);
+  const res = await api.get('/auth/steam/login').set('Host', HOST).expect(302);
   const location = new URL(res.headers.location);
   assert.equal(location.hostname, 'steamcommunity.com');
   assert.match(res.headers['set-cookie'][0], /^steam_login_state=/);
 });
 
-test('GET /auth/steam/login: builds realm and return_to from PUBLIC_ORIGIN, not the Host header', async () => {
-  const res = await api.get('/auth/steam/login').set('Host', 'evil.example').expect(302);
+test('GET /auth/steam/login: builds realm and return_to from PUBLIC_ORIGIN', async () => {
+  const res = await api.get('/auth/steam/login').set('Host', HOST).expect(302);
   const location = new URL(res.headers.location);
-  assert.equal(location.searchParams.get('openid.realm'), 'https://app.example');
-  assert.match(location.searchParams.get('openid.return_to'), /^https:\/\/app\.example\/auth\/steam\/callback\?/);
+  assert.equal(location.searchParams.get('openid.realm'), 'http://app.example');
+  assert.match(location.searchParams.get('openid.return_to'), /^http:\/\/app\.example\/auth\/steam\/callback\?/);
+});
+
+test('GET /auth/steam/login: from another host, goes to PUBLIC_ORIGIN first, so the state cookie lands where Steam returns', async () => {
+  const res = await api.get('/auth/steam/login').set('Host', 'www.app.example').expect(302);
+  assert.equal(res.headers.location, 'http://app.example/auth/steam/login');
+  assert.equal(res.headers['set-cookie'], undefined);
 });
 
 test("GET /auth/steam/callback: 400 for another site's assertion replayed with that site's Host", async (t) => {

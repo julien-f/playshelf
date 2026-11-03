@@ -94,8 +94,8 @@ module.exports = defineConfig({
           // frontend module — every request for it was silently proxied to the backend instead of
           // served by Vite, which fell through to server.js's SPA catch-all and served index.html
           // (text/html) in place of the script, breaking the module load entirely.
-          // Keeps the browser's Host: the backend builds Steam's return URL from it, and a
-          // rewritten one sent the login back to :3000, where the state cookie isn't sent.
+          // Keeps the browser's Host: login compares it with PUBLIC_ORIGIN (set by `dev:backend`),
+          // and a rewritten one would redirect forever.
           '/auth/': { target: backend, changeOrigin: false },
         },
   },

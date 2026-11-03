@@ -20,3 +20,13 @@ for (const path of ['/auth/steam/login', '/auth/steam/callback?state=x']) {
     assert.match(res.text, /Sign-in isn't available/);
   });
 }
+
+test('PUBLIC_ORIGIN that is not a URL: startup fails naming the setting', () => {
+  const { spawnSync } = require('node:child_process');
+  const run = spawnSync(process.execPath, ['-e', "require('./lib/config')"], {
+    env: { ...process.env, PUBLIC_ORIGIN: 'steam.isonoe.net' },
+    encoding: 'utf8',
+  });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /PUBLIC_ORIGIN/);
+});
