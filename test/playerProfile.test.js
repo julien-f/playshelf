@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { archetypeOf, playStyleOf, playStyle, storyGames } = require('../public/playerProfile.ts');
+const { archetypeOf, favouriteCreators, playStyleOf, playStyle, storyGames } = require('../public/playerProfile.ts');
 
 const SOLO = ['Single-player'];
 const COOP = ['Multi-player', 'Co-op', 'Online Co-op'];
@@ -92,4 +92,78 @@ test('archetypeOf: a title from the play style, story finishers among single-pla
   assert.equal(archetypeOf('multiplayer', null).name, 'Squad player');
   assert.equal(archetypeOf(null, story(8, 8)), null);
   assert.equal(archetypeOf('solo', story(8, 8), { family: true }), null, "a Family's profile mixes its members");
+});
+
+const made = (appid, developers, publishers = developers, extra = {}) => ({ appid, developers, publishers, ...extra });
+const filler = [91, 92, 93, 94, 95].map((id) => made(id, [`Solo ${id}`], [`Label ${id}`]));
+const names = (creators) => creators.map((c) => c.name);
+
+test('favouriteCreators: from 2 played games each, by log hours, ties by game count then name', () => {
+  const games = [
+    made(1, ['Marathon'], ['P']),
+    made(2, ['Marathon'], ['P']),
+    made(3, ['Variety'], ['P']),
+    made(4, ['Variety'], ['P']),
+    made(5, ['Variety'], ['P']),
+    made(6, ['One Hit'], ['P']),
+    made(7, ['Beta', 'Beta'], ['P']),
+    made(8, ['Beta'], ['P']),
+    made(9, ['Alpha'], ['P']),
+    made(10, ['Alpha'], ['P']),
+    ...filler,
+  ];
+  const hours = hoursFrom({
+    1: 1000,
+    2: 1,
+    3: 30,
+    4: 30,
+    5: 30,
+    6: 5000,
+    7: 3,
+    8: 3,
+    9: 3,
+    10: 3,
+    91: 2,
+    92: 2,
+    93: 2,
+    94: 2,
+    95: 2,
+  });
+  const { developers } = favouriteCreators(games, hours);
+  // Variety's 3×log(31) outweighs Marathon's log(1001)+log(2); One Hit has a single game.
+  assert.deepEqual(names(developers), ['Variety', 'Marathon', 'Alpha']);
+  assert.deepEqual(developers[1].appids, [1, 2], 'most played first');
+});
+
+test('favouriteCreators: a developer that also publishes shows once, as a developer, even outside the top 3', () => {
+  const games = [
+    ...[1, 2].map((id) => made(id, ['A'], ['Pub'])),
+    ...[3, 4].map((id) => made(id, ['B'], ['Pub'])),
+    ...[5, 6].map((id) => made(id, ['C'], ['C'])),
+    ...[7, 8].map((id) => made(id, ['Self'], ['Self'])),
+    ...[9, 10].map((id) => made(id, ['Only Dev 1'], ['Only Pub'])),
+    ...filler,
+  ];
+  const hours = hoursFrom({ 1: 50, 2: 50, 3: 40, 4: 40, 5: 30, 6: 30, 7: 2, 8: 2, 9: 1, 10: 1 });
+  const { developers, publishers } = favouriteCreators(games, hours);
+  assert.deepEqual(names(developers), ['A', 'B', 'C']);
+  assert.deepEqual(names(publishers), ['Pub', 'Only Pub'], 'Self and C publish only themselves');
+});
+
+test('favouriteCreators: software, under an hour and too thin a profile count for nothing', () => {
+  const hours = hoursFrom({ 1: 10, 2: 10, 3: 0.5, 4: 10, 91: 2, 92: 2, 93: 2, 94: 2, 95: 2 });
+  const games = [
+    made(1, ['Tools'], ['Tools'], { genres: ['Utilities'] }),
+    made(2, ['Tools'], ['Tools'], { genres: ['Utilities'] }),
+    made(3, ['Brief']),
+    made(4, ['Brief']),
+    ...filler,
+  ];
+  assert.deepEqual(favouriteCreators(games, hours), { developers: [], publishers: [] });
+  const thin = [made(1, ['Duo']), made(2, ['Duo']), made(3, ['X']), made(4, ['Y'])];
+  assert.deepEqual(
+    favouriteCreators(thin, () => 10),
+    { developers: [], publishers: [] },
+    'below 5 played games',
+  );
 });

@@ -69,7 +69,7 @@ export function similarGames<T extends Tagged>(target: T, games: readonly T[], l
 }
 
 // Below this many played games, a profile says more about chance than taste.
-const MIN_PLAYED_FOR_PROFILE = 5;
+export const MIN_PLAYED_FOR_PROFILE = 5;
 
 type Hours<T> = (g: T) => number | undefined;
 const ownPlaytime = (g: { playtime?: number }) => g.playtime;

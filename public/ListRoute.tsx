@@ -78,7 +78,14 @@ import {
   type Taste,
 } from './tagTaste.ts';
 import { loadTaste, saveTaste } from './tasteCache.ts';
-import { archetypeOf, playStyle, storyGames, STYLE_SENTENCES, type ProfileGame } from './playerProfile.ts';
+import {
+  archetypeOf,
+  favouriteCreators,
+  playStyle,
+  storyGames,
+  STYLE_SENTENCES,
+  type ProfileGame,
+} from './playerProfile.ts';
 import { GameArt, OwnedProfile, PlayerAvatar, ProfileBadge } from './PlayerProfile.tsx';
 import Gift from 'lucide-solid/icons/gift';
 import Heart from 'lucide-solid/icons/heart';
@@ -289,7 +296,7 @@ import {
 import { CombineForm, sourceOptions, refKey, type SourceOption } from './CombineForm.tsx';
 import type { MembershipGroup } from './combine.ts';
 import { peekMyOwnership, trackMyOwnership } from './myOwnership.ts';
-import { creatorTitle, fetchCreatorGames, steamSearchUrl, type CreatorRole } from './creatorData.ts';
+import { creatorListPath, creatorTitle, fetchCreatorGames, steamSearchUrl, type CreatorRole } from './creatorData.ts';
 import { fetchGamePass, GAME_PASS_PATH, GAME_PASS_TITLE, xboxStoreUrl, type GamePassData } from './gamePassData.ts';
 import ArrowLeft from 'lucide-solid/icons/arrow-left';
 import Check from 'lucide-solid/icons/check';
@@ -3933,6 +3940,10 @@ export default function ListRoute() {
     const hours = (g: ProfileGame) => (g as Game).playtime ?? 0;
     return { style: playStyle(rows, hours), story: storyGames(rows, hours, ownStatus) };
   });
+  const creators = createMemo(() => {
+    const rows = profileRows();
+    return rows ? favouriteCreators(rows, (g) => (g as Game).playtime ?? 0) : { developers: [], publishers: [] };
+  });
   // The games Play next lists (listViews.ts), counted the same way so the two agree.
   const unplayed = createMemo(() => {
     const rows = profileRows();
@@ -3967,6 +3978,8 @@ export default function ListRoute() {
         played={playsMostlyProfile().played}
         styleSentence={profileFacts().style ? STYLE_SENTENCES[profileFacts().style!] : null}
         story={profileFacts().story}
+        creators={creators()}
+        creatorHref={(role, name) => withAccountParam(creatorListPath(role, name))}
         unplayed={unplayed()}
         playNextHours={PLAY_NEXT_MAX_HOURS}
         backlogShown={backlogShown()}

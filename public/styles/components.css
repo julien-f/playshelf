@@ -904,6 +904,30 @@
     font-weight: 600;
     line-height: 1;
   }
+  .profile-creators-role {
+    display: grid;
+    gap: 2px;
+  }
+  .profile-creators-label {
+    color: var(--muted);
+    font-size: var(--fs-label);
+  }
+  .profile-creators ul {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-meta);
+  }
+  .profile-creator {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    color: var(--accent);
+  }
+  .profile-creator-count {
+    color: var(--muted);
+  }
   @media (max-width: 768px) {
     .profile--tiles {
       grid-template-columns: minmax(0, 1fr);
@@ -932,6 +956,10 @@
     }
     .profile-figure {
       font-size: 22px;
+    }
+    /* One studio per role until Why these? opens the rest. */
+    .profile:not(.profile--open) .profile-creators li:nth-child(n + 2) {
+      display: none;
     }
     /* 4 tags are enough to read on a phone, all 6 once Why these? is open. */
     .profile:not(.profile--open) .profile-bars li:nth-child(n + 5) {

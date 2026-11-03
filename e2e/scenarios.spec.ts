@@ -701,9 +701,45 @@ test('F3 edge: Owned says which tags the account plays most, each filtering the 
   await expect(coop).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('A5 edge: a profile too thin for an archetype or tiles shows neither, and no empty box', async ({ page }) => {
+test('A5: Favourite studios names the studios behind 2+ played games, each opening its list', async ({
+  page,
+}, testInfo) => {
   await asPlayer(page, ALICE);
-  // 10 h on all 6 of Alice's games: enough for Plays mostly, not for a play style or story games.
+  await page.route('**/api/common-games', (route) => {
+    const req = route.request();
+    const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
+    for (const perPlayer of Object.values(body.playtime) as Record<string, number>[])
+      for (const id of Object.keys(perPlayer)) perPlayer[id] = 600;
+    return route.fulfill({ json: body });
+  });
+  await page.goto('/lists/owned?u=alice');
+  const tile = page.locator('.profile-creators');
+  const developers = tile.getByRole('list', { name: 'Developers' });
+  const publishers = tile.getByRole('list', { name: 'Publishers' });
+  // Supergiant Games publishes its own game: shown once, as a developer; Feral publishes only one.
+  if (testInfo.project.name === 'phone') {
+    await expect(developers.getByRole('link').filter({ visible: true })).toHaveText(['Test Studio']);
+  } else {
+    await expect(developers.getByRole('link')).toHaveText(['Test Studio', 'Supergiant Games']);
+  }
+  await expect(publishers.getByRole('link')).toHaveText(['Test Publisher']);
+  await expect(developers.getByRole('listitem').first()).toContainText('3 games');
+
+  await page.locator('.profile').getByRole('button', { name: 'Why these?' }).click();
+  await expect(developers.getByRole('listitem').nth(1).getByRole('button')).toHaveCount(2);
+  const supergiant = developers.getByRole('link', { name: 'Supergiant Games' });
+  await expect(supergiant).toHaveAttribute('href', /[?&]u=alice/);
+  await supergiant.click();
+  await expect(page).toHaveURL(/\/lists\/developer\?.*name=Supergiant\+Games/);
+  await expect(page.locator('.list-hero-title')).toHaveText('Games by Supergiant Games');
+  await page.goBack();
+  await expect(page).toHaveURL(/\/lists\/owned/);
+  await expect(tile).toBeVisible();
+});
+
+test('A5 edge: a profile too thin for an archetype or story tile shows neither, and no empty box', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  // 10 h on all 6 of Alice's games: enough for Plays mostly and studios, not for a play style or story games.
   await page.route('**/api/common-games', (route) => {
     const req = route.request();
     const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
@@ -714,8 +750,9 @@ test('A5 edge: a profile too thin for an archetype or tiles shows neither, and n
   await page.goto('/lists/owned');
   const profile = page.locator('.profile');
   await expect(profile.getByRole('heading')).toHaveText('Plays mostly');
-  await expect(profile.locator('.profile-tile')).toHaveCount(0);
-  await expect(profile).not.toHaveClass(/profile--tiles/);
+  // Only Favourite studios: Test Studio made 3 of the played games.
+  await expect(profile.locator('.profile-tile')).toHaveCount(1);
+  await expect(profile.locator('.profile-tile')).toHaveClass(/profile-creators/);
 });
 
 test('A5 edge: the profile stays on screen through a refresh that keeps every game', async ({ page }) => {

@@ -1,13 +1,15 @@
 import { For, Show, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import BookOpen from 'lucide-solid/icons/book-open';
+import Building from 'lucide-solid/icons/building';
 import Compass from 'lucide-solid/icons/compass';
 import Handshake from 'lucide-solid/icons/handshake';
 import Play from 'lucide-solid/icons/play';
 import Swords from 'lucide-solid/icons/swords';
 import Users from 'lucide-solid/icons/users';
 import { STATUS_LABELS, type GameStatus } from './gameStatuses.ts';
-import type { Archetype, StoryGames } from './playerProfile.ts';
+import type { CreatorRole } from './creatorData.ts';
+import type { Archetype, Creator, StoryGames } from './playerProfile.ts';
 import type { PlayedTag } from './tagTaste.ts';
 import { fadeInOnLoad, fmtHours, roundHours } from './utils.ts';
 
@@ -129,6 +131,82 @@ export function GameArt(props: { art: string | null; large?: boolean }): JSX.Ele
   );
 }
 
+// A played game in Why these?'s evidence, opening its panel.
+function GameChip(props: {
+  appid: number;
+  name: string;
+  hours: number;
+  art: string | null;
+  onGame: (appid: number) => void;
+}) {
+  return (
+    <button type="button" class="profile-chip" onClick={() => props.onGame(props.appid)}>
+      <GameArt art={props.art} />
+      {props.name} <span class="profile-chip-hours">{fmtHours(props.hours)}</span>
+    </button>
+  );
+}
+
+const CREATOR_GAMES_SHOWN = 3;
+const CREATOR_ROLES = [
+  { role: 'developer', key: 'developers', label: 'Developers' },
+  { role: 'publisher', key: 'publishers', label: 'Publishers' },
+] as const;
+
+export type FavouriteCreators = Record<'developers' | 'publishers', Creator[]>;
+
+// Each studio links to its list of games; Why these? adds the played games behind it.
+function CreatorsTile(props: {
+  creators: FavouriteCreators;
+  whyOpen: boolean;
+  href: (role: CreatorRole, name: string) => string;
+  game: (appid: number) => ProfileGameInfo | undefined;
+  onGame: (appid: number) => void;
+}): JSX.Element {
+  return (
+    <div class="profile-tile profile-creators">
+      <span class="profile-label">
+        <Building /> Favourite studios
+      </span>
+      <For each={CREATOR_ROLES.filter((r) => props.creators[r.key].length)}>
+        {(r) => (
+          <div class="profile-creators-role">
+            <span class="profile-creators-label" id={`profile-creators-${r.role}`}>
+              {r.label}
+            </span>
+            <ul aria-labelledby={`profile-creators-${r.role}`}>
+              <For each={props.creators[r.key]}>
+                {(creator) => (
+                  <li>
+                    <a href={props.href(r.role, creator.name)} class="profile-creator">
+                      {creator.name}
+                    </a>{' '}
+                    <span class="profile-creator-count">{creator.appids.length} games</span>
+                    <Show when={props.whyOpen}>
+                      <div class="profile-bar-games">
+                        <For each={creator.appids.slice(0, CREATOR_GAMES_SHOWN)}>
+                          {(appid) => (
+                            <Show when={props.game(appid)}>
+                              {(g) => <GameChip appid={appid} {...g()} onGame={props.onGame} />}
+                            </Show>
+                          )}
+                        </For>
+                        <Show when={creator.appids.length > CREATOR_GAMES_SHOWN}>
+                          <span class="profile-more">+{creator.appids.length - CREATOR_GAMES_SHOWN} more</span>
+                        </Show>
+                      </div>
+                    </Show>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
+
 // Story games with their hours against their main story's length, reached ones then those short of it.
 function StoryList(props: {
   story: StoryGames;
@@ -185,6 +263,8 @@ export function OwnedProfile(props: {
   played: number;
   styleSentence: string | null;
   story: StoryGames | null;
+  creators: FavouriteCreators;
+  creatorHref: (role: CreatorRole, name: string) => string;
   unplayed: number; // games played `playNextHours` or less
   playNextHours: number;
   backlogShown: boolean;
@@ -196,7 +276,8 @@ export function OwnedProfile(props: {
   game: (appid: number) => ProfileGameInfo | undefined;
   onGame: (appid: number) => void;
 }): JSX.Element {
-  const tiles = () => !!props.story || props.unplayed > 0;
+  const hasCreators = () => props.creators.developers.length + props.creators.publishers.length > 0;
+  const tiles = () => !!props.story || hasCreators() || props.unplayed > 0;
   return (
     <Show when={props.tags.length || tiles()}>
       <div
@@ -238,12 +319,7 @@ export function OwnedProfile(props: {
                 <Show when={props.whyOpen}>
                   <div class="profile-bar-games">
                     <For each={played.games}>
-                      {(g) => (
-                        <button type="button" class="profile-chip" onClick={() => props.onGame(g.appid)}>
-                          <GameArt art={props.game(g.appid)?.art ?? null} />
-                          {g.name} <span class="profile-chip-hours">{fmtHours(g.hours)}</span>
-                        </button>
-                      )}
+                      {(g) => <GameChip {...g} art={props.game(g.appid)?.art ?? null} onGame={props.onGame} />}
                     </For>
                   </div>
                 </Show>
@@ -261,6 +337,12 @@ export function OwnedProfile(props: {
                     <li>
                       Play style: single-player, co-op or PvP, whichever holds over half the played games' weight (log
                       hours); a game with several modes goes by the one players tag it most for.
+                    </li>
+                  </Show>
+                  <Show when={hasCreators()}>
+                    <li>
+                      Studios: developers and publishers of 2 or more played games, most played first (log hours, so one
+                      long game doesn't decide); a studio publishing its own games shows as a developer.
                     </li>
                   </Show>
                   <Show when={props.story}>
@@ -292,6 +374,15 @@ export function OwnedProfile(props: {
                   </Show>
                 </div>
               )}
+            </Show>
+            <Show when={hasCreators()}>
+              <CreatorsTile
+                creators={props.creators}
+                whyOpen={props.whyOpen}
+                href={props.creatorHref}
+                game={props.game}
+                onGame={props.onGame}
+              />
             </Show>
             <Show when={props.unplayed}>
               <div class="profile-tile">

@@ -1,5 +1,5 @@
 import type { GameStatus } from './gameStatuses.ts';
-import { isSoftware } from './tagTaste.ts';
+import { isSoftware, MIN_PLAYED_FOR_PROFILE } from './tagTaste.ts';
 
 // Facts about how an account plays, beyond Plays mostly's tags: said as sentences, each silent
 // below the number of games it needs to mean anything.
@@ -9,6 +9,8 @@ export interface ProfileGame {
   genres?: string[];
   categories?: string[];
   hltbMain?: number | null;
+  developers?: string[];
+  publishers?: string[];
   details?: { tagWeights?: Record<string, number | null> | null } | null;
 }
 
@@ -119,6 +121,44 @@ export function storyGames(
     reached: byHours.filter(reached).map((g) => g.appid),
     fellShort: byHours.filter((g) => !reached(g)).map((g) => g.appid),
   };
+}
+
+export interface Creator {
+  name: string;
+  appids: number[]; // its played games, most played first
+}
+
+// From this many played games, a studio is one the player comes back to, not just their most played game.
+const MIN_CREATOR_GAMES = 2;
+const CREATORS_SHOWN = 3;
+
+// The developers and publishers of the most played games (log hours each, as playStyle weighs), from
+// MIN_CREATOR_GAMES played games each; a developer that also publishes shows once, as a developer.
+export function favouriteCreators(
+  games: readonly ProfileGame[],
+  hours: (g: ProfileGame) => number,
+): { developers: Creator[]; publishers: Creator[] } {
+  const played = games.filter((g) => isPlayed(g, hours(g))).sort((a, b) => hours(b) - hours(a));
+  if (played.length < MIN_PLAYED_FOR_PROFILE) return { developers: [], publishers: [] };
+  const rank = (role: 'developers' | 'publishers', skip: ReadonlySet<string>) => {
+    const byName = new Map<string, { appids: number[]; weight: number }>();
+    for (const g of played)
+      for (const name of new Set(g[role] ?? [])) {
+        if (skip.has(name)) continue;
+        const entry = byName.get(name) ?? { appids: [], weight: 0 };
+        entry.appids.push(g.appid);
+        entry.weight += Math.log1p(hours(g));
+        byName.set(name, entry);
+      }
+    return [...byName]
+      .filter(([, e]) => e.appids.length >= MIN_CREATOR_GAMES)
+      .sort(([an, a], [bn, b]) => b.weight - a.weight || b.appids.length - a.appids.length || an.localeCompare(bn));
+  };
+  const developers = rank('developers', new Set());
+  const publishers = rank('publishers', new Set(developers.map(([name]) => name)));
+  const shown = (ranked: typeof developers) =>
+    ranked.slice(0, CREATORS_SHOWN).map(([name, e]) => ({ name, appids: e.appids }));
+  return { developers: shown(developers), publishers: shown(publishers) };
 }
 
 export const STYLE_SENTENCES: Record<PlayStyle, string> = {
