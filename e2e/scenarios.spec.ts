@@ -8459,6 +8459,13 @@ test('F4 edge: a developer that also publishes is one link, and one developer le
   await expect(rows(page)).toHaveCount(1);
 });
 
+test("F4 edge: on that creator's own list, More from marks it current, whatever the path's case", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/Lists/Developer/?name=Supergiant%20Games&game=1145360');
+  await expect(page.locator('#panel-title')).toHaveText('Hades');
+  await expect(moreFrom(page).locator('[aria-current="page"]')).toHaveText('Supergiant Games');
+});
+
 test('S3 edge: a publisher\'s list link opens in a fresh browser, "/" in its name included', async ({ page }) => {
   await page.goto(`/lists/publisher?name=${encodeURIComponent('Feral Interactive (Mac/Linux)')}`);
   await expect(page.locator('.list-hero-title')).toHaveText('Published by Feral Interactive (Mac/Linux)');

@@ -81,7 +81,7 @@ import {
   type JSX,
 } from 'solid-js';
 import { Dynamic, render } from 'solid-js/web';
-import { A, useLocation } from '@solidjs/router';
+import { A, useLocation, useCurrentMatches } from '@solidjs/router';
 import { creatorListPath, type CreatorRole } from './creatorData.ts';
 import { present, presented, privateMode } from './presentation.ts';
 import ArrowUpDown from 'lucide-solid/icons/arrow-up-down';
@@ -2284,8 +2284,10 @@ function gameCreators(
 function MoreFrom(props: { game: ReadonlyGame }): JSX.Element {
   const location = useLocation();
   const creators = createMemo(() => gameCreators(metaOrBasics(props.game.details)));
+  const matches = useCurrentMatches();
+  // The matched <Route>'s role (AppRoot.tsx), not pathname: the router ignores case and a trailing slash.
   const isOpen = (role: CreatorRole, name: string) =>
-    location.pathname === `/lists/${role}` && new URLSearchParams(location.search).get('name')?.trim() === name;
+    matches().at(-1)?.route.info?.role === role && new URLSearchParams(location.search).get('name')?.trim() === name;
   return (
     <Show when={creators().length}>
       <div class="panel-similar-more">
