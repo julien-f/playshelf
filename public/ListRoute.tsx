@@ -60,7 +60,7 @@ import {
 } from 'solid-js';
 import { createStore, produce, unwrap } from 'solid-js/store';
 import { render } from 'solid-js/web';
-import { A, useParams, useLocation, useNavigate } from '@solidjs/router';
+import { A, useParams, useLocation, useNavigate, useCurrentMatches } from '@solidjs/router';
 import { createTableState, DataTableView, datePartGroup } from '@vates/data-table-solid';
 import { cascadeFirstRows, slideRowsOnViewChange } from './motion.ts';
 import type { ColumnDef, SortEntry, TableState, TableViewState } from '@vates/data-table-solid';
@@ -297,7 +297,7 @@ import { CombineForm, sourceOptions, refKey, type SourceOption } from './Combine
 import type { MembershipGroup } from './combine.ts';
 import { peekMyOwnership, trackMyOwnership } from './myOwnership.ts';
 import { creatorListPath, creatorTitle, fetchCreatorGames, steamSearchUrl, type CreatorRole } from './creatorData.ts';
-import { fetchGamePass, GAME_PASS_PATH, GAME_PASS_TITLE, xboxStoreUrl, type GamePassData } from './gamePassData.ts';
+import { fetchGamePass, GAME_PASS_TITLE, xboxStoreUrl, type GamePassData } from './gamePassData.ts';
 import ArrowLeft from 'lucide-solid/icons/arrow-left';
 import Check from 'lucide-solid/icons/check';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
@@ -311,20 +311,6 @@ import TriangleAlert from 'lucide-solid/icons/triangle-alert';
 import Trophy from 'lucide-solid/icons/trophy';
 
 type ListKind = 'owned' | 'wishlist' | 'bundle' | 'recent' | 'user' | 'compare' | 'shared' | 'creator' | 'game-pass';
-
-// /game (bare) and /game/:appid both live here, kind 'recent' either way — see this file's own
-// header comment and AppRoot.tsx.
-function kindFromPath(pathname: string, params: { bundleId?: string; listId?: string; appid?: string }): ListKind {
-  if (pathname === '/lists/owned') return 'owned';
-  if (pathname === '/lists/wishlist') return 'wishlist';
-  if (pathname === '/lists/compare') return 'compare';
-  if (pathname === '/lists/shared') return 'shared';
-  if (pathname === '/lists/developer' || pathname === '/lists/publisher') return 'creator';
-  if (pathname === GAME_PASS_PATH) return 'game-pass';
-  if (params.bundleId) return 'bundle';
-  if (pathname === '/game' || pathname.startsWith('/game/')) return 'recent';
-  return 'user';
-}
 
 // ── Columns — ported verbatim from library.tsx's own (see its comments for the full reasoning
 // behind each column's grouping/format/category choices) ──────────────────────────────────────
@@ -769,7 +755,9 @@ export default function ListRoute() {
   const params = useParams();
   const routerLocation = useLocation();
   const navigate = useNavigate();
-  const kind = kindFromPath(routerLocation.pathname, params);
+  // Set per <Route> in AppRoot.tsx: the router ignores case and a trailing slash, so the path can't tell.
+  const routeInfo = useCurrentMatches()().at(-1)!.route.info!;
+  const kind = routeInfo.kind as ListKind;
 
   let tableContainer!: HTMLDivElement;
   // Each compared player's label and owned games, in `compareAccounts` order (also the panel's Owned by, see getOwners).
@@ -1233,7 +1221,7 @@ export default function ListRoute() {
 
   // ── kind === 'creator' ────────────────────────────────────────────────────────────────────
   // The name rides in ?name=, not the path: the SPA fallback 404s on a path like "indie.io".
-  const creatorRole = (): CreatorRole => (routerLocation.pathname === '/lists/publisher' ? 'publisher' : 'developer');
+  const creatorRole = routeInfo.role as CreatorRole;
   const creatorName = createMemo(() => (new URLSearchParams(routerLocation.search).get('name') ?? '').trim());
   const [creatorResult, setCreatorResult] = createSignal<{ total: number; capped: boolean } | null>(null);
   // kind === 'game-pass': the last catalog read, for its note, its games not on Steam and its failures.
@@ -1522,7 +1510,7 @@ export default function ListRoute() {
     if (kind === 'user') return `list-route:user:${params.listId}`;
     if (kind === 'compare') return `list-route:compare:${compareKey()}`;
     if (kind === 'shared') return `list-route:shared:${sharedFormulaParam() ?? ''}`;
-    if (kind === 'creator') return `list-route:creator:${creatorRole()}:${creatorName()}`;
+    if (kind === 'creator') return `list-route:creator:${creatorRole}:${creatorName()}`;
     return `list-route:${kind}`;
   }
 
@@ -2641,14 +2629,14 @@ export default function ListRoute() {
     } else if (kind === 'creator') {
       const name = creatorName();
       setCreatorResult(null);
-      setListTitle(creatorTitle(creatorRole(), name));
+      setListTitle(creatorTitle(creatorRole, name));
       if (!name) {
         setStatusText('This link names no developer or publisher.');
         return;
       }
       setStatusText(`Searching Steam for games by ${name}…`);
       try {
-        const data = await fetchCreatorGames(creatorRole(), name, { refresh });
+        const data = await fetchCreatorGames(creatorRole, name, { refresh });
         if (loadGuard.isStale(gen)) return;
         noteFetchedAt(data.fetchedAt);
         setCreatorResult({ total: data.total, capped: data.capped });
@@ -3057,7 +3045,7 @@ export default function ListRoute() {
           : kind === 'owned'
             ? `${whose} library is empty, or private on Steam.`
             : kind === 'creator'
-              ? `Steam's store has no games under the exact ${creatorRole()} name "${creatorName()}".`
+              ? `Steam's store has no games under the exact ${creatorRole} name "${creatorName()}".`
               : kind === 'game-pass'
                 ? 'None of the games in this PC Game Pass catalog are on Steam.'
                 : 'No games in this list.',
@@ -3613,7 +3601,7 @@ export default function ListRoute() {
       );
     }
     const all = (
-      <a href={steamSearchUrl({ [creatorRole()]: name })} target="_blank" rel="noopener">
+      <a href={steamSearchUrl({ [creatorRole]: name })} target="_blank" rel="noopener">
         All on Steam ↗
       </a>
     );
@@ -3623,7 +3611,7 @@ export default function ListRoute() {
       </>
     ) : (
       <>
-        Every game on Steam whose {creatorRole()} is exactly "{name}". {all}
+        Every game on Steam whose {creatorRole} is exactly "{name}". {all}
       </>
     );
   }
@@ -4243,12 +4231,12 @@ export default function ListRoute() {
           </>
         )}
         {kind === 'creator' && (
-          <Show when={!!creatorResult()?.total && notOwnedHref({ kind: creatorRole(), name: creatorName() })}>
+          <Show when={!!creatorResult()?.total && notOwnedHref({ kind: creatorRole, name: creatorName() })}>
             {(href) => (
               <A
                 class="btn"
                 href={href()}
-                title={`This ${creatorRole()}'s games minus the ones you own — save it as a list from there`}
+                title={`This ${creatorRole}'s games minus the ones you own — save it as a list from there`}
               >
                 What don't I own?
               </A>

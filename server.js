@@ -1694,18 +1694,20 @@ async function linkPreview(req) {
   // Not req.query: Express 5 makes a repeated param an array.
   const query = new URL(req.url, 'http://x').searchParams;
   // A list opened on a game: that game is what the page shows first.
+  // As the client router matches it: any letter case, an optional trailing slash.
+  const pathname = req.path.toLowerCase().replace(/(.)\/$/, '$1');
   const openGame = Number(query.get('game'));
-  if (req.path.startsWith('/lists/') && Number.isInteger(openGame) && openGame > 0) return gamePreview(openGame);
-  const bundleId = /^\/lists\/bundle\/(\d+)\/?$/.exec(req.path)?.[1];
+  if (pathname.startsWith('/lists/') && Number.isInteger(openGame) && openGame > 0) return gamePreview(openGame);
+  const bundleId = /^\/lists\/bundle\/(\d+)$/.exec(pathname)?.[1];
   if (bundleId) return bundlePreview(Number(bundleId));
-  const appid = /^\/game\/(\d+)\/?$/.exec(req.path)?.[1];
+  const appid = /^\/game\/(\d+)$/.exec(pathname)?.[1];
   if (appid) return gamePreview(appid);
-  if (req.path === '/lists/owned') return accountListPreview(query, 'owned');
-  if (req.path === '/lists/wishlist') return accountListPreview(query, 'wishlist');
-  if (req.path === '/lists/compare') return comparePreview(query);
-  if (req.path === '/lists/developer') return creatorPreview(query, 'developer');
-  if (req.path === '/lists/publisher') return creatorPreview(query, 'publisher');
-  return FIXED_PREVIEWS[req.path] ?? {};
+  if (pathname === '/lists/owned') return accountListPreview(query, 'owned');
+  if (pathname === '/lists/wishlist') return accountListPreview(query, 'wishlist');
+  if (pathname === '/lists/compare') return comparePreview(query);
+  if (pathname === '/lists/developer') return creatorPreview(query, 'developer');
+  if (pathname === '/lists/publisher') return creatorPreview(query, 'publisher');
+  return FIXED_PREVIEWS[pathname] ?? {};
 }
 
 // SPA fallback: any GET that isn't an /api/* call and doesn't look like a static-asset request

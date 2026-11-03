@@ -34,6 +34,7 @@ The data model it renders — accounts, lists, combines, the localStorage schema
 
 - Path for "which list", query params for state within it (`?u=`, `?game=`/`&shot=`, view-sharing params). Except a developer's or publisher's name, in `?name=`: the production SPA fallback 404s on a path ending like a file (`indie.io`), and a `/` in a name doesn't survive a path segment.
 - The fixed `/lists/*` routes are registered before the generic `/lists/:listId` to document intent; `@solidjs/router` ranks by segment specificity, so the order isn't load-bearing.
+- `@solidjs/router` ignores letter case and a trailing slash (`/Lists/Owned/` matches `/lists/owned`), so `ListRoute` reads its kind from the matched `<Route>`'s `info` (`AppRoot.tsx`), never by comparing `pathname`; `linkPreview` (`server.js`) normalises the path the same way.
 - The production catch-all that makes these real paths work on a cold visit is in [architecture.md](architecture.md).
 
 **`/lists/shared?f=<formula>`** shares any saved _dynamic_ list, the way `/lists/compare` shares a comparison: the formula lives in the URL and resolves in memory (`listShare.ts`'s `decodeListFormula`, `ListRoute.tsx`'s `'shared'` kind), so it opens for someone with none of it in their storage. `f`'s grammar (`listShare.ts`):

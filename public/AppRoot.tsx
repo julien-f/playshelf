@@ -33,19 +33,19 @@ render(
   () => (
     <Router root={AppShell}>
       <Route path="/" component={HomeRoute} />
-      <Route path="/lists/owned" component={ListRoute} />
-      <Route path="/lists/wishlist" component={ListRoute} />
-      <Route path="/lists/compare" component={ListRoute} />
-      <Route path="/lists/shared" component={ListRoute} />
-      <Route path="/lists/developer" component={ListRoute} />
-      <Route path="/lists/publisher" component={ListRoute} />
-      <Route path="/lists/game-pass" component={ListRoute} />
-      <Route path="/lists/bundle/:bundleId" component={ListRoute} />
-      <Route path="/lists/:listId" component={ListRoute} />
+      <Route path="/lists/owned" component={ListRoute} info={{ kind: 'owned' }} />
+      <Route path="/lists/wishlist" component={ListRoute} info={{ kind: 'wishlist' }} />
+      <Route path="/lists/compare" component={ListRoute} info={{ kind: 'compare' }} />
+      <Route path="/lists/shared" component={ListRoute} info={{ kind: 'shared' }} />
+      <Route path="/lists/developer" component={ListRoute} info={{ kind: 'creator', role: 'developer' }} />
+      <Route path="/lists/publisher" component={ListRoute} info={{ kind: 'creator', role: 'publisher' }} />
+      <Route path="/lists/game-pass" component={ListRoute} info={{ kind: 'game-pass' }} />
+      <Route path="/lists/bundle/:bundleId" component={ListRoute} info={{ kind: 'bundle' }} />
+      <Route path="/lists/:listId" component={ListRoute} info={{ kind: 'user' }} />
       <Route path="/lists/:listId/rank" component={RankRoute} />
       <Route path="/bundles" component={BundlesBrowseRoute} />
       <Route path="/search" component={SearchRoute} />
-      <Route path="/game/:appid?" component={ListRoute} />
+      <Route path="/game/:appid?" component={ListRoute} info={{ kind: 'recent' }} />
       <Route path="/about" component={AboutRoute} />
       <Route path="*" component={NotFoundRoute} />
     </Router>

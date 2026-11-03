@@ -196,6 +196,16 @@ test('A1 edge: Owned with no account points to Home rather than showing 0 games'
   await expect(page).toHaveURL(/\/$/);
 });
 
+test('A1 edge: a fixed list opens with a trailing slash or other letter case', async ({ page }) => {
+  await mockApi(page);
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/game-pass/');
+  await expect(rows(page)).toHaveCount(4);
+  await page.goto('/Lists/Owned');
+  await expect(rows(page).first()).toBeVisible();
+  await expect(page.getByText("isn't in this browser")).toHaveCount(0);
+});
+
 test("A1 edge: a wishlist that didn't load says so on Home, rather than 0", async ({ page }) => {
   await page.route('**/api/wishlist', (route) =>
     route.fulfill({ status: 502, json: { error: 'Steam request failed' } }),

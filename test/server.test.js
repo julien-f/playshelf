@@ -225,6 +225,15 @@ test('GET / and /lists/owned: the app shell carries Open Graph tags with an abso
   }
 });
 
+test('GET /game/:appid/ and /Game/:appid: a trailing slash or other letter case gets the same preview', async () => {
+  _reset();
+  setCache('meta:620', { name: 'Portal 2', header_image: null, short_description: null });
+  for (const route of ['/game/620/', '/Game/620', '/lists/OWNED/?game=620']) {
+    const res = await api.get(route);
+    assert.match(res.text, /<meta property="og:title" content="Portal 2" \/>/, route);
+  }
+});
+
 test('GET /game/:appid: the preview names and describes a cached game and shows its header image, without fetching', async (t) => {
   _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
