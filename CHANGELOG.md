@@ -77,6 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A game with no Steam store page is named from its achievement data, and gets its HowLongToBeat times
 - A game whose HLTB lookup failed is no longer searched again on every list load for the next 10 minutes
 - Steam sign-in now needs `PUBLIC_ORIGIN` set to the site's address, and no longer trusts the request's Host header
+- Signing in on a device with many saved settings no longer leaves some of them unsynced or blocks the next sign-in
 
 ### Development
 

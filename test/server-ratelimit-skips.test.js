@@ -12,6 +12,7 @@ process.env.FRIENDS_RATE_LIMIT_MAX = '2';
 process.env.DETAILS_RATE_LIMIT_MAX = '2';
 process.env.ACHIEVEMENTS_RATE_LIMIT_MAX = '2';
 process.env.BUNDLES_RATE_LIMIT_MAX = '2';
+process.env.PREFS_RATE_LIMIT_MAX = '2';
 process.env.ITAD_API_KEY = 'test-itad-key';
 
 const { test } = require('node:test');
@@ -19,6 +20,7 @@ const assert = require('node:assert/strict');
 const supertest = require('supertest');
 const { app } = require('../server');
 const { _reset, setCache } = require('../lib/cache');
+const { SESSION_COOKIE, createSession, upsertUser } = require('../lib/auth');
 
 const api = supertest(app);
 
@@ -275,8 +277,24 @@ test('bundle-by-id limiter: counts every request, twice the bundles budget', asy
   assert.equal((await api.get('/api/bundles/abc')).status, 429);
 });
 
-test('auth limiter: login, callback and pref writes share one budget', async () => {
+test('auth limiter: login and callback share one budget, which pref writes leave alone', async () => {
   for (let i = 0; i < 20; i++) assert.equal((await api.get('/auth/steam/login')).status, 302);
   assert.equal((await api.get('/auth/steam/callback')).status, 429);
-  assert.equal((await api.put('/api/me/prefs/theme').send({ value: 'dark' })).status, 429);
+  assert.equal((await api.put('/api/me/prefs/myAccount').send({ value: null, updatedAt: 1 })).status, 401);
+});
+
+// A first sign-in pushes every local key at once: those writes mustn't spend sign-in's budget.
+test('prefs limiter: counts each signed-in account apart', async () => {
+  const cookieFor = (steamid) => {
+    upsertUser(steamid);
+    return `${SESSION_COOKIE}=${createSession(steamid)}`;
+  };
+  const alice = cookieFor('76561198000000601');
+  const bob = cookieFor('76561198000000602');
+  const put = (cookie) => api.put('/api/me/prefs/myAccount').set('Cookie', cookie).send({ value: null, updatedAt: 1 });
+
+  assert.equal((await put(alice)).status, 200);
+  assert.equal((await put(alice)).status, 200);
+  assert.equal((await put(alice)).status, 429);
+  assert.equal((await put(bob)).status, 200, "another account's writes have their own budget");
 });

@@ -64,7 +64,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 
 ### Inbound — `limiterTrips`
 
-- Trips (requests rejected) per `express-rate-limit` instance in `server.js`, recorded by the shared `namedRateLimit` wrapper: `search`, `friends`, `details`, `meta`, `news`, `gameSearch`, `creatorGames`, `achievements`, `bundlesList`, `bundlesById`, `bundlesResolve`, `prices`, `gameBundles`, `gamePass`, `auth`. Plus `stream`: details streams refused by `STREAM_MAX_PER_IP`. `meta` also limits an opened list row's media loads.
+- Trips (requests rejected) per `express-rate-limit` instance in `server.js`, recorded by the shared `namedRateLimit` wrapper: `search`, `friends`, `details`, `meta`, `news`, `gameSearch`, `creatorGames`, `achievements`, `bundlesList`, `bundlesById`, `bundlesResolve`, `prices`, `gameBundles`, `gamePass`, `auth`, `prefs`. Plus `stream`: details streams refused by `STREAM_MAX_PER_IP`. `meta` also limits an opened list row's media loads.
 - Only trips count, not requests a limiter saw or skipped as cached.
 
 ### `dedupHits`, `cache`, `cacheEntries`
