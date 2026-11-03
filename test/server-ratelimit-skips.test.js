@@ -5,6 +5,7 @@
 // file's search test already spends searchLimit's.
 process.env.STEAM_API_KEY = 'test-key';
 process.env.NODE_ENV = 'test';
+process.env.PUBLIC_ORIGIN = 'https://app.example';
 process.env.RATE_LIMIT_ENABLED = 'true';
 process.env.SEARCH_RATE_LIMIT_MAX = '2';
 process.env.FRIENDS_RATE_LIMIT_MAX = '2';

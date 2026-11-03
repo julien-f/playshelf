@@ -3,6 +3,7 @@
 // Set env before requiring the app so module-level reads see test values.
 process.env.STEAM_API_KEY = 'test-key';
 process.env.NODE_ENV = 'test';
+process.env.PUBLIC_ORIGIN = 'https://app.example';
 // Force the in-memory DB regardless of how this file is invoked — `npm test`
 // already does this via a shell-level `DB_FILE=`, but running this file
 // directly (e.g. `node --test test/server.test.js`, an IDE test runner) would
@@ -3512,7 +3513,7 @@ test('POST /api/game-details/stream: fully cached games come first, ahead of unc
 
 // ── Authentication (Steam OpenID) ────────────────────────────────────────────
 
-// supertest serves each request on a fresh port; the callback checks return_to against the host.
+// PUBLIC_ORIGIN's host: sign-in checks return_to against it, whatever Host a request sends.
 const HOST = 'app.example';
 
 // Runs the full login handshake through a cookie-persisting agent and returns it, already
@@ -3557,6 +3558,26 @@ test('GET /auth/steam/login: redirects to Steam with a return_to and state, and 
   const location = new URL(res.headers.location);
   assert.equal(location.hostname, 'steamcommunity.com');
   assert.match(res.headers['set-cookie'][0], /^steam_login_state=/);
+});
+
+test('GET /auth/steam/login: builds realm and return_to from PUBLIC_ORIGIN, not the Host header', async () => {
+  const res = await api.get('/auth/steam/login').set('Host', 'evil.example').expect(302);
+  const location = new URL(res.headers.location);
+  assert.equal(location.searchParams.get('openid.realm'), 'https://app.example');
+  assert.match(location.searchParams.get('openid.return_to'), /^https:\/\/app\.example\/auth\/steam\/callback\?/);
+});
+
+test("GET /auth/steam/callback: 400 for another site's assertion replayed with that site's Host", async (t) => {
+  const state = 'attacker-state';
+  const returnTo = `http://evil.example/auth/steam/callback?state=${state}`;
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, text: async () => 'is_valid:true' }));
+  await api
+    .get('/auth/steam/callback')
+    .set('Host', 'evil.example')
+    .set('Cookie', `steam_login_state=${state}`)
+    .query({ state, ...steamAssertion('76561198000000220', returnTo) })
+    .expect(400);
+  assert.equal(fetchMock.mock.callCount(), 0);
 });
 
 test('GET /auth/steam/callback: 400 when the state cookie is missing or does not match', async () => {

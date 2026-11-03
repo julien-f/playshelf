@@ -76,6 +76,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A game delisted from the Steam store shows its thumbnail again, and its panel says it has no store page instead of looking empty
 - A game with no Steam store page is named from its achievement data, and gets its HowLongToBeat times
 - A game whose HLTB lookup failed is no longer searched again on every list load for the next 10 minutes
+- Steam sign-in now needs `PUBLIC_ORIGIN` set to the site's address, and no longer trusts the request's Host header
 
 ### Development
 

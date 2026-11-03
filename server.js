@@ -98,7 +98,7 @@ const {
   prefFits,
   PREFS_MAX_BYTES,
 } = require('./lib/auth');
-const { SESSION_TTL_MS, MISS_CACHE_TTL_MS, TRUST_PROXY } = require('./lib/config');
+const { SESSION_TTL_MS, MISS_CACHE_TTL_MS, TRUST_PROXY, PUBLIC_ORIGIN } = require('./lib/config');
 
 const HOST = process.env.HOST;
 const PORT = process.env.PORT;
@@ -1468,17 +1468,20 @@ function requireAuth(req, res, next) {
   next();
 }
 
-app.get('/auth/steam/login', authLimit, (req, res) => {
-  const origin = `${req.protocol}://${req.get('host')}`;
+// Shown to visitors; the setup hint goes to the startup log instead (see app.listen below).
+const requireSignIn = (_req, res, next) =>
+  PUBLIC_ORIGIN ? next() : res.status(503).send("Sign-in isn't available on this instance.");
+
+app.get('/auth/steam/login', authLimit, requireSignIn, (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
   res.setHeader(
     'Set-Cookie',
     serializeCookie(STATE_COOKIE, state, { maxAgeMs: 5 * 60 * 1000, secure: req.protocol === 'https' }),
   );
-  res.redirect(buildLoginUrl(origin, state));
+  res.redirect(buildLoginUrl(PUBLIC_ORIGIN, state));
 });
 
-app.get('/auth/steam/callback', authLimit, async (req, res) => {
+app.get('/auth/steam/callback', authLimit, requireSignIn, async (req, res) => {
   const secure = req.protocol === 'https';
   const clearState = serializeCookie(STATE_COOKIE, '', {});
   const { [STATE_COOKIE]: expectedState } = parseCookies(req.headers.cookie);
@@ -1490,7 +1493,7 @@ app.get('/auth/steam/callback', authLimit, async (req, res) => {
   let steamid;
   try {
     steamid = await verifySteamAssertion(req.query, {
-      origin: `${req.protocol}://${req.get('host')}`,
+      origin: PUBLIC_ORIGIN,
       state: expectedState,
     });
   } catch (err) {
@@ -1732,6 +1735,7 @@ if (require.main === module) {
     process.exit(1);
   }
   if (!isItadConfigured()) console.warn('ITAD_API_KEY is not set: bundles and prices are off (see default.env).');
+  if (!PUBLIC_ORIGIN) console.warn('PUBLIC_ORIGIN is not set: Steam sign-in is off (see default.env).');
   app.listen(PORT, HOST, (err) => {
     if (err) {
       console.error(`Error: cannot listen on ${HOST}:${PORT}: ${err.message}`);
