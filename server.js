@@ -93,6 +93,7 @@ const {
   verifySteamAssertion,
   upsertUser,
   createSession,
+  touchSession,
   destroySession,
   getSessionUser,
   setUserPref,
@@ -1532,8 +1533,16 @@ app.post('/auth/logout', (req, res) => {
 // (see authStore.ts's initAuth) to answer "is anyone signed in", and since sign-in is optional
 // most visits are anonymous, so that isn't an error condition worth a console-level 401 on
 // every single one of them.
+// Also where a session slides forward (touchSession): the one call every page load makes.
 app.get('/api/me', (req, res) => {
-  const user = getSessionUser(parseCookies(req.headers.cookie)[SESSION_COOKIE]);
+  const sessionId = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  const user = getSessionUser(sessionId);
+  if (user && touchSession(sessionId)) {
+    res.setHeader(
+      'Set-Cookie',
+      serializeCookie(SESSION_COOKIE, sessionId, { maxAgeMs: SESSION_TTL_MS, secure: signInCookieSecure() }),
+    );
+  }
   res.json(user ? { steamid: user.steamid, prefs: user.prefs } : { steamid: null, prefs: null });
 });
 

@@ -21,6 +21,7 @@ const {
   createSession,
   destroySession,
   getSessionUser,
+  touchSession,
   setUserPref,
   _resetNonces,
 } = require('../lib/auth');
@@ -234,6 +235,46 @@ test('createSession: db.sqlite holds only a SHA-256 of the session id, which doe
 test('getSessionUser: undefined for an unknown or missing session id', () => {
   assert.equal(getSessionUser('does-not-exist'), undefined);
   assert.equal(getSessionUser(undefined), undefined);
+});
+
+test('touchSession: renews a session past half its lifetime, not before', (t) => {
+  const start = Date.parse('2026-10-10T00:00:00Z');
+  t.mock.timers.enable({ apis: ['Date'], now: start });
+  const steamid = '76561198000000110';
+  upsertUser(steamid);
+  const sessionId = createSession(steamid);
+  const expiresAt = () => db.prepare('SELECT expires_at FROM sessions WHERE steamid = ?').get(steamid).expires_at;
+  const ttl = expiresAt() - start;
+
+  t.mock.timers.tick(ttl / 2 - 1000);
+  assert.equal(touchSession(sessionId), false);
+  assert.equal(expiresAt(), start + ttl);
+
+  t.mock.timers.tick(2000);
+  assert.equal(touchSession(sessionId), true);
+  assert.equal(expiresAt(), Date.now() + ttl);
+  // Past the original expiry, the renewed session still signs in.
+  t.mock.timers.tick(ttl / 2 + 1000);
+  assert.equal(getSessionUser(sessionId)?.steamid, steamid);
+});
+
+test('touchSession: never revives an expired, signed-out or unknown session', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-10T00:00:00Z') });
+  const steamid = '76561198000000111';
+  upsertUser(steamid);
+  const expired = createSession(steamid);
+  const ttl = db.prepare('SELECT expires_at FROM sessions WHERE steamid = ?').get(steamid).expires_at - Date.now();
+  t.mock.timers.tick(ttl + 1000);
+  assert.equal(touchSession(expired), false);
+  assert.equal(getSessionUser(expired), undefined);
+
+  const signedOut = createSession(steamid);
+  destroySession(signedOut);
+  assert.equal(touchSession(signedOut), false);
+  assert.equal(getSessionUser(signedOut), undefined);
+
+  assert.equal(touchSession('does-not-exist'), false);
+  assert.equal(touchSession(undefined), false);
 });
 
 test('destroySession: the session stops resolving to a user afterwards', () => {

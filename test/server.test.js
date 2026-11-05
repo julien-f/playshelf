@@ -3677,6 +3677,21 @@ test('login flow → GET /api/me: returns the signed-in steamid and empty prefs 
   assert.deepEqual(res.body, { steamid: '76561198000000202', prefs: {} });
 });
 
+test('GET /api/me: renews a session past half its lifetime, re-sending its cookie only then', async (t) => {
+  const steamid = '76561198000000221';
+  const agent = await loginAs(t, steamid);
+  let res = await agent.get('/api/me').expect(200);
+  assert.equal(res.headers['set-cookie'], undefined);
+
+  const halfLeft = Date.now() + SESSION_TTL_MS / 2 - 60 * 1000;
+  db.prepare('UPDATE sessions SET expires_at = ? WHERE steamid = ?').run(halfLeft, steamid);
+  res = await agent.get('/api/me').expect(200);
+  assert.equal(res.body.steamid, steamid);
+  assert.match(res.headers['set-cookie'][0], new RegExp(`^sid=[0-9a-f]+;.*Max-Age=${SESSION_TTL_MS / 1000}`));
+  const { expires_at } = db.prepare('SELECT expires_at FROM sessions WHERE steamid = ?').get(steamid);
+  assert.ok(expires_at > halfLeft + SESSION_TTL_MS / 4);
+});
+
 test("GET /api/me: 200 with a null steamid/prefs when not signed in — checking status isn't an error", async () => {
   const res = await api.get('/api/me').expect(200);
   assert.deepEqual(res.body, { steamid: null, prefs: null });

@@ -42,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Taste fit stays hidden until the account's taste is known on this device, instead of a column of dashes
 - Large lists load faster when several people use the app at once: names, ratings, tags, ProtonDB and HLTB fill in before genres, Metacritic and achievements
 - GET /api/metrics opens with what's wrong now (`alerts`), groups each upstream's live state together and dates its worst event-loop block
+- Each visit now extends the Steam sign-in, instead of it expiring a fixed time after signing in
 
 ### Fixed
 

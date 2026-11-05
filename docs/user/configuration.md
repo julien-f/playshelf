@@ -24,6 +24,6 @@ Everything else in `default.env` is a limit or a lifetime with a sensible defaul
   - Behind a reverse proxy without `TRUST_PROXY`, every visitor is the proxy's address: they all share one client's share.
 - **Upstream pacing** (`STORE_MIN_INTERVAL_MS`, `UPSTREAM_MIN_INTERVAL_MS`) — the pause before a request slot is reused: Steam's store, then HLTB, ProtonDB, Steam reviews and Steam's store browse API. `STORE_DETAILS_MAX_PER_5_MIN` caps store details lookups under Steam's own limit. Leave them: loosening them raises traffic to undocumented endpoints.
 - **Cache lifetimes** (`*_CACHE_TTL_MINUTES`) — how long each kind of upstream data is kept. They're generous on purpose; the lists, prices and the game panel say how old their data is, and the age itself is the button that fetches fresh (a single bundle's page only states it).
-- **Session lifetime** (`SESSION_TTL_DAYS`) — how long "Sign in with Steam" lasts before signing in again.
+- **Session lifetime** (`SESSION_TTL_DAYS`) — how long "Sign in with Steam" lasts without a visit; each visit past half of it starts it over.
 
 `npm run cache:clear` empties every cache table without deleting the database.
