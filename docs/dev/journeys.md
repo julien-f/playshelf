@@ -275,7 +275,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   1. **Bundles**
   2. narrow with "New" / "Ending soon" / "Wishlist", or sort by Wishlist or New to you
   3. open one
-  4. check tier price vs. best deals, owned badges, ratings; click a tier to see what it gets and what of that is new
+  4. check tier price vs. best deals (each tier header says what its step adds for me and whether it beats buying apart), owned badges, ratings; click a tier to see what it gets and what of that is new
 - **Done when**: owned games are obvious; games with no Steam listing are listed below the table, not dropped.
 - **Edges**: no `ITAD_API_KEY` configured (Bundles unavailable — is that explained?); region change reprices; a Fanatical pick-and-mix bundle shows its quantity tiers, prices the selection and links to buying it (★); a tab left open for hours shows stale countdowns (frontend.md, Known gaps).
 

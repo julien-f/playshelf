@@ -30,6 +30,8 @@ const {
   savingsText,
   tierGroupKey,
   tierGroupLabel,
+  tierValues,
+  sumBestDeals,
   savingTier,
   bundlePackages,
   wholePackages,
@@ -608,6 +610,61 @@ test("tierGroupLabel: a tier's price and its step over the one below; a range, a
   assert.equal(
     tierGroupLabel(12, [usd(5), usd(12), varies], 'tiered', new Map(), 'USD'),
     '$12.00 tier · +$7.00 over $5.00',
+  );
+});
+
+test("tierGroupLabel with a tier's value: what its step buys, against those games' best deals", () => {
+  const tiers = [usd(5), usd(12), { ...usd(2), addon: true }];
+  const label = (key, value, rangeMax = new Map()) => tierGroupLabel(key, tiers, 'tiered', rangeMax, 'USD', value);
+  const v = (fresh, deals, unpriced = 0) => ({ fresh, deals, unpriced });
+  assert.equal(label(5, v(3, 9.12)), '$5.00 tier · saves $4.12 · 3 new worth $9.12', 'the first step is its price');
+  assert.equal(label(12, v(2, 24.38)), '$12.00 tier · saves $17.38 · +$7.00 for 2 new worth $24.38');
+  assert.equal(label(12, v(1, 4.49)), '$12.00 tier · $2.51 cheaper apart · +$7.00 for 1 new worth $4.49');
+  assert.equal(label(12, v(1, 7)), '$12.00 tier · same as apart · +$7.00 for 1 new worth $7.00');
+  assert.equal(label(12, v(0, 0)), '$12.00 tier · nothing new · +$7.00');
+  assert.equal(label(12, v(2, null, 1)), '$12.00 tier · +$7.00 for 2 new · 1 unpriced');
+  assert.equal(label(tierGroupKey({ tierPrice: 2, addon: true }), v(1, 3)), '$2.00 add-on · 1 new worth $3.00');
+  assert.equal(
+    label(5, v(2, 20), new Map([[5, 12]])),
+    "$5.00–$12.00 · which tier isn't listed · 2 new worth $20.00",
+    'no verdict when the tier is unknown',
+  );
+  assert.match(
+    tierGroupLabel(12, tiers, 'tiered', new Map(), 'EUR', v(2, 24.38)),
+    /^\$12\.00 \(≈ €[\d.]+\) tier · saves \$17\.38 \(≈ €[\d.]+\) · \+\$7\.00 for 2 new worth \$24\.38 \(≈ €[\d.]+\)$/,
+    "a USD bundle: each figure in the tier's currency, estimated once in the region's",
+  );
+});
+
+test("tierValues: each group's games not owned, once per ITAD game, summed in the tier's currency", () => {
+  const tiers = [usd(5), usd(12), usd(20), { ...usd(2), addon: true }];
+  const row = (appid, tierPrice, bestDealPrice, extra = {}) => ({
+    appid,
+    tierPrice,
+    bestDealPrice,
+    priceCurrency: 'USD',
+    inLibrary: false,
+    ...extra,
+  });
+  const rows = [
+    row(1, 5, 3, { inLibrary: true }),
+    row(8, 20, 9, { inLibrary: true }), // a tier all owned: nothing new
+    row(2, 5, 4),
+    row(3, 12, 10, { gid: 'pkg' }),
+    row(4, 12, 10, { gid: 'pkg' }), // the same package: its deal counts once
+    row(5, 12, null),
+    row(6, 2, 1, { addon: true }),
+    row(7, null, 2), // Varies: no group value
+  ];
+  const values = tierValues(rows, tiers, (r) => r.gid ?? r.appid);
+  assert.deepEqual(values.get(5), { fresh: 1, unpriced: 0, deals: 4 });
+  assert.deepEqual(values.get(12), { fresh: 3, unpriced: 1, deals: null });
+  assert.deepEqual(values.get(tierGroupKey({ tierPrice: 2, addon: true })), { fresh: 1, unpriced: 0, deals: 1 });
+  assert.deepEqual(values.get(20), { fresh: 0, unpriced: 0, deals: 0 });
+  assert.equal(values.size, 4);
+  assert.equal(
+    sumBestDeals([row(3, 12, 10, { gid: 'pkg' }), row(4, 12, 10, { gid: 'pkg' })], 'USD', (r) => r.gid),
+    10,
   );
 });
 

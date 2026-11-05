@@ -3821,8 +3821,11 @@ test('B1.4: a tier shows what paying it gets, and what of that is new to me', as
   const hero = page.locator('.list-hero');
   // The tile names the pricing model and its rule, readable without hovering.
   await expect(hero).toContainText('each includes the cheaper ones');
-  // Grouped by tier, each header saying what it costs over the one below.
-  await expect(groupRows(page)).toHaveText([/€5\.00 tier\b/, /€12\.00 tier · \+€7\.00 over €5\.00/]);
+  // Grouped by tier, each header saying what its step over the one below buys Alice: she owns the €5 games.
+  await expect(groupRows(page)).toHaveText([
+    /€5\.00 tier · nothing new/,
+    /€12\.00 tier · saves €10\.00 · \+€7\.00 for 2 new worth €17\.00/,
+  ]);
   // Alice's two new games (€7 + €10 at best deals) are both in the €12 tier.
   await expect(hero.locator('.bundle-tier-saving')).toHaveText('saves €5.00 at €12.00');
   const five = hero.getByRole('button', { name: /5\.00.* tier$/ });

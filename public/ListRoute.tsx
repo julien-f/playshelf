@@ -178,7 +178,7 @@ import { STATUS_LABELS, getStatus } from './gameStatuses.ts';
 import { NewViewMenu, ViewTabs, viewHref } from './ViewTabs.tsx';
 import { etaSeconds, formatEta, type LoadSample } from './loadProgress.ts';
 import { measureLoadStep, startLoadTiming } from './loadTiming.ts';
-import { convert, formatWithEstimate } from './currency.ts';
+import { formatWithEstimate } from './currency.ts';
 import {
   membershipColumn,
   membershipKey,
@@ -222,16 +222,20 @@ import {
   pickPlanDetail,
   bundlePackages,
   wholePackages,
+  onePerGid as onePerGidBy,
   savingsText,
   savingTier,
+  sumBestDeals as sumBestDealsBy,
   tierGroupKey,
   tierGroupLabel,
   tierKeyPrice,
+  tierValues,
   type BundlePackage,
   type BundlePricingModel,
   type BundleTierSummary,
   type PickPlan,
   type PickTier,
+  type TierValue,
 } from './bundleRows.ts';
 import { getBrowsedBundles } from './bundleBrowseStore.ts';
 import { rememberBundle } from './bundleSnapshots.ts';
@@ -672,6 +676,7 @@ const PICK_BUNDLE_COLUMNS = BUNDLE_COLUMNS.map((c) =>
 function bundleColumns(
   meta: { tiers: BundleTierSummary[]; model: BundlePricingModel },
   games: readonly ResolvedGame[],
+  values: () => ReadonlyMap<number, TierValue> | null,
 ): ColumnDef<Record<string, any>>[] {
   const rangeMax = new Map(
     games.flatMap((g) =>
@@ -686,7 +691,8 @@ function bundleColumns(
     format: (v) => TIER_PRICE_COLUMN.format!(v == null ? v : tierKeyPrice(Number(v)).price),
     render: (_v, row) => renderTierPrice(row.tierPrice, row),
     groupValue: (_v, row) => tierGroupKey(row),
-    groupFormat: (key) => tierGroupLabel(Number(key), meta.tiers, meta.model, rangeMax, target),
+    groupFormat: (key) =>
+      tierGroupLabel(Number(key), meta.tiers, meta.model, rangeMax, target, values()?.get(Number(key))),
     keepVisibleWhenGrouped: false,
   };
   return BUNDLE_COLUMNS.map((c) => (c.key === 'tierPrice' ? column : c));
@@ -2827,7 +2833,7 @@ export default function ListRoute() {
             : kind === 'bundle'
               ? pickBundle
                 ? PICK_BUNDLE_COLUMNS
-                : bundleColumns(untrack(bundleMeta)!, resolvedBundleGames ?? [])
+                : bundleColumns(untrack(bundleMeta)!, resolvedBundleGames ?? [], tierValueMap)
               : kind === 'user'
                 ? priced
                   ? tiered
@@ -3120,17 +3126,19 @@ export default function ListRoute() {
     }
     return gidMap.get(appid);
   }
+  const gameKey = (r: Game) => gidOf(r.appid) ?? r.appid;
   // How many picks the selection takes in a pick-and-mix bundle — one per ITAD game, so a Steam
   // package spanning several rows counts once — and the cheapest way to buy them.
   function onePerGid(rows: readonly Game[]): Game[] {
-    const seen = new Set<string | number>();
-    return rows.filter((r) => {
-      const key = gidOf(r.appid) ?? r.appid;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    return onePerGidBy(rows, gameKey);
   }
+  // What each tier's step buys for the current account, for its group header; once ownership is known.
+  const tierValueMap = createMemo(() => {
+    const meta = bundleMeta();
+    if (kind !== 'bundle' || !meta || meta.model === 'pick' || !getEffectiveCurrentAccount()) return null;
+    if (!rowsStore.length || rowsStore.some((r) => r.inLibrary == null)) return null;
+    return tierValues(rowsStore, meta.tiers, gameKey);
+  });
   function selectedPickCount(): number {
     return onePerGid(selectedRows()).length;
   }
@@ -3176,13 +3184,8 @@ export default function ListRoute() {
     }
     return names.length ? { url: fanaticalBuyUrl(url, names), names, byHand } : null;
   }
-  // `rows`' summed best deals in `currency`, null until every one is priced — once per gid, since a
-  // package's rows each carry the whole package's deal.
   function sumBestDeals(rows: readonly Game[], currency: string): number | null {
-    const deals = onePerGid(rows).map((r) =>
-      r.bestDealPrice == null ? null : convert(r.bestDealPrice, r.priceCurrency ?? currency, currency),
-    );
-    return deals.every((d) => d != null) ? deals.reduce((sum, d) => sum! + d!, 0)! : null;
+    return sumBestDealsBy(rows, currency, gameKey);
   }
   // The selected picks already owned (a package only when every row of it is): they cost a pick but
   // add nothing, so the saving leaves them out.

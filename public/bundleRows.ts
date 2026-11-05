@@ -8,7 +8,7 @@
 // own filter checklists/group keys are built from.
 
 import { compareByOrder, formatMoney, fmtLocalDate, pad2 } from './utils.ts';
-import { formatWithEstimate } from './currency.ts';
+import { convert, formatWithEstimate } from './currency.ts';
 import type { PriceAmount } from './types.ts';
 import type { OwnershipStatus } from './myOwnership.ts';
 
@@ -503,14 +503,15 @@ export function tierKeyPrice(key: number): { price: number; addon: boolean } {
   return key >= ADDON_GROUP ? { price: key - ADDON_GROUP, addon: true } : { price: key, addon: false };
 }
 
-// A Tier Price group's header: the tier's price (its range when ITAD doesn't say which tier holds
-// its games, `rangeMax` by price), and what a tier costs over the one below it.
+// A Tier Price group's header: the tier's price (or `rangeMax` range), its step over the tier below,
+// and with `value` what that step buys the account and whether it beats those games' best deals.
 export function tierGroupLabel(
   key: number,
   tiers: readonly BundleTierSummary[],
   model: BundlePricingModel,
   rangeMax: ReadonlyMap<number, number>,
   target: string,
+  value?: TierValue,
 ): string {
   if (key >= VARIES_GROUP) return 'Varies';
   const { price, addon } = tierKeyPrice(key);
@@ -521,14 +522,106 @@ export function tierGroupLabel(
     max != null
       ? `${formatMoney(price, currency)}–${formatWithEstimate(max, currency, target)}`
       : formatWithEstimate(price, currency, target);
-  if (addon) return `${money} add-on`;
-  if (max != null) return `${money} · which tier isn't listed`;
+  const what = value && whatItBuys(value, currency, target);
+  const worth = what ? ` · ${what.games}` : '';
+  if (addon) return `${money} add-on${worth}`;
+  if (max != null) return `${money} · which tier isn't listed${worth}`;
   const base = tiers.filter((t) => !t.addon && !t.quantity);
-  if (model === 'fixed' && base.every((t) => t.price != null)) return `${money} · every game`;
   const prev = base.filter((t) => t.price != null && t.price < price).at(-1);
-  return prev
-    ? `${money} tier · +${formatMoney(price - prev.price!, currency)} over ${formatMoney(prev.price!, currency)}`
-    : `${money} tier`;
+  const head = model === 'fixed' && base.every((t) => t.price != null) ? `${money} · every game` : `${money} tier`;
+  const step = prev ? price - prev.price! : price;
+  const stepText = prev ? `+${formatMoney(step, currency)}` : '';
+  if (!what) return prev ? `${head} · ${stepText} over ${formatMoney(prev.price!, currency)}` : head;
+  // The verdict first: on a phone the header shows its first ~30 characters only.
+  const verdict = what.deals == null ? null : verdictText(what.deals - step, currency, target);
+  const detail = what.fresh ? [stepText && `${stepText} for`, what.games].filter(Boolean).join(' ') : stepText;
+  return [head, verdict ?? (what.fresh ? null : 'nothing new'), detail].filter(Boolean).join(' · ');
+}
+
+// A tier group's games not in the account's library: how many, how many have no best deal, and their
+// best deals summed in the tier's currency (null when any lacks one).
+export interface TierValue {
+  fresh: number;
+  unpriced: number;
+  deals: number | null;
+}
+
+// "2 new worth $24.38", "2 new · 1 unpriced", or "nothing new" (then no `deals` to judge).
+function whatItBuys(
+  value: TierValue,
+  currency: string,
+  target: string,
+): { fresh: number; games: string; deals: number | null } {
+  if (!value.fresh) return { fresh: 0, games: 'nothing new', deals: null };
+  const games = `${value.fresh} new`;
+  if (value.deals == null)
+    return { fresh: value.fresh, games: value.unpriced ? `${games} · ${value.unpriced} unpriced` : games, deals: null };
+  return {
+    fresh: value.fresh,
+    games: `${games} worth ${formatWithEstimate(value.deals, currency, target)}`,
+    deals: value.deals,
+  };
+}
+
+// What paying a step instead of buying its new games at their best deals saves (`diff` > 0) or costs.
+function verdictText(diff: number, currency: string, target: string): string {
+  const cents = Math.round(diff * 100) / 100;
+  if (cents === 0) return 'same as apart';
+  const amount = formatWithEstimate(Math.abs(cents), currency, target);
+  return cents > 0 ? `saves ${amount}` : `${amount} cheaper apart`;
+}
+
+// `rows` once per ITAD game (`keyOf`): a Steam package's rows each carry the whole package's deal.
+export function onePerGid<T>(rows: readonly T[], keyOf: (row: T) => string | number): T[] {
+  const seen = new Set<string | number>();
+  return rows.filter((r) => {
+    const key = keyOf(r);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+interface DealRow {
+  bestDealPrice?: number | null;
+  priceCurrency?: string | null;
+}
+
+// `rows`' summed best deals in `currency`, null until every one is priced (or convertible).
+export function sumBestDeals<T extends DealRow>(
+  rows: readonly T[],
+  currency: string,
+  keyOf: (row: T) => string | number,
+): number | null {
+  const deals = onePerGid(rows, keyOf).map((r) =>
+    r.bestDealPrice == null ? null : convert(r.bestDealPrice, r.priceCurrency ?? currency, currency),
+  );
+  return deals.every((d) => d != null) ? deals.reduce((sum, d) => sum! + d!, 0)! : null;
+}
+
+// Each tier group's TierValue, by tierGroupKey; a group whose tier has no currency is left out.
+export function tierValues<
+  T extends DealRow & { tierPrice?: number | null; addon?: boolean | null; inLibrary?: boolean | null },
+>(rows: readonly T[], tiers: readonly BundleTierSummary[], keyOf: (row: T) => string | number): Map<number, TierValue> {
+  const byKey = new Map<number, T[]>();
+  for (const r of rows) {
+    if (r.tierPrice == null) continue;
+    const key = tierGroupKey(r);
+    byKey.set(key, [...(byKey.get(key) ?? []), ...(r.inLibrary ? [] : [r])]);
+  }
+  const out = new Map<number, TierValue>();
+  for (const [key, fresh] of byKey) {
+    const { price, addon } = tierKeyPrice(key);
+    const currency = tiers.find((t) => !!t.addon === addon && t.price === price)?.currency;
+    if (!currency) continue;
+    const games = onePerGid(fresh, keyOf);
+    out.set(key, {
+      fresh: fresh.length,
+      unpriced: games.filter((r) => r.bestDealPrice == null).length,
+      deals: sumBestDeals(fresh, currency, keyOf),
+    });
+  }
+  return out;
 }
 
 // The pressed tier, else the cheapest holding every game in `fresh` (base games not owned); null when
