@@ -5323,13 +5323,13 @@
     font-size: var(--fs-meta);
     white-space: nowrap;
   }
-  /* Published/Ends: the date, its time under it, so the column costs only the date's width. */
-  .bundle-datetime {
+  /* A date-time cell (dateTime.ts): the date, its time under it, so the column costs only the date's width. */
+  .datetime {
     display: flex;
     flex-direction: column;
     line-height: 1.35;
   }
-  .bundle-datetime-time {
+  .datetime-time {
     color: var(--muted);
     font-size: var(--fs-meta);
   }

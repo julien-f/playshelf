@@ -7,7 +7,8 @@
 // operates on a plain scalar (`row.shop`, not `row.page?.name`), which is also what the table's
 // own filter checklists/group keys are built from.
 
-import { compareByOrder, formatMoney, fmtLocalDate, pad2 } from './utils.ts';
+import { compareByOrder, formatMoney } from './utils.ts';
+import { parseIsoDate } from './dateTime.ts';
 import { convert, formatWithEstimate } from './currency.ts';
 import type { PriceAmount } from './types.ts';
 import type { OwnershipStatus } from './myOwnership.ts';
@@ -232,47 +233,6 @@ export function cheapestTierPrice(bundle: BundleListItem): PriceAmount | null {
   );
 }
 
-// Local-time `YYYY-MM-DD HH:MM`. Built from the local getters rather than `toISOString()` (what
-// bundles.tsx's own fmtExpiry used): ITAD's timestamps carry a real UTC offset, so a late-evening
-// local time shifts a day under UTC.
-//
-// The time is shown, not just the date, because ITAD's timestamps are precise to the second and
-// the table genuinely sorts on that precision — several bundles publish on the same calendar day
-// (and a bundle that ends "today" ends at a specific hour). Day-only text made a correctly-ordered
-// pair of same-day rows look arbitrarily ordered, with nothing on screen to explain the order.
-// Split into two halves because the cell stacks them — date on top, time under it, smaller and
-// dimmed (see renderDateTime in BundlesBrowseRoute.tsx). That keeps the full HH:MM precision while
-// costing the column only as much *width* as the date alone; the rows are already tall enough for
-// a second line, since the cover grid sets the row height regardless. Rounding the time to the
-// hour to shorten it was considered and rejected — two bundles published at 21:21 and 21:16 on the
-// same day (real, live data) would both read "21h", putting back exactly the unexplained ordering
-// showing the time was meant to fix.
-
-function parseBundleDate(iso: string | null | undefined): Date | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-export function fmtBundleDatePart(iso: string | null | undefined): string {
-  const d = parseBundleDate(iso);
-  return d ? fmtLocalDate(d) : '—';
-}
-
-// Empty (not '—') for a missing date — the stacked cell renders no second line at all in that
-// case, rather than a second em dash under the first.
-export function fmtBundleTimePart(iso: string | null | undefined): string {
-  const d = parseBundleDate(iso);
-  return d ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : '';
-}
-
-// The flat one-line form, still what the column's own `format` returns — it's the text the table's
-// search matches against and the fallback whenever a cell isn't rendered through `render`.
-export function fmtBundleDateTime(iso: string | null | undefined): string {
-  const time = fmtBundleTimePart(iso);
-  return time ? `${fmtBundleDatePart(iso)} ${time}` : fmtBundleDatePart(iso);
-}
-
 // The first `max` distinct game banners in the bundle (four, laid out 2×2 by the cover cell), in
 // tier order — cheapest tier first, which
 // is also the order the shop itself advertises. There is no bundle-level image anywhere in ITAD's
@@ -453,7 +413,7 @@ export const BUNDLE_AGE = {
 const BUNDLE_AGE_ORDER: string[] = [BUNDLE_AGE.fresh, BUNDLE_AGE.week, BUNDLE_AGE.older, BUNDLE_AGE.unknown];
 
 export function bundleAge(publish: string | null | undefined, now: number = Date.now()): string {
-  const d = parseBundleDate(publish);
+  const d = parseIsoDate(publish);
   if (!d) return BUNDLE_AGE.unknown;
   const hours = (now - d.getTime()) / 3600000;
   if (hours < 24) return BUNDLE_AGE.fresh;

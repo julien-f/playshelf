@@ -4,9 +4,6 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   cheapestTierPrice,
-  fmtBundleDateTime,
-  fmtBundleDatePart,
-  fmtBundleTimePart,
   toBundleRow,
   bundleOwnership,
   bundleCovers,
@@ -95,57 +92,6 @@ test('cheapestTierPrice: ignores priceless tiers alongside priced ones', () => {
 test('cheapestTierPrice: no tiers at all', () => {
   assert.equal(cheapestTierPrice(bundle({ tiers: [] })), null);
   assert.equal(cheapestTierPrice(bundle({ tiers: undefined })), null);
-});
-
-// ── fmtBundleDateTime ────────────────────────────────────────────────────────────────────────────
-
-test('fmtBundleDateTime: formats an ITAD timestamp as its own local date and time', () => {
-  // Deliberately an offset timestamp whose UTC date differs from its local one in a negative-
-  // offset timezone: this is what `toISOString().slice(0, 10)` gets wrong.
-  const iso = '2026-09-25T01:30:00+02:00';
-  const expected = new Date(iso);
-  const pad = (n) => String(n).padStart(2, '0');
-  assert.equal(
-    fmtBundleDateTime(iso),
-    `${expected.getFullYear()}-${pad(expected.getMonth() + 1)}-${pad(expected.getDate())}` +
-      ` ${pad(expected.getHours())}:${pad(expected.getMinutes())}`,
-  );
-});
-
-test('fmtBundleDatePart / fmtBundleTimePart: the two halves the stacked cell renders', () => {
-  const iso = '2026-09-25T01:30:00+02:00';
-  const d = new Date(iso);
-  const pad = (n) => String(n).padStart(2, '0');
-  assert.equal(fmtBundleDatePart(iso), `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
-  assert.equal(fmtBundleTimePart(iso), `${pad(d.getHours())}:${pad(d.getMinutes())}`);
-  // Together they're exactly the flat form the column's own `format` (and so the table's search)
-  // still returns.
-  assert.equal(fmtBundleDateTime(iso), `${fmtBundleDatePart(iso)} ${fmtBundleTimePart(iso)}`);
-});
-
-test('fmtBundleTimePart: empty for a missing date, so the cell renders no second line at all', () => {
-  for (const v of [null, undefined, '', 'not a date']) {
-    assert.equal(fmtBundleTimePart(v), '');
-    assert.equal(fmtBundleDatePart(v), '—');
-    // No trailing space from an empty time half.
-    assert.equal(fmtBundleDateTime(v), '—');
-  }
-});
-
-test('fmtBundleDateTime: keeps the time that distinguishes two same-day bundles', () => {
-  // The reason the time is shown at all: the table sorts on the full timestamp, so a pair of rows
-  // both reading "2026-09-04" would otherwise look arbitrarily ordered.
-  const early = fmtBundleDateTime('2026-09-04T16:55:38+02:00');
-  const late = fmtBundleDateTime('2026-09-04T20:35:03+02:00');
-  assert.notEqual(early, late);
-  assert.ok(early < late, `${early} should render before ${late}`);
-});
-
-test('fmtBundleDateTime: missing/unparseable dates render as an em dash', () => {
-  assert.equal(fmtBundleDateTime(null), '—');
-  assert.equal(fmtBundleDateTime(undefined), '—');
-  assert.equal(fmtBundleDateTime(''), '—');
-  assert.equal(fmtBundleDateTime('not a date'), '—');
 });
 
 // ── bundleCovers ─────────────────────────────────────────────────────────────────────────────

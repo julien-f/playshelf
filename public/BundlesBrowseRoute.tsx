@@ -26,12 +26,10 @@ import { createTableState, DataTableView, datePartGroup, numericRangeGroup } fro
 import { cascadeFirstRows, slideRowsOnViewChange } from './motion.ts';
 import type { ColumnDef } from '@vates/data-table-solid';
 import { fmt, compareDateMissingLast, compareNumMissingLast, priceTierGroup } from './gameColumns.ts';
+import { fmtDateTime, renderDateTime } from './dateTime.ts';
 import { fadeInOnLoad, fmtAge, formatMoney, oldestFetchedAt, scoreColor } from './utils.ts';
 import {
   toBundleRow,
-  fmtBundleDateTime,
-  fmtBundleDatePart,
-  fmtBundleTimePart,
   bundleUrgency,
   shopHue,
   bundleEndsIn,
@@ -129,31 +127,6 @@ function renderShop(value: unknown): Node {
   return span;
 }
 
-// Date on the first line, its time on a second, smaller and dimmed (see fmtBundleDatePart's own
-// comment for why the time is shown at all and why it isn't rounded to the hour). `extra`, when
-// given, joins that second line after the time — the Ends column's countdown, below. Keeping it
-// off the first line is what actually sets the column's width: "06:00 ⏳ in 2d" is narrower than
-// "2026-09-24 ⏳ in 2d" would be, and the first line stays a bare date.
-function renderDateTime(value: unknown, extra?: Node): Node {
-  const wrap = document.createElement('div');
-  wrap.className = 'bundle-datetime';
-  const first = document.createElement('span');
-  first.textContent = fmtBundleDatePart(value as string | null);
-  wrap.appendChild(first);
-  const time = fmtBundleTimePart(value as string | null);
-  // No second line at all for a missing date, rather than an em dash under an em dash — unless
-  // there's an `extra` to carry, which can't happen today (a date bundleUrgency can't parse yields
-  // no countdown either) but would otherwise silently drop it.
-  if (time || extra) {
-    const timeEl = document.createElement('span');
-    timeEl.className = 'bundle-datetime-time';
-    timeEl.textContent = time;
-    if (extra) timeEl.appendChild(extra);
-    wrap.appendChild(timeEl);
-  }
-  return wrap;
-}
-
 // The above, plus — for a bundle actually about to go — a colored relative countdown, the one
 // column on a bundle *browse* page where "act now" is real information rather than trivia. Colors
 // are scoreColor's own tiers, the same scale every other urgency/quality signal in the app uses
@@ -233,7 +206,7 @@ const COLUMNS: ColumnDef<BundleRow>[] = [
     label: 'Published',
     type: 'date',
     groupable: true,
-    format: (v) => fmtBundleDateTime(v as string | null),
+    format: (v) => fmtDateTime(v as string | null),
     render: (v) => renderDateTime(v),
     compare: compareDateMissingLast,
     defaultSortDir: 'desc',
@@ -256,7 +229,7 @@ const COLUMNS: ColumnDef<BundleRow>[] = [
     label: 'Ends',
     type: 'date',
     groupable: true,
-    format: (v) => fmtBundleDateTime(v as string | null),
+    format: (v) => fmtDateTime(v as string | null),
     render: renderEnds,
     compare: compareDateMissingLast,
     defaultValueSort: { by: 'alpha', dir: 'asc' },

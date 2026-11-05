@@ -109,6 +109,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 
 **Table, panel, and shared plumbing**
 
+- `dateTime.ts` — an ISO timestamp as the viewer's local date and time: flat, or the stacked date-over-time table cell.
 - `gameColumns.ts` — every game-table column definition and its render/format/compare/bucket helpers (see [game-table.md](game-table.md)).
 - `rowStore.ts` — `createRowStore`: the appid→index bookkeeping and the `getRow`/`mutateRow` pair over a route's Solid store array.
 - `streamBatcher.ts` — batches a high-frequency mutation stream into one `batch()` per flush.

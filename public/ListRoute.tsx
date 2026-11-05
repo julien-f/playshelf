@@ -197,6 +197,7 @@ import {
 } from './accountsStore.ts';
 import { getAccountOverrideState, accountOverrideStatusText } from './accountOverride.ts';
 import { fetchAccountOverview, fetchAccountWishlist, resolveAccountSlot, type GameOwner } from './accountData.ts';
+import { fmtDatePart, fmtDateTime } from './dateTime.ts';
 import { loadRecentGames, addRecentGame, renameRecentGame, MAX_RECENT_GAMES } from './recentGames.ts';
 import {
   fetchBundleById,
@@ -213,8 +214,6 @@ import {
   bundleTierSummary,
   bundleUrgency,
   filterTiers,
-  fmtBundleDatePart,
-  fmtBundleDateTime,
   shopHue,
   pickTiers,
   pickRate,
@@ -3314,7 +3313,7 @@ export default function ListRoute() {
       const ended = urgency?.tier === 'ended';
       tiles.push({
         label: 'Ends',
-        value: `${ended ? 'Ended ' : ''}${fmtBundleDateTime(meta.expiry)}`,
+        value: `${ended ? 'Ended ' : ''}${fmtDateTime(meta.expiry)}`,
         sub:
           urgency && urgency.label && !ended ? (
             <span
@@ -3351,7 +3350,7 @@ export default function ListRoute() {
     }
     // Date only — the hour matters for a deadline, not for when a bundle went live, and the
     // browse table's own Published column still carries it.
-    if (meta.publish) tiles.push({ label: 'Published', value: fmtBundleDatePart(meta.publish) });
+    if (meta.publish) tiles.push({ label: 'Published', value: fmtDatePart(meta.publish) });
     // The one Updated tile in the app that isn't also its own refresh control: a bundle is found
     // by walking several cached list pages, so there is no force path to hang on it (see
     // bundleData.ts's fetchBundleById). Stated anyway — the tiers and the end date above are

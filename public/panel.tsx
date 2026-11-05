@@ -54,7 +54,8 @@ import type {
   PanelNews,
   PanelPrice,
 } from './panelData.ts';
-import { bestPickRate, bundleUrgency, fmtBundleDateTime, pickTiers } from './bundleRows.ts';
+import { bestPickRate, bundleUrgency, pickTiers } from './bundleRows.ts';
+import { fmtDateTime } from './dateTime.ts';
 import { formatWithEstimate } from './currency.ts';
 import { currentRegion, regionCurrency } from './region.ts';
 import { nextHopHistory } from './panelHistory.ts';
@@ -1790,7 +1791,7 @@ function PanelBundleLines(props: { game: ReadonlyGame }): JSX.Element {
                                 : {}
                           }
                         >
-                          ends <time datetime={b.expiry!}>{fmtBundleDateTime(b.expiry)}</time>
+                          ends <time datetime={b.expiry!}>{fmtDateTime(b.expiry)}</time>
                           {urgency?.label ? ` (${urgency.label})` : ''}
                         </span>
                       </Show>
