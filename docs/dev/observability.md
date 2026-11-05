@@ -32,7 +32,8 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
                               concurrentMax, cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs },
               eventLoop:    { minutes, busyPercent, maxP99DelayMs, maxDelayMs, maxDelayAt } },
   sinceRestart: { …same shape as lastHour… },
-  daily: { [day]: { [group]: { [label]: { [status]: count } } } } }
+  daily: { [day]: { [group]: { [label]: { [status]: count } } } },
+  itadDates: [{ source, agree, seen }] }
 ```
 
 - **Windows**: every windowed signal nests under `lastHour`/`sinceRestart`; nothing nests a window of its own. `lastHour` sums 60 per-minute buckets, so an event leaves it 59–60 minutes after it happened: bounded memory and O(1) recording whatever the traffic. A name with no event in a window is absent rather than zeroed, so the first hour after a start reads the same in both.
@@ -42,7 +43,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 
 - `getAlerts` (`lib/metrics.js`, thresholds in its `ALERT`), computed at each read from the same body: warnings first, then information. `firstAt`/`lastAt` date a windowed one.
 - **warn**: ≥ 3 unexpected answers on one label in the last hour (`hltb.search`); a 5xx on an inbound route; a breaker open now; a budget at ≥ 80 % of a ceiling; an event-loop delay ≥ 1 s outside the first 2 minutes after start (loading the cache blocks it then).
-- **info**: a breaker that tripped in the last hour and closed again; rate-limiter trips; loads that hit a client's budget share (`streams.limited`); a semaphore's `rejected` (lifetime, so not a warning); a start less than an hour ago (`lastHour` partial, a crash loop shows).
+- **info**: a breaker that tripped in the last hour and closed again; rate-limiter trips; loads that hit a client's budget share (`streams.limited`); a semaphore's `rejected` (lifetime, so not a warning); a start less than an hour ago (`lastHour` partial, a crash loop shows); ITAD's end dates matching an override's on every live bundle (`itad-dates`, [integrations.md](integrations.md#bundles)).
 - Not from `daily`: history, not "now"; read it by day.
 
 ### Outbound — `outbound`
