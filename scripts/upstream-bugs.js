@@ -1,7 +1,7 @@
 'use strict';
 
 // The workarounds waiting on an upstream fix — a comment ending "<bug URL> is fixed" (Bugzilla or GitHub
-// issue) — and each bug's state, so one whose bug closed gets removed. Logs each run (dev-metrics `upstream-bugs`).
+// issue) — and each bug's state, so one whose bug closed gets checked and removed. Logs each run (dev-metrics `upstream-bugs`).
 //   node scripts/upstream-bugs.js
 
 const path = require('node:path');
@@ -27,7 +27,7 @@ function workarounds(lines) {
 // A workaround → what's left about it, or nothing while its bug is open (or its state unknown).
 function leftover(w) {
   if (!w.filed) return `${w.where}: upstream bug not filed yet (${w.url})`;
-  if (w.state === 'closed') return `${w.where}: ${w.url} is closed, remove the workaround`;
+  if (w.state === 'closed') return `${w.where}: ${w.url} is closed: check it was fixed, then remove the workaround`;
   return null;
 }
 

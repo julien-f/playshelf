@@ -108,6 +108,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - GET /api/metrics shows how lists load (timings, uncached games, concurrent loads), the store details cap's waits and HLTB's held lookups
 - GET /api/metrics reports the event loop, each route's latency (p50/p95), memory and database size; a list load leaves User Timing marks; `node scripts/perf-measure.js` measures an Owned load at the phone profile
 - The server logs when ITAD's bundle end dates match Fanatical's or Humble's again, so their overrides can be dropped.
+- upstream-bugs.js asks to check a closed bug was really fixed before removing its workaround.
 
 ## [0.12.0] - 2026-10-30
 
