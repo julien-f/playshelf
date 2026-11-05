@@ -24,6 +24,16 @@ export interface RecentGame {
   appid: number;
   name: string;
   tinyImage: string | null;
+  // Epoch ms of the latest lookup; absent on entries recorded before it was kept.
+  lookedUpAt?: number;
+}
+
+// A pick writes its entry twice (on select, then once details land): the second keeps the first's stamp.
+const SAME_LOOKUP_MS = 60_000;
+
+// The Looked up column's value: an ISO timestamp, which the table's date sort and grouping read.
+export function lookedUpValue(g: RecentGame): string | null {
+  return g.lookedUpAt === undefined ? null : new Date(g.lookedUpAt).toISOString();
 }
 
 export function loadRecentGames(): RecentGame[] {
@@ -39,7 +49,17 @@ export function addRecentGame(appid: number, name: string, tinyImage?: string | 
   const list = loadRecentGames();
   const existing = list.find((g) => g.appid === appid);
   const rest = list.filter((g) => g.appid !== appid);
-  rest.unshift({ appid, name: name || existing?.name || '', tinyImage: tinyImage || existing?.tinyImage || null });
+  const now = Date.now();
+  const stamp =
+    existing === list[0] && existing?.lookedUpAt !== undefined && now - existing.lookedUpAt < SAME_LOOKUP_MS
+      ? existing.lookedUpAt
+      : now;
+  rest.unshift({
+    appid,
+    name: name || existing?.name || '',
+    tinyImage: tinyImage || existing?.tinyImage || null,
+    lookedUpAt: stamp,
+  });
   setPref(RECENT_GAMES_PREF_KEY, rest.slice(0, MAX_RECENT_GAMES));
 }
 
@@ -52,6 +72,6 @@ export function renameRecentGame(appid: number, name: string, tinyImage?: string
   const idx = list.findIndex((g) => g.appid === appid);
   if (idx === -1) return;
   const next = list.slice();
-  next[idx] = { appid, name: name || list[idx].name, tinyImage: tinyImage || list[idx].tinyImage };
+  next[idx] = { ...list[idx], name: name || list[idx].name, tinyImage: tinyImage || list[idx].tinyImage };
   setPref(RECENT_GAMES_PREF_KEY, next);
 }

@@ -60,7 +60,7 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 
 - Sizes come from the `--fs-*` scale in `styles/tokens.css` (caps labels, meta and chips, tables and controls, prose, card titles, page titles, big figures); px sizes are for icon glyphs only. `test/typeScale.test.js` enforces it for the app's own CSS (the presentation window's `clamp()` TV sizes included), not the table library's.
 - Two weights: 400, and 600 for emphasis.
-- Two faces, the platform's own, so a page load downloads no font: `--font-sans` (a `system-ui` stack) for text; `--font-mono` (a `ui-monospace` stack) with tabular figures for a figure standing alone (`<time>`, `<output>`, `<data>`, a price, a score, a duration). Table cells stay in the text face, with tabular figures, since a cell can't be told numeric from CSS. A column of figures aligns to the end, so digits line up (data-table's default for `type: 'number'`); a number column whose cells read as text (Group fit's player, Looked up's "Latest") sets `align: 'start'`.
+- Two faces, the platform's own, so a page load downloads no font: `--font-sans` (a `system-ui` stack) for text; `--font-mono` (a `ui-monospace` stack) with tabular figures for a figure standing alone (`<time>`, `<output>`, `<data>`, a price, a score, a duration). Table cells stay in the text face, with tabular figures, since a cell can't be told numeric from CSS. A column of figures aligns to the end, so digits line up (data-table's default for `type: 'number'`); a number column whose cells read as text (Group fit's player) sets `align: 'start'`.
 - The face differs per platform: don't size a layout to one face's metrics or rely on a symbol glyph matching its neighbours (key caps: `Kbd.tsx`).
 
 ## Icons

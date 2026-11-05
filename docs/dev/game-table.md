@@ -9,7 +9,7 @@ Every list of games renders through the same `@vates/data-table-solid` table ove
 - **owned** — Played (h), Last Played, after the HLTB cluster, and Status (the viewer's own Finished/Abandoned mark, `gameStatuses.ts`, on their own account's games only).
 - **wishlist** — Wishlist Rank, then `PRICE_COLUMNS`, plus Added.
 - **bundle** — ownership status, Tier Price, Add-on, then `PRICE_COLUMNS`.
-- **recent** — ownership status, plus Looked up (the stored newest-first order), its default sort.
+- **recent** — ownership status, plus Looked up (each entry's `lookedUpAt` as a date-time, unstamped legacy entries last), its default sort, newest first; grouped by day, not filterable (the range filter's day bounds are UTC).
 - **compare** — ownership status, plus one Played (h) per player, shown by default and keyed by position (`playtime:<i>`) so a saved layout fits the next comparison, one hidden Last 2 weeks (h) per player (`recentPlaytime:<i>`), Group fit shown by default, and the membership column when grouped by membership.
 - **creator** and **game-pass** — ownership status, `PRICE_COLUMNS`, and Taste fit shown by default.
 - **shared** — ownership status, plus the membership column when grouped by membership. A priced source adds `PRICE_COLUMNS`, and a bundle source its Tier Price too (`bundleTierFields`, fed by `createDefaultFetchers`' `onBundleGames`; the first bundle wins a game in two), shown once a remaining row has one; a pick-and-mix rate reads "Varies", having no selection to count, and a region change re-fetches the bundle.

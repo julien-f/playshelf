@@ -3479,8 +3479,23 @@ test('L4 edge: Recently Looked Up lists the latest lookup first, and says it kee
   await expect(rows(page)).toHaveCount(2);
   await expect(rows(page).first()).toContainText('Valheim');
   await expect(page.locator('.list-hero')).toContainText('last 500');
-  // A number column whose cells read as text ("Latest") stays start-aligned.
-  await expect(page.locator('.dt-td[data-col-key="lookedUp"]').first()).toHaveCSS('text-align', 'start');
+});
+
+test('L4 edge: Recently Looked Up shows when each game was looked up, undated ones last', async ({ page }) => {
+  // Stored out of order (a device that dropped stamps wrote last): the dates decide.
+  await asPlayer(page, ALICE, {
+    recentGames: [
+      620,
+      { appid: 105600, lookedUpAt: Date.UTC(2026, 9, 1, 8, 5) },
+      { appid: 1145360, lookedUpAt: Date.UTC(2026, 10, 3, 23, 30) }, // already Nov 4 in Paris
+    ],
+  });
+  await page.goto('/game');
+  await expect(rows(page)).toHaveCount(3);
+  const cells = page.locator('.dt-td[data-col-key="lookedUp"]');
+  await expect(cells).toHaveText(['2026-11-0400:30', '2026-10-0110:05', '—']);
+  await page.locator('.dt-th[data-col-key="lookedUp"] .dt-th-sort').click();
+  await expect(cells).toHaveText(['2026-10-0110:05', '2026-11-0400:30', '—']);
 });
 
 test('L4 edge: the search box lists the latest 10 lookups, and links the rest', async ({ page }) => {

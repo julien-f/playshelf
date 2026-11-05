@@ -151,7 +151,7 @@ export interface Game extends PriceFields {
   tierPerGame?: boolean; // tierPrice is a pick-and-mix bundle's per-game rate at the current selection
   addon?: boolean;
   rank?: number | null; // a ranked list's own rows only — null = not ranked yet / excluded
-  lookedUp?: number | null; // Recently Looked Up's rows only — 1 = the latest lookup
+  lookedUp?: string | null; // Recently Looked Up's rows only — ISO time of the latest lookup
 
   // standalone-lookup flag (see gameSearch.ts) — true for a game opened from the
   // "look up any game" box that isn't one of the loaded rows

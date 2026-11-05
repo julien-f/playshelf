@@ -197,8 +197,8 @@ import {
 } from './accountsStore.ts';
 import { getAccountOverrideState, accountOverrideStatusText } from './accountOverride.ts';
 import { fetchAccountOverview, fetchAccountWishlist, resolveAccountSlot, type GameOwner } from './accountData.ts';
-import { fmtDatePart, fmtDateTime } from './dateTime.ts';
-import { loadRecentGames, addRecentGame, renameRecentGame, MAX_RECENT_GAMES } from './recentGames.ts';
+import { fmtDatePart, fmtDateTime, renderDateTime } from './dateTime.ts';
+import { loadRecentGames, addRecentGame, renameRecentGame, MAX_RECENT_GAMES, lookedUpValue } from './recentGames.ts';
 import {
   fetchBundleById,
   loadErrorText,
@@ -515,21 +515,22 @@ const OWNED_DEFAULT_VISIBLE = ['capsule', 'name', 'steamdbRating', 'hltbAll', 'r
 // restatement of what the Name column right next to it already shows.
 const RECENT_COLUMNS = insertColumnsAfter(CORE_COLUMNS, 'name', OWNERSHIP_STATUS_COLUMN);
 const RECENT_DEFAULT_VISIBLE = ['capsule', 'name', 'steamdbRating', 'hltbAll', 'releaseDate', 'genres'];
-// Recently Looked Up's own order: stored newest first (recentGames.ts), with no timestamps.
+// When each game was last looked up (recentGames.ts); — for entries recorded before that was kept.
 const LOOKED_UP_COLUMN: ColumnDef<Record<string, any>> = {
   key: 'lookedUp',
   label: 'Looked up',
-  type: 'number',
-  align: 'start', // its cells read as text
-  groupable: false,
-  filterable: false,
-  format: (v) => (v == null ? '—' : v === 1 ? 'Latest' : `#${v}`),
-  compare: compareNumMissingLast,
-  defaultSortDir: 'asc',
+  type: 'date',
+  groupable: true,
+  filterable: false, // the range filter's day bounds are UTC midnights, which would cut off part of a local day
+  format: (v) => fmtDateTime(v as string | null),
+  render: (v) => renderDateTime(v),
+  compare: compareDateMissingLast,
+  defaultSortDir: 'desc',
+  ...datePartGroup('day', undefined, '—'),
 };
 const LOOKED_UP_COLUMNS = insertColumnsAfter(RECENT_COLUMNS, 'capsule', LOOKED_UP_COLUMN);
 const LOOKED_UP_DEFAULT_VISIBLE = ['lookedUp', ...RECENT_DEFAULT_VISIBLE];
-const LOOKED_UP_DEFAULT_SORT: SortEntry[] = [{ key: 'lookedUp', dir: 'asc' }];
+const LOOKED_UP_DEFAULT_SORT: SortEntry[] = [{ key: 'lookedUp', dir: 'desc' }];
 // A user list also gets the current account's Played/Last Played (stamped from myOwnership.ts,
 // the same fetch as the ✓/☆ markers) — hidden by default, there to filter/sort on.
 const USER_COLUMNS = insertColumnsAfter(
@@ -1813,9 +1814,9 @@ export default function ListRoute() {
   // become a real row, not a standalone aside. Used both by load()'s own params.appid handling
   // (a fresh /game/:appid navigation) and by handleOpenGameRequest (a lookup made while already
   // sitting on this route) — same behavior either way, since /game/:appid *is* this route now.
-  // Renumbers the Looked up column after a lookup moved a game to the front of the stored list.
+  // Refreshes the Looked up column after a lookup restamped a game, or pushed one past the cap.
   function restampLookedUp(): void {
-    const order = new Map(loadRecentGames().map((g, i) => [g.appid, i + 1]));
+    const order = new Map(loadRecentGames().map((g) => [g.appid, lookedUpValue(g)]));
     batch(() => {
       for (const { appid } of rowsStore) {
         rowStore.mutateRow(appid, (draft) => {
@@ -2623,9 +2624,9 @@ export default function ListRoute() {
       // metadata had streamed in with the real title. The placeholder is presentational only now
       // (panel.tsx's title falls back to it); a still-nameless row is `loading` and filtered out
       // of the table anyway until its details event lands.
-      initialRows = recents.map((g, i) => ({
+      initialRows = recents.map((g) => ({
         appid: g.appid,
-        lookedUp: i + 1,
+        lookedUp: lookedUpValue(g),
         name: g.name,
         capsule: g.tinyImage || undefined,
         loading: true,
