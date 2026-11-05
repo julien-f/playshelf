@@ -62,6 +62,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 ## Bundles and prices
 
 - **U177 · polish · B1** — shop chips (`.shop-chip`) take a hue hashed from the shop's name, outside the tokens, so a shop can land on amber, which ui-guidelines.md's Colour keeps for warnings and owned games (Humble Bundle does). One neutral chip, or a few token hues that exclude amber.
+- **U244 · minor · B1, C2** — grouped price columns show no total, so "what would this tier (or the missing friend's games) cost at best deals / 1-year lows" is summed by hand. Give Steam Full Price, Best Deal and the three lows an `aggregate` (region currency, once per gid, an incomplete marker for an unpriced row; off for pick & mix), shown through the release's aggregate formatter, not the cell render (Best Deal's record badge would read the first row's lows); hiding owned rows then sums only what's new. Waits for the @vates/data-table release after 0.21.0: before it, a group split across pages sums each page's rows only.
 - **U238 · minor · B1** — `/bundles`' clock doesn't tick: its countdowns ("⏳ in 6h"), the Age and Ends in buckets and the hero's New and Ending soon counts are computed when the table processes its rows. Re-run the whole sort/filter/render pass on a timer: ticking only the hero counts would make them disagree with the rows.
 
 ## Phone
