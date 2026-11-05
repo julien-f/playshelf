@@ -82,6 +82,7 @@ const {
 const { withPickAndMix, withCachedPickAndMix } = require('./lib/fanatical');
 const { findEarlyExpired } = require('./lib/earlyExpired');
 const { withChoiceEnd } = require('./lib/humbleChoice');
+const { itadDateAgreement } = require('./lib/itadDates');
 const { streamEvent } = require('./lib/streamEvent.mjs');
 const { catalogCacheKey, getGamePass, isGamePassCached } = require('./lib/gamepass');
 const {
@@ -585,6 +586,7 @@ app.get('/api/metrics', (_req, res) => {
       held: { hltb: getHeldGames() },
       openStreams: streamsOpen,
       cacheEntries: getCacheEntryCounts(),
+      itadDates: itadDateAgreement(),
     }),
   );
 });

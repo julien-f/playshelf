@@ -22,7 +22,10 @@ test('workarounds: a Bugzilla or GitHub issue URL followed by "is fixed", with w
 
 test('leftover: a closed bug or an unfiled one; nothing while open or unknown', () => {
   const w = { where: 'a.ts:3', url: 'U', filed: true };
-  assert.equal(leftover({ ...w, state: 'closed' }), 'a.ts:3: U is closed, remove the workaround');
+  assert.equal(
+    leftover({ ...w, state: 'closed' }),
+    'a.ts:3: U is closed: check it was fixed, then remove the workaround',
+  );
   assert.equal(leftover({ ...w, filed: false }), 'a.ts:3: upstream bug not filed yet (U)');
   assert.equal(leftover({ ...w, state: 'open' }), null);
   assert.equal(leftover({ ...w, state: 'unknown' }), null);

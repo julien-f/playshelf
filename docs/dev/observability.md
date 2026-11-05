@@ -4,7 +4,7 @@ Outbound-request metrics, budgets, and the warnings the app logs on its own. Cac
 
 ## GET /api/metrics
 
-No auth, same trust level as `GET /api/health`. In memory, reset on restart, except `cacheEntries` and `daily`, the only history beyond the trailing hour. Keys in reading order: what's wrong now, what's live per upstream, the server, the two windows, history. Is all quiet: `curl -s <host>/api/metrics | jq .alerts` (empty).
+No auth, same trust level as `GET /api/health`. In memory, reset on restart, except `cacheEntries` and `daily`, the only history beyond the trailing hour. Keys in reading order: what's wrong now, what's live per upstream, the server, the two windows, history. Is all quiet: `curl -s <host>/api/metrics | jq .alerts` (empty); `node scripts/prod-check.js` (run by `session-end.js`) lists production's warnings, event-loop blocks, inbound 5xx and upstream statuses no call declares `expected`, new since its last run, and an undeployed `origin/main`.
 
 - Locally, `dev:mock` answers `e2e mock: no fixture for GET /api/metrics`: it mocks every `/api` route. Run the real server on a scratch database instead: `PORT=<free> DB_FILE=<scratch>.sqlite STEAM_API_KEY=x node server.js` (no upstream call is made until a route needs one).
 
@@ -32,7 +32,8 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
                               concurrentMax, cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs },
               eventLoop:    { minutes, busyPercent, maxP99DelayMs, maxDelayMs, maxDelayAt } },
   sinceRestart: { …same shape as lastHour… },
-  daily: { [day]: { [group]: { [label]: { [status]: count } } } } }
+  daily: { [day]: { [group]: { [label]: { [status]: count } } } },
+  itadDates: [{ source, agree, seen }] }
 ```
 
 - **Windows**: every windowed signal nests under `lastHour`/`sinceRestart`; nothing nests a window of its own. `lastHour` sums 60 per-minute buckets, so an event leaves it 59–60 minutes after it happened: bounded memory and O(1) recording whatever the traffic. A name with no event in a window is absent rather than zeroed, so the first hour after a start reads the same in both.
@@ -42,7 +43,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 
 - `getAlerts` (`lib/metrics.js`, thresholds in its `ALERT`), computed at each read from the same body: warnings first, then information. `firstAt`/`lastAt` date a windowed one.
 - **warn**: ≥ 3 unexpected answers on one label in the last hour (`hltb.search`); a 5xx on an inbound route; a breaker open now; a budget at ≥ 80 % of a ceiling; an event-loop delay ≥ 1 s outside the first 2 minutes after start (loading the cache blocks it then).
-- **info**: a breaker that tripped in the last hour and closed again; rate-limiter trips; loads that hit a client's budget share (`streams.limited`); a semaphore's `rejected` (lifetime, so not a warning); a start less than an hour ago (`lastHour` partial, a crash loop shows).
+- **info**: a breaker that tripped in the last hour and closed again; rate-limiter trips; loads that hit a client's budget share (`streams.limited`); a semaphore's `rejected` (lifetime, so not a warning); a start less than an hour ago (`lastHour` partial, a crash loop shows); ITAD's end dates matching an override's on every live bundle (`itad-dates`, [integrations.md](integrations.md#bundles)).
 - Not from `daily`: history, not "now"; read it by day.
 
 ### Outbound — `outbound`
@@ -127,7 +128,6 @@ Logged at the moment they happen, once per event rather than once per affected r
 - **`[budget:<group>] hourly/daily outbound budget exhausted …`** — once per window per service, with the time the window rolls over.
 - **`[budget:<group>] a client spent its hourly/daily share …`** — once per window per client and service, without the client's address.
 - **`[semaphore:<name>] queue saturated …`** — every rejection, unthrottled: it should never fire, so each one matters.
-- **`[itad-dates] ITAD's end date for bundle … may be removable`** — `console.log`, once per bundle per process: information, not a fault ([integrations.md](integrations.md#bundles)).
 - **`[HLTB] search failed …`** — throttled to one per `HLTB_SEARCH_WARN_THROTTLE_MS` (30 s); the searches themselves still run and fail normally. `[HLTB] init failed` is throttled by the auth retry backoff.
 
 All are `console.warn`: degraded but recoverable. An error marked `isLogged` is not logged again by `routeErrorStatus` or the details parts (`logDetailsError`): it's set where the warning was printed — `assertClosed` while a breaker is open, `chargeBudget` past a budget, and HLTB's errors repeating the failure the last `[HLTB]` line warned about, or an auth hold whose cause was already logged. Without it, one open breaker or spent budget logs a line per game in a large load.

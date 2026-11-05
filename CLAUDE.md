@@ -54,7 +54,7 @@ These add to the user-level `~/.claude/CLAUDE.md` working style.
 ## Ask first
 
 - Besides the user-level list: deleting or hand-editing `db.sqlite` (`npm run cache:clear` empties its cache tables without touching the file), overwriting the `steam.isonoe.net:prefs` localStorage backup a screenshot run left behind.
-- **Environments**: local dev servers, `dev:mock` and the test suites are safe; the live site (steam.isonoe.net) and its server need explicit approval.
+- **Environments**: local dev servers, `dev:mock` and the test suites are safe; the live site (steam.isonoe.net) and its server need explicit approval, except `session-end.js`'s read of its `/api/metrics`.
 - Committing: approving a multi-step plan is the go-ahead to commit each step.
 
 ## Where things belong
@@ -69,7 +69,7 @@ The user-level rules apply; here:
 - **Message format**: a plain imperative subject, no Conventional Commits prefix — the `feat:`/`fix:` prefixes in older history were dropped; don't reintroduce them.
 - Ordinary changes commit directly to `main` — this is a solo repo with no PR/review process. A complex feature (multiple concerns, significant refactoring, a new subsystem) spanning more than one commit gets a dedicated branch instead, worked in its own worktree (`node scripts/worktree.js <branch>`: adds it and runs `npm ci`): other agents share the main checkout, so never switch its branch. A worktree's e2e and mock servers get their own ports (`node scripts/ports.js e2e|mock`).
 - A feature branch's merge into `main` is made in its worktree, never in the main checkout: `git switch --no-track -c <branch>-merge main`, `git merge --no-ff <branch>`, resolve and commit there, then `git merge --ff-only <branch>-merge` in the main checkout. A conflict or a hook blocking the merge commit leaves it pending, and a merge pending in the shared checkout gets aborted or absorbed by another session ([pitfalls.md](docs/dev/pitfalls.md)).
-- Before closing a session, or when asked what's left: `node scripts/session-end.js` lists unpushed commits, uncommitted changes, merged worktrees and branches, running servers, and workarounds whose upstream bug closed or isn't filed yet.
+- Before closing a session, or when asked what's left: `node scripts/session-end.js` lists unpushed commits, uncommitted changes, merged worktrees and branches, running servers, workarounds whose upstream bug closed or isn't filed yet, and what production's metrics show since the last run (`prod-check.js`).
 - Chasing a CI-only failure: experiment on a branch and run CI there (`gh workflow run CI --ref <branch>`), never by pushing to `main`.
 - A parallel fix batch ([BATCH.md](.claude/skills/code-fix/BATCH.md)) works the same way, one branch per lane, each closed with `git merge --no-ff`.
 

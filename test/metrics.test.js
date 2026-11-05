@@ -653,3 +653,26 @@ test('getAlerts: informs on limiter trips, limited streams, a rejecting semaphor
     ['info hltb.semaphores.hltb', 'info limiter details', 'info streams', 'info server'],
   );
 });
+
+test('getAlerts: says an ITAD end-date override may go once every live bundle agrees, past each source minimum', () => {
+  const m = quiet();
+  m.itadDates = [
+    { source: 'Fanatical', agree: 12, seen: 12 },
+    { source: 'Humble Choice', agree: 0, seen: 1 },
+  ];
+  assert.deepEqual(getAlerts(m, NOW), [
+    {
+      level: 'info',
+      where: 'itad-dates',
+      message: "ITAD's end dates match Fanatical's on 12/12 live bundles: the override may be removable",
+    },
+  ]);
+  m.itadDates = [
+    { source: 'Fanatical', agree: 2, seen: 2 }, // too few to tell
+    { source: 'Fanatical', agree: 11, seen: 12 },
+    { source: 'Unknown', agree: 5, seen: 5 },
+  ];
+  assert.deepEqual(getAlerts(m, NOW), []);
+  m.itadDates = [{ source: 'Humble Choice', agree: 1, seen: 1 }];
+  assert.equal(getAlerts(m, NOW)[0]?.where, 'itad-dates');
+});

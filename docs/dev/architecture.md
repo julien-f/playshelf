@@ -24,7 +24,7 @@ Setup and dev commands are in [README.md](../../README.md), along with the index
 - **`lib/itad.js`** — IsThereAnyDeal calls (`getShopId`, `getBundles`, `resolveSteamAppIds`, prices) behind bundle browsing and every price column.
 - **`lib/fanatical.js`** — Fanatical's storefront feed, for pick-and-mix tier prices ([integrations.md](integrations.md#fanatical--pick-and-mix-tier-prices)).
 - **`lib/humbleChoice.js`** — Humble Choice's end date from Humble's schedule, over ITAD's early one ([integrations.md](integrations.md#bundles)).
-- **`lib/itadDates.js`** — `overrideExpiry`: a better source's end date over ITAD's, saying when ITAD's agrees ([integrations.md](integrations.md#bundles)).
+- **`lib/itadDates.js`** — `overrideExpiry`: a better source's end date over ITAD's, tallying whether ITAD's agrees for `GET /api/metrics`' alerts.
 - **`lib/earlyExpired.js`** — `findEarlyExpired`: bundles still on sale that ITAD already expired, from its expired pages ([integrations.md](integrations.md#fanatical--pick-and-mix-tier-prices)).
 - **`lib/gamepass.js`** — the PC Game Pass catalog as Steam appids ([integrations.md](integrations.md#xbox-pc-game-pass--catalog-feed)).
 - **`lib/streamEvent.mjs`** — one game's details-stream event, without screenshots and trailers; an ES module so `e2e/mockApi.ts` shares it.

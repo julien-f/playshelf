@@ -2,7 +2,8 @@
 
 // What's left before closing a session, across every worktree of this repo: unpushed or unpulled
 // main (as of the last fetch), a main checkout off main, uncommitted changes, merged worktrees and
-// branches, background servers still running, workarounds whose upstream bug closed or isn't filed.
+// branches, background servers still running, workarounds whose upstream bug closed or isn't filed,
+// and what production's metrics say needs a look (prod-check.js).
 // Prints nothing-left when clean; logs each run (dev-metrics `session-end`). Runs from any checkout.
 //   node scripts/session-end.js
 
@@ -11,6 +12,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { record } = require('./dev-metrics');
 const upstreamBugs = require('./upstream-bugs');
+const prodCheck = require('./prod-check');
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 
@@ -77,8 +79,8 @@ function state() {
 }
 
 if (require.main === module) {
-  upstreamBugs.check().then(({ left }) => {
-    const lines = [...leftovers(state()), ...left];
+  Promise.all([upstreamBugs.check(), prodCheck.check()]).then(([{ left }, prod]) => {
+    const lines = [...leftovers(state()), ...left, ...prod];
     console.log(lines.length ? lines.join('\n') : 'nothing left');
     record('session-end', { left: lines.length });
   });
