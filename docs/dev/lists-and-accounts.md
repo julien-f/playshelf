@@ -125,6 +125,10 @@ Signing in (the account chip's popover, `AccountChip.tsx`) is optional; without 
 - **Signing in fills `myAccount`/`currentAccount` when unset** (`autoPopulateAccountFromLogin`), via the same `resolveAccountSlot` as Home's picker; an existing pick is never overwritten, and a failed resolve retries on the next load.
 - **Table-view keys sync like any key** (`TABLE_VIEW_PREF_KEYS`, `public/tableViewKeys.ts`). They're written only on **Save** (a table change is a draft until then, [game-table.md](game-table.md#the-game-table)), so each push is one.
   - Prefs schema v3: a v2 blob's table-view keys were written on every edit and never pushed, so they read as `updatedAt: 0` — the account's Saved layout wins at the next sync.
+- **A push answered 401** (the session ended while the page was open; `prefs.ts`'s `sessionLost`) signs out on the spot and drops pending pushes: each edit's local `updatedAt` stays newer than the server's, so the next sign-in's merge pushes it. Two limits:
+  - signing back in as another Steam account is that account's first sync on this device, so its values win over those edits;
+  - another open tab keeps its own state until it reloads.
+- **Sign out sends pending pushes first**, then logs out, so a debounced edit still reaches the account.
 - **An adopted entry with the same value** as this device's (another device pushed it) only takes the server's `updatedAt`: no reload.
 - **A user list's view is not a table-view key**: it is the list's own `tableView`, saved into `lists` on **Save** (`setListTableView`, minus `page`/`searchQuery`).
 

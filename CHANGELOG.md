@@ -85,6 +85,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Behind a proxy without `TRUST_PROXY`, sign-in cookies are still marked Secure on an https site, and signing in from another host name (`www.`) works
 - Humble Choice no longer shows as expired, or drops off the bundle list, in the two hours before it actually ends
 - Recently Looked Up no longer says your search history stays in the browser: it syncs when you're signed in with Steam.
+- A Steam sign-in that expires while the app is open now shows as signed out at the next change, instead of changes silently no longer syncing
 
 ### Development
 

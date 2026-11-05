@@ -2,6 +2,7 @@
 
 const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
+const { until } = require('./until');
 
 function makeMemoryLocalStorage() {
   const store = new Map();
@@ -506,6 +507,52 @@ test('signOut: a failed logout request still signs out locally', async (t) => {
   assert.equal(auth().getAuthUser(), null);
   prefs().setPref('region', 'DE');
   assert.deepEqual(pushes(calls), []);
+});
+
+test('a push answered 401 signs out: the session ended while the page was open', async (t) => {
+  withBrowser(t);
+  await signIn(t);
+  const calls = [];
+  withFetch(t, async (url, opts = {}) => {
+    calls.push({ url, method: opts.method ?? 'GET' });
+    return { ok: false, status: 401, json: async () => ({ error: 'Not signed in' }) };
+  });
+
+  prefs().setPref('region', 'DE');
+  await until(() => auth().getAuthUser() === null, 'signed out');
+
+  prefs().setPref('region', 'FR');
+  assert.equal(pushes(calls).length, 1);
+});
+
+test('initAuth: a session lost during the sign-in merge stays signed out', async (t) => {
+  withBrowser(t);
+  markAlreadySynced();
+  prefs().setPref('region', 'DE');
+  withFetch(t, async (url) => {
+    if (url === '/api/me') return { ok: true, json: async () => ({ steamid: STEAMID, prefs: {} }) };
+    return { ok: false, status: 401, json: async () => ({ error: 'Not signed in' }) };
+  });
+
+  await auth().initAuth();
+
+  assert.equal(auth().getAuthUser(), null);
+});
+
+test('signOut: sends pending pushes before logging out, so they still reach the account', async (t) => {
+  withBrowser(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const calls = mockMeFetch(t, { steamid: STEAMID, prefs: {} });
+  await auth().initAuth();
+  prefs().setPref('lists', [{ id: 'a' }]);
+  calls.length = 0;
+
+  await auth().signOut();
+
+  assert.deepEqual(calls, [
+    { url: '/api/me/prefs/lists', method: 'PUT' },
+    { url: '/auth/logout', method: 'POST' },
+  ]);
 });
 
 test('getAuthUser is reactive: an effect follows sign-in and sign-out', async (t) => {

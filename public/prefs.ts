@@ -154,11 +154,11 @@ function schedulePush(key: string): void {
   );
 }
 
-function flushPush(key: string, keepalive = false): void {
+function flushPush(key: string, keepalive = false): Promise<void> | undefined {
   clearTimeout(pendingPushes.get(key));
   pendingPushes.delete(key);
   const entry = readEntries()[key];
-  if (entry && signedInSteamid) pushPrefToServer(key, entry.value, entry.updatedAt, { keepalive });
+  if (entry && signedInSteamid) return pushPrefToServer(key, entry.value, entry.updatedAt, { keepalive });
 }
 
 // keepalive so a push flushed as the tab is hidden/closed still completes.
@@ -177,10 +177,27 @@ if (typeof document !== 'undefined') {
 // setPref also sync". authStore.ts is the one importing from this file (for the prefs merge),
 // not the other way around.
 let signedInSteamid: string | null = null;
-export function setSignedInSteamid(steamid: string | null): void {
+// Resolves once the pending pushes it sent have answered.
+export function setSignedInSteamid(steamid: string | null): Promise<void> {
   // Pending pushes belong to the account they were written under: send them before it changes.
-  if (steamid !== signedInSteamid) for (const key of [...pendingPushes.keys()]) flushPush(key);
+  const flushed = steamid !== signedInSteamid ? [...pendingPushes.keys()].map((key) => flushPush(key)) : [];
   signedInSteamid = steamid;
+  return Promise.all(flushed).then(() => undefined);
+}
+
+// authStore.ts's, registered rather than imported for the same reason as signedInSteamid above.
+let onSessionLost = (): void => {};
+export function setOnSessionLost(callback: () => void): void {
+  onSessionLost = callback;
+}
+
+// A push answered 401: the session ended. Pending pushes are dropped, not sent into more 401s: their
+// local `updatedAt` stays newer than the server's, so the next sign-in's merge pushes them.
+function sessionLost(): void {
+  for (const timer of pendingPushes.values()) clearTimeout(timer);
+  pendingPushes.clear();
+  signedInSteamid = null;
+  onSessionLost();
 }
 
 // Test-only (see test/prefs.test.js) — this repo's usual "delete require.cache between tests"
@@ -190,6 +207,7 @@ export function setSignedInSteamid(steamid: string | null): void {
 // naming convention as lib/cache.js/lib/metrics.js's own test-only resets.
 export function _resetPrefsState(): void {
   signedInSteamid = null;
+  onSessionLost = () => {};
   cache = null;
   setWriteFailing(false);
   setDismissed(false);
@@ -215,7 +233,10 @@ export function pushPrefToServer(
     headers: { 'Content-Type': 'application/json' },
     body,
   })
-    .then(() => undefined)
+    .then((res) => {
+      if (res.status === 401) sessionLost();
+      else if (!res.ok) console.warn(`[prefs] the server refused "${key}" (${res.status}); it stays on this device`);
+    })
     .catch((err) => console.error(`[prefs] failed to sync "${key}" to the server`, err));
 }
 

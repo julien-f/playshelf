@@ -2,6 +2,7 @@
 
 const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
+const { until } = require('./until');
 
 // prefs.js reads/writes the bare `localStorage` global (it's loaded as a plain script in the
 // browser, not a module) — stub it before requiring so getPref/setPref have something to hit.
@@ -324,6 +325,57 @@ test('setSignedInSteamid: signing out first pushes what is pending, under the ac
   assert.deepEqual(seen, [{ url: '/api/me/prefs/lists', value: [{ id: 'a', name: 'renamed' }] }]);
   t.mock.timers.tick(3000);
   assert.equal(seen.length, 1);
+});
+
+test('a push answered 401 reports the session lost, stops syncing and drops pending pushes', async (t) => {
+  const restore = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url) => {
+    seen.push(url);
+    return { ok: false, status: 401, json: async () => ({ error: 'Not signed in' }) };
+  };
+  t.after(() => {
+    globalThis.fetch = restore;
+  });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+
+  const { setPref, setSignedInSteamid, setOnSessionLost } = require('../public/prefs.ts');
+  let lost = 0;
+  const reported = new Promise((resolve) => setOnSessionLost(() => resolve(++lost)));
+  setSignedInSteamid('76561198000000001');
+  setPref('lists', [{ id: 'a' }]);
+  setPref('region', 'DE');
+  await reported;
+
+  t.mock.timers.tick(3000);
+  setPref('region', 'FR');
+  assert.deepEqual(seen, ['/api/me/prefs/region']);
+  assert.equal(lost, 1);
+});
+
+test('a push refused for another reason warns and keeps syncing', async (t) => {
+  const restore = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url) => {
+    seen.push(url);
+    return { ok: false, status: 429, json: async () => ({}) };
+  };
+  t.after(() => {
+    globalThis.fetch = restore;
+  });
+  const warn = t.mock.method(console, 'warn', () => {});
+
+  const { setPref, setSignedInSteamid, setOnSessionLost } = require('../public/prefs.ts');
+  let lost = 0;
+  setOnSessionLost(() => lost++);
+  setSignedInSteamid('76561198000000001');
+  setPref('region', 'DE');
+  await until(() => warn.mock.callCount() === 1, 'the refusal warned');
+  assert.match(String(warn.mock.calls[0].arguments[0]), /^\[prefs\] .*"region".*429/);
+
+  setPref('region', 'FR');
+  assert.equal(seen.length, 2);
+  assert.equal(lost, 0);
 });
 
 test('flushPendingPushes: a body over the browser keepalive limit is sent without keepalive', async (t) => {

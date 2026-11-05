@@ -2,7 +2,14 @@
 // (GET /api/me, POST /auth/logout); "signing in" itself is a plain page navigation to
 // /auth/steam/login (AccountChip.tsx), not something this module drives.
 import { createSignal } from 'solid-js';
-import { getAllPrefEntries, adoptPrefEntry, pushPrefToServer, setSignedInSteamid, type PrefEntry } from './prefs.ts';
+import {
+  getAllPrefEntries,
+  adoptPrefEntry,
+  pushPrefToServer,
+  setSignedInSteamid,
+  setOnSessionLost,
+  type PrefEntry,
+} from './prefs.ts';
 import { isSyncedPrefKey } from './syncedPrefKeys.ts';
 import { getMyAccount, setMyAccount, getCurrentAccount, setCurrentAccount } from './accountsStore.ts';
 import { resolveAccountSlot } from './accountData.ts';
@@ -15,6 +22,13 @@ const [currentUser, setCurrentUser] = createSignal<AuthUser | null>(null);
 
 export function getAuthUser(): AuthUser | null {
   return currentUser();
+}
+
+// Bumped when a push finds the session gone, so a sign-in check still merging knows not to sign in after it.
+let sessionEpoch = 0;
+function handleSessionLost(): void {
+  sessionEpoch++;
+  setCurrentUser(null);
 }
 
 // Whether this browser has ever completed a prefs sync with this steamid before — gates the one
@@ -124,6 +138,7 @@ export async function autoPopulateAccountFromLogin(steamid: string): Promise<voi
 // in (e.g. returning from /auth/steam/callback, or just a normal page load while signed in) and
 // merges prefs with the server every time, not just the first.
 export async function initAuth(): Promise<void> {
+  setOnSessionLost(handleSessionLost);
   try {
     const res = await fetch('/api/me');
     const { steamid, prefs } = (await res.json()) as {
@@ -136,7 +151,9 @@ export async function initAuth(): Promise<void> {
       return;
     }
     // Set only after the merge: an adoption reloads, and pending pushes would flush under the old state.
+    const epoch = sessionEpoch;
     const adopted = await syncPrefsWithServer(steamid, prefs ?? {});
+    if (epoch !== sessionEpoch) return;
     setCurrentUser({ steamid });
     setSignedInSteamid(steamid);
     if (adopted) {
@@ -151,11 +168,12 @@ export async function initAuth(): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
+  // Pending pushes go first, while the session still accepts them.
+  await setSignedInSteamid(null);
   try {
     await fetch('/auth/logout', { method: 'POST' });
   } catch (err) {
     console.error('[auth] sign-out request failed', err);
   }
   setCurrentUser(null);
-  setSignedInSteamid(null);
 }
