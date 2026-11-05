@@ -3566,10 +3566,10 @@ export default function ListRoute() {
     // ITAD's own editorial note ("Keys expire. Please redeem before …") — often the most human
     // thing on the page.
     if (kind === 'bundle') return bundleMeta()?.note || undefined;
-    // Recently Looked Up is pure local search history (recentGames.ts) — worth saying outright,
+    // Recently Looked Up is the viewer's own search history (recentGames.ts) — worth saying outright,
     // since every other list here is either someone's Steam data or a list they built on purpose.
     if (kind === 'recent')
-      return `The last ${MAX_RECENT_GAMES} games you looked up in this browser — local search history, never sent anywhere.`;
+      return `The last ${MAX_RECENT_GAMES} games you looked up, synced to your other devices when you're signed in with Steam.`;
     const list = combineList();
     if (list?.kind === 'dynamic' || list?.kind === 'ranked') return formulaNote(list);
     if (kind === 'owned')

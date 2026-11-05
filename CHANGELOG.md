@@ -82,6 +82,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A list address with a trailing slash or other letter case (`/lists/owned/`) opens that list instead of saying it isn't in this browser
 - Behind a proxy without `TRUST_PROXY`, sign-in cookies are still marked Secure on an https site, and signing in from another host name (`www.`) works
 - Humble Choice no longer shows as expired, or drops off the bundle list, in the two hours before it actually ends
+- Recently Looked Up no longer says your search history stays in the browser: it syncs when you're signed in with Steam.
 
 ### Development
 

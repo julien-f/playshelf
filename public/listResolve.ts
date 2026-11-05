@@ -227,7 +227,7 @@ export function createDefaultFetchers({
     },
     // No refresh and no age for the other two: GET /api/bundles/:id has no force path at all
     // (server.js — finding one bundle walks several cached pages, so forcing it costs several
-    // upstream calls), and the recent-games list is this browser's own localStorage.
+    // upstream calls), and the recent-games list is the viewer's own prefs.
     bundle: (bundleId) =>
       resolveBundleSource(
         bundleId,
