@@ -208,6 +208,8 @@ A lightbox on another screen, for showing trailers and screenshots to the people
 
 **Sign in with Steam** (in the nav-bar account chip) to keep your accounts, lists, views, rankings, statuses, recently looked-up games and region the same on every device. Signing in is optional; it also sets your account if you hadn't picked one. Changes sync as you make them, and the newest edit of each setting wins. A device signing in for the first time takes the account's settings rather than overwriting them.
 
+A sign-in lasts as long as you keep visiting ([Session lifetime](configuration.md)). If it expires anyway, an amber dot on the account chip says so, and its menu offers **Sign in again**, which syncs the changes made in the meantime, or **Stay signed out**.
+
 Table layouts sync too, once saved (see [Table layouts](#table-layouts)). The first sync after the update that brought Save keeps the account's saved layouts over a device's unsaved ones.
 
 ## Keyboard shortcuts

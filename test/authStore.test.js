@@ -372,9 +372,12 @@ function withBrowser(t) {
   const seen = { reloads: 0 };
   global.window = { dispatchEvent: () => {} };
   global.location = { reload: () => seen.reloads++ };
+  // Enough for announce.ts's live region.
+  global.document = { createElement: () => ({ setAttribute() {}, style: {} }), body: { append() {} } };
   t.after(() => {
     delete global.window;
     delete global.location;
+    delete global.document;
   });
   return seen;
 }
@@ -553,6 +556,60 @@ test('signOut: sends pending pushes before logging out, so they still reach the 
     { url: '/api/me/prefs/lists', method: 'PUT' },
     { url: '/auth/logout', method: 'POST' },
   ]);
+});
+
+test('isSessionExpired: signed out on a load after signing in on this browser, until signing in again', async (t) => {
+  withBrowser(t);
+  await signIn(t);
+  assert.equal(auth().isSessionExpired(), false);
+
+  mockMeFetch(t, { steamid: null, prefs: null });
+  await auth().initAuth();
+  assert.equal(auth().isSessionExpired(), true);
+
+  await signIn(t);
+  assert.equal(auth().isSessionExpired(), false);
+});
+
+test('isSessionExpired: never for a browser that never signed in, nor after Sign out', async (t) => {
+  withBrowser(t);
+  mockMeFetch(t, { steamid: null, prefs: null });
+  await auth().initAuth();
+  assert.equal(auth().isSessionExpired(), false);
+
+  await signIn(t);
+  await auth().signOut();
+  mockMeFetch(t, { steamid: null, prefs: null });
+  await auth().initAuth();
+  assert.equal(auth().isSessionExpired(), false);
+});
+
+test('dismissSessionExpired: "Stay signed out" hides it, and a later load keeps it hidden', async (t) => {
+  withBrowser(t);
+  await signIn(t);
+  mockMeFetch(t, { steamid: null, prefs: null });
+  await auth().initAuth();
+
+  auth().dismissSessionExpired();
+  assert.equal(auth().isSessionExpired(), false);
+  await auth().initAuth();
+  assert.equal(auth().isSessionExpired(), false);
+});
+
+test("isSessionExpired: set by a push's 401, not by a sign-in check that failed", async (t) => {
+  withBrowser(t);
+  await signIn(t);
+  t.mock.method(console, 'error', () => {});
+  withFetch(t, async () => {
+    throw new Error('network down');
+  });
+  await auth().initAuth();
+  assert.equal(auth().isSessionExpired(), false);
+
+  await signIn(t);
+  withFetch(t, async () => ({ ok: false, status: 401, json: async () => ({ error: 'Not signed in' }) }));
+  prefs().setPref('region', 'DE');
+  await until(() => auth().isSessionExpired(), 'expired');
 });
 
 test('getAuthUser is reactive: an effect follows sign-in and sign-out', async (t) => {

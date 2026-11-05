@@ -8434,6 +8434,33 @@ test('Y1 edge: signing out switches the account menu back to signing in', async 
   await expect(page.getByText('Signed in — your accounts/lists/settings sync')).toHaveCount(0);
 });
 
+test('Y1 edge: a Steam sign-in that expired shows on the account chip until signing in again or staying signed out', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  // Signed in on this browser before: once, so Stay signed out survives the reload below.
+  await page.addInitScript((steamid) => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('steam.isonoe.net:signed-in-as', steamid);
+  }, ALICE.steamid);
+  await mockApi(page);
+  await page.goto('/about');
+
+  const chip = page.getByRole('button', { name: /^Account: Alice — Steam sign-in expired/ });
+  await expect(chip).toBeVisible();
+  await chip.click();
+  await expect(page.getByText('Your Steam sign-in expired')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sign in again' })).toHaveAttribute('href', '/auth/steam/login');
+  await expect(page.getByRole('link', { name: 'Sign in with Steam' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Stay signed out' }).click();
+  await expect(page.getByText('Your Steam sign-in expired')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Sign in with Steam' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Account: Alice', exact: true })).toBeVisible();
+});
+
 const moreFrom = (page: Page) => page.locator('#panel-section-similar .panel-similar-more');
 
 test("F4.1-2,5: a game's publisher lists its games, the open game's panel kept, and Back returns", async ({ page }) => {

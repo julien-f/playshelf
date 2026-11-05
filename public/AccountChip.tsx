@@ -16,7 +16,7 @@
 // `?u=` exploring state. Resolving a new identifier, ★ starring, per-account refresh, counts,
 // Family member rows and removal all stay on Home — this is a nav affordance, not a second,
 // half-implemented copy of that screen, so it links there instead of growing toward it.
-import { onCleanup, onMount, For, Show, type JSX } from 'solid-js';
+import { onCleanup, onMount, For, Match, Show, Switch, type JSX } from 'solid-js';
 import Link from 'lucide-solid/icons/link';
 import Star from 'lucide-solid/icons/star';
 import { A, useLocation, useNavigate } from '@solidjs/router';
@@ -32,8 +32,17 @@ import { getAccountOverrideState, adoptAccount, accountOverrideStatusText } from
 import { withAccountParam } from './urlState.ts';
 import { bindNavPopover } from './navPopover.ts';
 import { CopyButton } from './CopyButton.tsx';
-import { getAuthUser, signOut } from './authStore.ts';
+import {
+  getAuthUser,
+  signOut,
+  isSessionExpired,
+  dismissSessionExpired,
+  SESSION_EXPIRED_TITLE,
+  SESSION_EXPIRED_DETAIL,
+} from './authStore.ts';
 import type { AccountSlot } from './types.ts';
+
+const EXPIRED_HINT = " — Steam sign-in expired, changes aren't syncing";
 
 export function AccountChip(): JSX.Element {
   const location = useLocation();
@@ -97,7 +106,8 @@ export function AccountChip(): JSX.Element {
         <button
           type="button"
           class="site-nav-link account-chip-btn"
-          aria-label={account() ? `Account: ${chipLabel()}` : chipLabel()}
+          aria-label={(account() ? `Account: ${chipLabel()}` : chipLabel()) + (isSessionExpired() ? EXPIRED_HINT : '')}
+          title={isSessionExpired() ? "Steam sign-in expired: changes aren't syncing" : undefined}
           popovertarget="account-chip-panel"
           ref={btnEl}
         >
@@ -122,6 +132,9 @@ export function AccountChip(): JSX.Element {
               <Link />
               <span class="visually-hidden">(from a link)</span>
             </span>
+          </Show>
+          <Show when={isSessionExpired()}>
+            <span class="account-chip-alert" aria-hidden="true" />
           </Show>
         </button>
 
@@ -207,25 +220,40 @@ export function AccountChip(): JSX.Element {
               Signing in with Steam additionally syncs prefs (accounts/lists/settings) to the
               server, so they follow you to another browser/device. */}
           <h2 class="account-chip-section">Steam account</h2>
-          <Show
-            when={getAuthUser()}
-            // rel="external" is @solidjs/router's documented escape hatch from its own global
-            // anchor-click interception — without it, this same-origin link was hijacked into a
-            // client-side navigation to a path with no matching route (a blank page, no request
-            // ever reaching the server) instead of the real page load /auth/steam/login needs.
+          {/* rel="external" is @solidjs/router's documented escape hatch from its own global
+              anchor-click interception — without it, this same-origin link was hijacked into a
+              client-side navigation to a path with no matching route (a blank page, no request
+              ever reaching the server) instead of the real page load /auth/steam/login needs. */}
+          <Switch
             fallback={
               <a href="/auth/steam/login" rel="external" class="account-chip-panel-link">
                 Sign in with Steam
               </a>
             }
           >
-            <p class="account-chip-note">
-              Signed in — your accounts/lists/settings sync to your Steam account.
-              <button type="button" class="account-chip-action" onClick={() => signOut()}>
-                Sign out
-              </button>
-            </p>
-          </Show>
+            <Match when={isSessionExpired()}>
+              <div class="account-chip-expired">
+                <p class="account-chip-expired-title">{SESSION_EXPIRED_TITLE}</p>
+                <p class="account-chip-note">{SESSION_EXPIRED_DETAIL}</p>
+                <div class="account-chip-expired-actions">
+                  <a href="/auth/steam/login" rel="external" class="btn btn-primary">
+                    Sign in again
+                  </a>
+                  <button type="button" class="account-chip-action" onClick={() => dismissSessionExpired()}>
+                    Stay signed out
+                  </button>
+                </div>
+              </div>
+            </Match>
+            <Match when={getAuthUser()}>
+              <p class="account-chip-note">
+                Signed in — your accounts/lists/settings sync to your Steam account.
+                <button type="button" class="account-chip-action" onClick={() => signOut()}>
+                  Sign out
+                </button>
+              </p>
+            </Match>
+          </Switch>
 
           <A
             href={link('/')}

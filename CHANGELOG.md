@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Owned's player profile names your favourite studios: the developers and publishers of 2 or more played games, each filtering the list or opening its own
 - A tiered bundle's tier headers say what each step adds for you and whether it beats buying those games apart
 - Recently Looked Up shows when you last looked up each game.
+- An amber dot on the account chip when your Steam sign-in has expired, with Sign in again or Stay signed out in its menu
 
 ### Changed
 

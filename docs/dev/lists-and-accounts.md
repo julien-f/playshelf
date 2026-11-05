@@ -128,6 +128,7 @@ Signing in (the account chip's popover, `AccountChip.tsx`) is optional; without 
 - **A push answered 401** (the session ended while the page was open; `prefs.ts`'s `sessionLost`) signs out on the spot and drops pending pushes: each edit's local `updatedAt` stays newer than the server's, so the next sign-in's merge pushes it. Two limits:
   - signing back in as another Steam account is that account's first sync on this device, so its values win over those edits;
   - another open tab keeps its own state until it reloads.
+- **An expired sign-in shows** (`authStore.ts`'s `isSessionExpired`): the `steam.isonoe.net:signed-in-as` localStorage key (its own, never synced) holds the steamid last signed in on this browser; signed out by a check or a 401 while it's set puts an amber dot on the account chip and **Sign in again** / **Stay signed out** in its popover. Sign out and Stay signed out clear the key; an `/api/me` that fails (offline, 5xx) never sets it.
 - **Sign out sends pending pushes first**, then logs out, so a debounced edit still reaches the account.
 - **An adopted entry with the same value** as this device's (another device pushed it) only takes the server's `updatedAt`: no reload.
 - **A user list's view is not a table-view key**: it is the list's own `tableView`, saved into `lists` on **Save** (`setListTableView`, minus `page`/`searchQuery`).

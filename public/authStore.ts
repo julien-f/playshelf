@@ -13,6 +13,7 @@ import {
 import { isSyncedPrefKey } from './syncedPrefKeys.ts';
 import { getMyAccount, setMyAccount, getCurrentAccount, setCurrentAccount } from './accountsStore.ts';
 import { resolveAccountSlot } from './accountData.ts';
+import { announce } from './announce.ts';
 
 export interface AuthUser {
   steamid: string;
@@ -24,12 +25,53 @@ export function getAuthUser(): AuthUser | null {
   return currentUser();
 }
 
+// The steamid last signed in on this browser, until Sign out or Stay signed out: what tells an expired
+// session from never having signed in. Never synced, like SYNCED_FLAG_PREFIX below.
+const SIGNED_IN_AS_KEY = 'steam.isonoe.net:signed-in-as';
+
+function readSignedInAs(): string | null {
+  try {
+    return localStorage.getItem(SIGNED_IN_AS_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeSignedInAs(steamid: string | null): void {
+  try {
+    if (steamid) localStorage.setItem(SIGNED_IN_AS_KEY, steamid);
+    else localStorage.removeItem(SIGNED_IN_AS_KEY);
+  } catch {
+    /* unavailable storage */
+  }
+}
+
+const [sessionExpired, setSessionExpired] = createSignal(false);
+
+// Signed in on this browser before, signed out now without asking to: the account chip says so.
+export function isSessionExpired(): boolean {
+  return sessionExpired();
+}
+
+// "Stay signed out": forgets the expired sign-in, as an explicit Sign out would.
+export function dismissSessionExpired(): void {
+  writeSignedInAs(null);
+  setSessionExpired(false);
+}
+
 // Bumped when a push finds the session gone, so a sign-in check still merging knows not to sign in after it.
 let sessionEpoch = 0;
 function handleSessionLost(): void {
   sessionEpoch++;
   setCurrentUser(null);
+  if (readSignedInAs() && !sessionExpired()) {
+    setSessionExpired(true);
+    announce(`${SESSION_EXPIRED_TITLE}. ${SESSION_EXPIRED_DETAIL}`);
+  }
 }
+
+export const SESSION_EXPIRED_TITLE = 'Your Steam sign-in expired';
+export const SESSION_EXPIRED_DETAIL = 'Changes made on this device since then will sync when you sign in again.';
 
 // Whether this browser has ever completed a prefs sync with this steamid before — gates the one
 // asymmetry in the merge below. Deliberately its own localStorage key, outside prefs.ts's synced
@@ -148,6 +190,7 @@ export async function initAuth(): Promise<void> {
     if (!steamid) {
       setCurrentUser(null);
       setSignedInSteamid(null);
+      setSessionExpired(readSignedInAs() !== null);
       return;
     }
     // Set only after the merge: an adoption reloads, and pending pushes would flush under the old state.
@@ -156,6 +199,8 @@ export async function initAuth(): Promise<void> {
     if (epoch !== sessionEpoch) return;
     setCurrentUser({ steamid });
     setSignedInSteamid(steamid);
+    writeSignedInAs(steamid);
+    setSessionExpired(false);
     if (adopted) {
       location.reload();
       return;
@@ -168,6 +213,7 @@ export async function initAuth(): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
+  dismissSessionExpired();
   // Pending pushes go first, while the session still accepts them.
   await setSignedInSteamid(null);
   try {

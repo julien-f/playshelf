@@ -445,7 +445,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   2. edit a list on one
   3. reload the other
 - **Done when**: first sign-in on a new device never overwrites the account's existing prefs; later edits merge per key, last-write-wins; a table layout syncs on **Save**, without its page or search.
-- **Edges**: a list deleted on one device while the other edits it; signing out; signing in as a Steam account other than my ★ one.
+- **Edges**: a list deleted on one device while the other edits it; signing out; signing in as a Steam account other than my ★ one; the sign-in expiring (does the chip say so, do edits made since still sync?; without `PUBLIC_ORIGIN`, Sign in again hits U243).
 
 ### Y2 Losing my browser data
 

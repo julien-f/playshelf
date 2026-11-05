@@ -121,6 +121,7 @@
   }
   /* An identity, not a route: an outline button with the avatar, never the current route's underline. */
   .account-chip-btn {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -161,6 +162,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* A Steam sign-in that expired: ringed in the nav's background so it reads over any avatar. */
+  .account-chip-alert {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--warn);
+    box-shadow: 0 0 0 2px var(--bg);
   }
   .account-chip-explore {
     flex-shrink: 0;
@@ -261,6 +273,30 @@
     text-decoration: underline;
     text-underline-offset: 2px;
     cursor: pointer;
+  }
+  .account-chip-expired {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--surface));
+    border-radius: var(--radius-2);
+    background: color-mix(in srgb, var(--warn) 8%, var(--surface));
+  }
+  .account-chip-expired-title {
+    color: var(--text);
+    font-size: var(--fs-ui);
+    font-weight: 600;
+  }
+  .account-chip-expired-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+  }
+  .account-chip-expired-actions .account-chip-action {
+    margin-top: 0;
+    min-height: 24px;
   }
   .account-chip-id {
     display: flex;
