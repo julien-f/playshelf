@@ -27,7 +27,7 @@
 
 Each rule comes from a flake it fixed; add one when a fix teaches something new.
 
-- No real-time wait: drive time with the fake clock (`page.clock`, `node:test`'s `mock.timers`), or wait on the state (`until` in `test/until.js`). A real wait is a window that load closes or stretches; `test/e2eWaits.test.js` fails on a `waitForTimeout` whose line doesn't say `// real time: <why>`.
+- No real-time wait: drive time with the fake clock (`page.clock`, `node:test`'s `mock.timers`), or wait on the state (`until` in `test/until.js`; not in a test faking `setTimeout`, where it hangs instead of failing: await a promise the code resolves). A real wait is a window that load closes or stretches; `test/e2eWaits.test.js` fails on a `waitForTimeout` whose line doesn't say `// real time: <why>`.
   - `page.clock` is the whole context's: install it after `startPresenting`, not before (the popup's first document misses it about one run in four). Timers armed before the install keep real time.
   - A window between two inputs (double-tap, a wheel gesture's end, a burst's settle): `pauseAt`, then `runFor` past it.
   - Paused, `requestAnimationFrame` and debounced writes (the lightbox's status line) wait too: assert on what changes at once (its counter).
