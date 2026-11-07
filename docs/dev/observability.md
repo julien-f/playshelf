@@ -4,7 +4,7 @@ Outbound-request metrics, budgets, and the warnings the app logs on its own. Cac
 
 ## GET /api/metrics
 
-No auth, same trust level as `GET /api/health`. In memory, reset on restart, except `cacheEntries` and `daily`, the only history beyond the trailing hour. Keys in reading order: what's wrong now, what's live per upstream, the server, the two windows, history. Is all quiet: `curl -s <host>/api/metrics | jq .alerts` (empty); `node scripts/prod-check.js` (run by `session-end.js`) lists production's warnings, event-loop blocks, inbound 5xx and upstream statuses no call declares `expected`, new since its last run, and an undeployed `origin/main`.
+No auth, same trust level as `GET /api/health`. In memory, reset on restart, except `cacheEntries` and `daily`, the only history beyond the trailing hour. Keys in reading order: what's wrong now, what's live per upstream, the server, the two windows, history. Is all quiet: `curl -s <host>/api/metrics | jq .alerts` (empty); `node scripts/prod-check.js` (run by `session-end.js`) lists production's warnings, event-loop blocks, inbound 5xx and upstream statuses no call declares `expected`, new since its last run, and an undeployed `origin/main`; `--all` lists them over the whole `daily` window, for a review, without moving that baseline.
 
 - Locally, `dev:mock` answers `e2e mock: no fixture for GET /api/metrics`: it mocks every `/api` route. Run the real server on a scratch database instead: `PORT=<free> DB_FILE=<scratch>.sqlite STEAM_API_KEY=x node server.js` (no upstream call is made until a route needs one).
 

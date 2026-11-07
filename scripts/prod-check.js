@@ -2,7 +2,7 @@
 
 // What production's GET /api/metrics says needs a look, new since the last run; one line each, nothing
 // when healthy. Run by session-end.js; logs each run (dev-metrics `prod-check`).
-//   node scripts/prod-check.js
+//   node scripts/prod-check.js [--all]   (--all: the whole daily window, not a reference for the next run)
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -49,8 +49,10 @@ function unexpectedDaily(daily, expected) {
 
 // The lines to print, and what to remember for next time. `last`: the previous run's row, if any.
 // `behind`: commits origin/main has past the deployed one, null when that commit is unknown here.
-function prodCheck(m, { last, behind, expected, now = Date.now() }) {
-  const since = last ? Date.parse(last.at) : now - FIRST_RUN_DAYS * 24 * 60 * 60 * 1000;
+// `all`: ignore `last` and report everything `m` still holds.
+function prodCheck(m, { last, behind, expected, all = false, now = Date.now() }) {
+  if (all) last = undefined;
+  const since = all ? 0 : last ? Date.parse(last.at) : now - FIRST_RUN_DAYS * 24 * 60 * 60 * 1000;
   const lines = [];
   for (const a of m.alerts ?? [])
     if (a.level === 'warn' || a.where === 'itad-dates') lines.push(`${a.where}: ${a.message}`);
@@ -93,9 +95,9 @@ function behindOriginMain(commit) {
 }
 
 // Lines to print; offline → none. Records the run.
-async function check() {
+async function check({ all = false } = {}) {
   const start = Date.now();
-  const runs = history('prod-check').filter((r) => r.reachable);
+  const runs = history('prod-check').filter((r) => r.reachable && !r.all);
   let m;
   try {
     const res = await fetch(URL, { signal: AbortSignal.timeout(5000) });
@@ -103,18 +105,22 @@ async function check() {
     m = await res.json();
   } catch (err) {
     const code = err.cause?.code;
-    record('prod-check', { reachable: false, error: code ?? err.message, ms: Date.now() - start });
+    record('prod-check', { reachable: false, all, error: code ?? err.message, ms: Date.now() - start });
     return OFFLINE.has(code) ? [] : [`prod metrics unreachable: ${code ?? err.message}`];
   }
   const { lines, seen } = prodCheck(m, {
     last: runs.at(-1),
     behind: m.commit ? behindOriginMain(m.commit) : null,
     expected: expectedStatuses(),
+    all,
   });
-  record('prod-check', { reachable: true, lines: lines.length, seen, ms: Date.now() - start });
+  record('prod-check', { reachable: true, all, lines: lines.length, seen, ms: Date.now() - start });
   return lines;
 }
 
-if (require.main === module) check().then((lines) => console.log(lines.length ? lines.join('\n') : 'prod: all quiet'));
+if (require.main === module)
+  check({ all: process.argv.includes('--all') }).then((lines) =>
+    console.log(lines.length ? lines.join('\n') : 'prod: all quiet'),
+  );
 
 module.exports = { check, prodCheck, expectedStatuses, unexpectedDaily };
