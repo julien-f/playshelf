@@ -5477,7 +5477,10 @@ test('F1 edge: stepping onto a preloaded screenshot shows it at once, not its th
   await mockApi(page, { states: ['slow-media'] }); // a screenshot's thumbnail and full image apart
   await page.goto('/game/1145360?shot=s1');
   const next = page.locator('.lb-preload[data-src*="Screenshot%202.svg?full"]');
-  await expect.poll(() => next.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+  // Its fetch starts once shot 1 has loaded, so two slow-media delays queue behind the page load.
+  await expect
+    .poll(() => next.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0), { timeout: 15_000 })
+    .toBe(true);
   await page.locator('#screenshot-lightbox .lb-img').evaluate((img: HTMLImageElement) => {
     const w = window as Window & { srcs?: string[] };
     w.srcs = [];

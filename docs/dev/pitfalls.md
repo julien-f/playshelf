@@ -61,6 +61,12 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 - **Cause**: worktrees run their own `npm ci`; the main checkout's `node_modules` stays at whatever it last installed.
 - **Fix**: `npm ci` in the main checkout, then commit the merge again (it stays staged).
 
+### `Connection to github.com closed by remote host` during `git push`
+
+- **Symptom**: the pre-push hook's e2e output shows `Connection to github.com closed by remote host`, then `error: failed to push some refs`, even when every test passes.
+- **Cause**: git opens the SSH connection before running the hook; GitHub drops it while the full e2e run (~8 min) keeps it idle.
+- **Fix**: run `npm run test:e2e -- --if-changed` before pushing: its passing run is recorded, so the hook skips e2e and pushes at once.
+
 ### Another agent's commit shows a branch as merged without its changes
 
 - **Symptom**: `git log --graph` shows someone else's commit with a branch as second parent, but its tree lacks that branch's changes, which are still staged.
