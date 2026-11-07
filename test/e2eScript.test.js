@@ -6,20 +6,35 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
-const { claimPort, isFullRun, listening } = require('../scripts/e2e');
+const { claimPort, listening, planRun } = require('../scripts/e2e');
 
-test('isFullRun: only a run of the whole suite counts as a pass to record', () => {
-  assert.equal(isFullRun([]), true);
-  assert.equal(isFullRun(['--reporter=list,json']), true);
+test('planRun: records a pass only for the projects a run covers in full', () => {
+  const none = new Set();
+  assert.deepEqual(planRun([], none, false), { running: ['desktop', 'phone'], runArgs: [] });
+  assert.deepEqual(planRun(['--reporter=list,json'], none, false).running, ['desktop', 'phone']);
+  assert.deepEqual(planRun(['--project=desktop'], none, false).running, ['desktop']);
+  assert.deepEqual(planRun(['--project', 'phone'], none, false).running, ['phone']);
   for (const args of [
     ['-g', 'A1:'],
     ['--grep=A1'],
-    ['--project=desktop'],
+    ['--project=desktop', '-g', 'A1'],
     ['e2e/scenarios.spec.ts'],
     ['--last-failed'],
   ]) {
-    assert.equal(isFullRun(args), false, args.join(' '));
+    assert.deepEqual(planRun(args, none, true), { running: null, runArgs: args }, args.join(' '));
   }
+});
+
+test('planRun: --if-changed runs only the projects not yet passed on this build', () => {
+  const desktop = new Set(['desktop']);
+  assert.deepEqual(planRun(['--reporter=dot'], desktop, true), {
+    running: ['phone'],
+    runArgs: ['--reporter=dot', '--project=phone'],
+  });
+  assert.deepEqual(planRun(['--project=desktop'], desktop, true), { running: [], runArgs: null });
+  assert.deepEqual(planRun(['--project=phone'], desktop, true), { running: ['phone'], runArgs: ['--project=phone'] });
+  assert.deepEqual(planRun([], new Set(['desktop', 'phone']), true).runArgs, null);
+  assert.deepEqual(planRun([], desktop, false).runArgs, []); // without the flag, everything runs
 });
 
 const tmpDir = (t) => {

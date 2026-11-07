@@ -112,6 +112,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - GET /api/metrics says when ITAD's bundle end dates match Fanatical's or Humble's again, so their overrides can be dropped.
 - session-end.js also lists what production's metrics show since its last run: warnings, event-loop blocks, server errors, unexpected upstream answers and an undeployed main.
 - `node scripts/prod-check.js --all` lists production's warnings over the whole daily window, for a metrics review.
+- Pushing after a UI commit runs only the phone e2e half: each width's pass is remembered
 
 ## [0.12.0] - 2026-10-30
 

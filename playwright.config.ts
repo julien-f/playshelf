@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import { portOf } from './scripts/ports.js';
+import PROJECTS from './scripts/e2e-projects.js';
 
 // End-to-end tests for docs/dev/journeys.md's journeys (`npm run test:e2e`). The app runs on
 // its own Vite server; every /api call is answered in the browser by e2e/mockApi.ts, so no
@@ -29,11 +30,7 @@ export default defineConfig({
     // The committed DejaVu fonts, not the machine's: layouts measure the same locally and in CI (Linux only: fontconfig).
     launchOptions: { env: { ...process.env, FONTCONFIG_FILE: path.join(__dirname, 'e2e/fonts/fonts.conf') } },
   },
-  // The two sizes ux-review checks.
-  projects: [
-    { name: 'desktop', use: { viewport: { width: 1440, height: 900 } } },
-    { name: 'phone', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
-  ],
+  projects: Object.entries(PROJECTS).map(([name, use]) => ({ name, use })),
   webServer: {
     // E2E_BUILT: scripts/e2e.js (`npm run test:e2e`) already built into that directory.
     command: process.env.E2E_BUILT
