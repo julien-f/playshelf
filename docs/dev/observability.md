@@ -128,6 +128,7 @@ Logged at the moment they happen, once per event rather than once per affected r
 - **`[budget:<group>] hourly/daily outbound budget exhausted …`** — once per window per service, with the time the window rolls over.
 - **`[budget:<group>] a client spent its hourly/daily share …`** — once per window per client and service, without the client's address.
 - **`[semaphore:<name>] queue saturated …`** — every rejection, unthrottled: it should never fire, so each one matters.
+- **`[cache]`/`[auth]` expiry sweep blocked the event loop for … ms** — a sweep (`sweep`, `lib/db.js`) that took ≥ 1 s, the `eventLoop` alert's threshold: pins a block to it.
 - **`[HLTB] search failed …`** — throttled to one per `HLTB_SEARCH_WARN_THROTTLE_MS` (30 s); the searches themselves still run and fail normally. `[HLTB] init failed` is throttled by the auth retry backoff.
 
 All are `console.warn`: degraded but recoverable. An error marked `isLogged` is not logged again by `routeErrorStatus` or the details parts (`logDetailsError`): it's set where the warning was printed — `assertClosed` while a breaker is open, `chargeBudget` past a budget, and HLTB's errors repeating the failure the last `[HLTB]` line warned about, or an auth hold whose cause was already logged. Without it, one open breaker or spent budget logs a line per game in a large load.

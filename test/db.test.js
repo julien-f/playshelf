@@ -7,7 +7,7 @@ const os = require('node:os');
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { DatabaseSync } = require('node:sqlite');
-const { db: appDb, migrate, MIGRATIONS } = require('../lib/db');
+const { db: appDb, migrate, MIGRATIONS, CACHE_TABLES, sweep } = require('../lib/db');
 
 test('migrate: a fresh database ends up at the latest version with every table', () => {
   const db = new DatabaseSync(':memory:');
@@ -30,9 +30,8 @@ test('migrate: a fresh database ends up at the latest version with every table',
 
 test("migrate: a database already at a migration's version treats it as applied, preserving existing rows", () => {
   const db = new DatabaseSync(':memory:');
-  db.exec(
-    'CREATE TABLE cache_library (key TEXT PRIMARY KEY, value TEXT NOT NULL, ts INTEGER NOT NULL, expires INTEGER)',
-  );
+  for (const table of CACHE_TABLES)
+    db.exec(`CREATE TABLE ${table} (key TEXT PRIMARY KEY, value TEXT NOT NULL, ts INTEGER NOT NULL, expires INTEGER)`);
   db.exec("INSERT INTO cache_library (key, value, ts) VALUES ('k', 'v', 1)");
   db.exec('PRAGMA user_version = 7');
 
@@ -157,4 +156,26 @@ test("requiring lib/db picks up default.env's DB_FILE even without a shell-level
 
 test('lib/db opens the database with a busy timeout', () => {
   assert.ok(appDb.prepare('PRAGMA busy_timeout').get().timeout > 0);
+});
+
+test('migrate: every cache table gets its expiry index', () => {
+  const db = new DatabaseSync(':memory:');
+  migrate(db, MIGRATIONS);
+  for (const table of CACHE_TABLES) {
+    const names = db
+      .prepare(`PRAGMA index_list(${table})`)
+      .all()
+      .map((r) => r.name);
+    assert.ok(names.includes(`${table}_expiry`), `${table}: ${names}`);
+  }
+});
+
+test('sweep: warns only when it blocked the event loop for a second or more', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const now = t.mock.method(performance, 'now', () => 0);
+  sweep('cache', () => now.mock.mockImplementation(() => 999));
+  assert.equal(warn.mock.callCount(), 0);
+  now.mock.mockImplementation(() => 0);
+  sweep('cache', () => now.mock.mockImplementation(() => 1000));
+  assert.deepEqual(warn.mock.calls[0].arguments, ['[cache] expiry sweep blocked the event loop for 1000 ms']);
 });
