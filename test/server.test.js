@@ -28,13 +28,17 @@ const { db } = require('../lib/db');
 const { PREFS_MAX_BYTES, SYNCED_PREF_KEYS, getUserPrefs, setUserPref } = require('../lib/auth');
 const { _resetAuth, getHLTB } = require('../lib/hltb');
 const { _resetTagNameMap } = require('../lib/steam');
+const { _resetPickAndMix } = require('../lib/fanatical');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
 const { SESSION_TTL_MS, MISS_CACHE_TTL_MS } = require('../lib/config');
 const { getMetrics } = require('../lib/metrics');
 const { getUpstreamStats } = require('../lib/upstream');
 
-// The tag-name map's failure hold-off outlives _reset(), which only empties the cache.
-beforeEach(_resetTagNameMap);
+// The tag-name map's and Fanatical's in-memory state outlive _reset(), which only empties the cache.
+beforeEach(() => {
+  _resetTagNameMap();
+  _resetPickAndMix();
+});
 
 const api = supertest(app);
 

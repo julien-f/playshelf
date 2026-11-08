@@ -2,7 +2,7 @@
 
 process.env.DB_FILE = '';
 
-const { test } = require('node:test');
+const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   pickAndMixSlug,
@@ -11,8 +11,13 @@ const {
   getPickAndMix,
   withPickAndMix,
   withCachedPickAndMix,
+  _resetPickAndMix,
 } = require('../lib/fanatical');
-const { _reset, setCache } = require('../lib/cache');
+const { _reset, getCachedAt, setCache } = require('../lib/cache');
+const { BUNDLES_CACHE_TTL_MS } = require('../lib/config');
+
+// The last map and the failure hold-off outlive _reset(), which only empties the cache.
+beforeEach(_resetPickAndMix);
 
 const ITAD_URL =
   'https://www.awin1.com/cread.php?awinmid=118821&awinaffid=235265&ued=https%3A%2F%2Fwww.fanatical.com%2Fen%2Fpick-and-mix%2Fbuild-your-own-killer-bundle';
@@ -183,6 +188,30 @@ test('getPickAndMix: re-fetches for an unknown slug once the map is old, keeping
   assert.equal(calls, 0);
   assert.deepEqual(await getPickAndMix(['new-one']), old);
   assert.equal(calls, 1);
+});
+
+// data.md: a failed fetch keeps the last map, even once its row expired (getCached deleted it).
+test('getPickAndMix: a failure after the row expired keeps the last map, held off an hour without rewriting the row', async (t) => {
+  _reset();
+  t.mock.method(console, 'warn', () => {});
+  const old = { known: { tiers: [{ quantity: 1, prices: { USD: 1 } }], products: [] } };
+  setCache('fanatical-pnm:v3', old);
+  assert.deepEqual(await getPickAndMix(), old);
+  const start = Date.now();
+  let now = start + BUNDLES_CACHE_TTL_MS + 1;
+  t.mock.method(Date, 'now', () => now);
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    return { ok: false, status: 500 };
+  });
+  assert.deepEqual(await getPickAndMix(), old);
+  assert.deepEqual(await getPickAndMix(['new-one']), old);
+  assert.equal(calls, 1, 'held off');
+  assert.equal(getCachedAt('fanatical-pnm:v3'), undefined, 'no row rewritten');
+  now += 60 * 60 * 1000;
+  await getPickAndMix();
+  assert.equal(calls, 2, 'asked again after the hold-off');
 });
 
 test("withPickAndMix: ITAD's end date stays when the feed has none", async (t) => {
