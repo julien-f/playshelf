@@ -1616,7 +1616,7 @@ test('resolveSteamTags: re-fetches the tag name map once its row expires', async
   _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now }]]);
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'Old', weight: null }]);
 
-  _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now - META_CACHE_TTL_MS - 1 }]]);
+  t.mock.method(Date, 'now', () => now + META_CACHE_TTL_MS + 1);
   mockTagEndpoints(t, { nameMap: { 1: 'New' } });
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'New', weight: null }]);
 });
@@ -1630,12 +1630,15 @@ test('resolveSteamTags: a fetched tag name map expires within a month', async (t
   assert.ok(expires !== null && expires - Date.now() <= 30 * 24 * 60 * 60 * 1000, String(expires));
 });
 
-test('resolveSteamTags: reads a tag name map row rewritten since the last read', async () => {
+// A stream's games each resolve tags: the row isn't read per game while the parsed map is that young (C315).
+test('resolveSteamTags: reads the tag name map row again only a month after its write', async (t) => {
   const now = Date.now();
   _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now - 1000 }]]);
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'Old', weight: null }]);
 
-  _reset([['tagnames:all', { value: { 1: 'New' }, ts: now }]]);
+  _reset([['tagnames:all', { value: { 1: 'New' }, ts: now, expires: now + 31 * 24 * 60 * 60 * 1000 }]]);
+  assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'Old', weight: null }]);
+  t.mock.method(Date, 'now', () => now + 30 * 24 * 60 * 60 * 1000);
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'New', weight: null }]);
 });
 
@@ -2449,8 +2452,8 @@ test('resolveSteamId: caches a failed lookup and re-throws it without a second u
 
 const browseItem = (fields) => ({ success: 1, name: 'Game', type: 0, basic_info: {}, assets: {}, ...fields });
 
-test('gameBasics: converts a browse item to appdetails shapes', () => {
-  const basics = gameBasics(
+test('gameBasics: converts a browse item to appdetails shapes', async () => {
+  const basics = await gameBasics(
     browseItem({
       basic_info: { short_description: 'Desc', developers: [{ name: 'Dev' }], publishers: [{ name: 'Pub' }] },
       release: { steam_release_date: 1303186800 },
@@ -2474,8 +2477,8 @@ test('gameBasics: converts a browse item to appdetails shapes', () => {
   });
 });
 
-test('gameBasics: an unconfirmed type and a coming-soon date short of a full one stay null', () => {
-  const basics = gameBasics(
+test('gameBasics: an unconfirmed type and a coming-soon date short of a full one stay null', async () => {
+  const basics = await gameBasics(
     browseItem({
       type: 7,
       release: { steam_release_date: 1830000000, is_coming_soon: true, coming_soon_display: 'date_quarter' },
@@ -2487,14 +2490,14 @@ test('gameBasics: an unconfirmed type and a coming-soon date short of a full one
   assert.equal(basics.comingSoon, true);
 });
 
-test('gameBasics: an item cached before basics were requested falls back to cached appdetails, never fetching', (t) => {
+test('gameBasics: an item cached before basics were requested falls back to cached appdetails, never fetching', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () => {
     throw new Error('should not fetch');
   });
-  assert.equal(gameBasics({ success: 1, tagids: [] }, 640), null);
+  assert.equal(await gameBasics({ success: 1, tagids: [] }, 640), null);
   setCache('meta:640', { name: 'Cached', type: 'game', release_date: { date: 'Jan 1, 2020' }, developers: ['D'] });
-  const basics = gameBasics({ success: 1, tagids: [] }, 640);
+  const basics = await gameBasics({ success: 1, tagids: [] }, 640);
   assert.equal(basics.name, 'Cached');
   assert.equal(basics.releaseDate, 'Jan 1, 2020');
   assert.deepEqual(basics.developers, ['D']);
@@ -2518,7 +2521,7 @@ test('a coming-soon store row expires within a day once read, however it was cac
     json: async () => ({ response: { store_items: [{ ...soonItem, appid: 655 }] } }),
   }));
   await getAppDetails(650);
-  gameBasics({ success: 1, tagids: [] }, 651);
+  await gameBasics({ success: 1, tagids: [] }, 651);
   await getStoreBrowseItem(652);
   await getAppDetails(653);
   await getStoreBrowseItem(654);

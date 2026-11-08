@@ -1051,6 +1051,27 @@ test('GET /api/game-details/:appid: a warm request reads each cached meta-tier r
   assert.equal(metaHits() - before, 4);
 });
 
+// A browse row cached before basics were requested takes them from the store page the store part reads anyway (C315).
+test('GET /api/game-details/:appid: a browse row without basics reads the store page once', async (t) => {
+  _reset();
+  setCache('hltb:405', []);
+  setCache('meta:405', { name: 'X', type: 'game' });
+  setCache('browse:405', { tagids: TAG_IDS });
+  setCache('protondb:405', null);
+  setCache('rating:405', { total_reviews: 1, total_positive: 1 });
+  setCache('tagnames:all', TAG_NAME_MAP);
+  t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('should not fetch');
+  });
+
+  const metaHits = () => getMetrics().sinceRestart.cache.meta.hits;
+  const before = metaHits();
+  const res = await api.get('/api/game-details/405');
+  assert.equal(res.body.basics.name, 'X');
+  // hltb, meta, browse, protondb and the tag-name map's first read
+  assert.equal(metaHits() - before, 5);
+});
+
 test('GET /api/game-details/:appid: dates each source separately, and fetchedAt is the oldest of them', async (t) => {
   _reset();
   // Deliberately staggered: the panel's ↻ shows one figure for five sources cached under tiers
@@ -3700,13 +3721,15 @@ test('POST /api/game-details/stream: fully cached games come first, ahead of unc
     setCache(`protondb:${appid}`, null);
   }
   setCache('tagnames:all', TAG_NAME_MAP);
-  // Uncached games' reviews hang until released, holding the workers that took them.
+  // Uncached games' reviews hang until released, holding the workers that took them; their store pages too, so
+  // the store pool's answers don't race the cached games' events.
   let started = 0;
   let release;
   const gate = new Promise((r) => {
     release = r;
   });
   const fetchMock = t.mock.method(globalThis, 'fetch', async (url) => {
+    if (String(url).includes('appdetails')) await gate;
     if (!String(url).includes('GetAppReviews')) return { ok: true, json: async () => ({}) };
     started++;
     await gate;
