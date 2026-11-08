@@ -102,6 +102,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A game's panel reopened after a while fetches its price, bundles, news and achievements again instead of showing stale ones
 - A released game's ProtonDB and HowLongToBeat lookups no longer wait for its Steam reviews
 - A tag name list cached before tags expired monthly now expires within a month too
+- A game whose Steam store page comes back malformed now reports Steam's error instead of a server error
 
 ### Development
 

@@ -976,6 +976,13 @@ test('getAppDetails: returns null when success is false', async (t) => {
   assert.equal(await getAppDetails(400), null);
 });
 
+test('getAppDetails: a page that is not an object is an upstream error, not cached', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, 'oops'));
+  await assert.rejects(() => getAppDetails(400), { isUpstream: true });
+  assert.equal(getCachedAt('appdetails:400'), undefined);
+});
+
 // A whole store page, every field extractAppDetails reads plus some it doesn't.
 const FULL_PAGE = {
   name: 'Game',
