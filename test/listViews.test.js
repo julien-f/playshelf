@@ -101,32 +101,77 @@ test('suggestedTemplates: per kind, minus created ones (even renamed), priced on
   assert.deepEqual(ids('owned', true), ['play-next', 'short-games']);
 });
 
-test('Play next and Short games leave out finished and abandoned games', () => {
+test('Play next and Short games leave out finished, abandoned and unreleased games', () => {
   const { VIEW_TEMPLATES, createFromTemplate } = views();
   for (const id of ['play-next', 'short-games']) {
     const v = createFromTemplate(VIEW_TEMPLATES.find((t) => t.id === id));
-    assert.deepEqual(v.tableView.excludeFilters, { status: ['Finished', 'Abandoned'] });
+    assert.deepEqual(v.tableView.excludeFilters, { status: ['Finished', 'Abandoned'], availability: ['Coming soon'] });
     assert.ok(v.tableView.visibleCols.includes('status'));
   }
 });
 
-test('a Play next view created before statuses gets their exclusion, unless it was edited', () => {
-  const { getListViews } = views();
-  const legacy = {
-    rangeFilters: { playtime: { min: '', max: '2' } },
-    sorts: [{ key: 'tasteFit', dir: 'desc' }],
-    visibleCols: ['capsule', 'name', 'tasteFit', 'steamdbRating', 'hltbAll', 'playtime', 'genres'],
-    columnOrder: ['capsule', 'name', 'tasteFit', 'steamdbRating', 'hltbAll', 'playtime', 'genres'],
-  };
-  const edited = { ...legacy, sorts: [{ key: 'hltbAll', dir: 'asc' }] };
-  require('../public/prefs.ts').setPref('listViews', {
-    owned: [
-      { id: 'a', name: 'Play next', template: 'play-next', tableView: legacy },
-      { id: 'b', name: 'Mine', template: 'play-next', tableView: edited },
-    ],
-  });
-  const [patched, kept] = getListViews('owned');
-  assert.deepEqual(patched.tableView.excludeFilters, { status: ['Finished', 'Abandoned'] });
-  assert.ok(patched.tableView.visibleCols.includes('status'));
-  assert.deepEqual(kept.tableView, edited);
+test('isPlayNextCandidate: played 2 h or less, no status, released', () => {
+  const { isPlayNextCandidate } = views();
+  assert.equal(isPlayNextCandidate({ playtime: 2 }, null), true);
+  assert.equal(isPlayNextCandidate({}, null), true);
+  assert.equal(isPlayNextCandidate({ playtime: 2.1 }, null), false);
+  assert.equal(isPlayNextCandidate({ playtime: 0 }, 'Finished'), false);
+  assert.equal(isPlayNextCandidate({ playtime: 0, comingSoon: true }, null), false);
+});
+
+// As stored by earlier versions, written out here rather than derived from the code's own list.
+const PLAY_NEXT_COLS = ['capsule', 'name', 'tasteFit', 'steamdbRating', 'hltbAll', 'playtime', 'genres'];
+const SHORT_COLS = ['capsule', 'name', 'hltbMain', 'steamdbRating', 'tasteFit', 'playtime', 'genres'];
+const PAST = {
+  'play-next': [
+    {
+      rangeFilters: { playtime: { min: '', max: '2' } },
+      sorts: [{ key: 'tasteFit', dir: 'desc' }],
+      visibleCols: PLAY_NEXT_COLS,
+      columnOrder: PLAY_NEXT_COLS,
+    },
+    {
+      rangeFilters: { playtime: { min: '', max: '2' } },
+      excludeFilters: { status: ['Finished', 'Abandoned'] },
+      sorts: [{ key: 'tasteFit', dir: 'desc' }],
+      visibleCols: [...PLAY_NEXT_COLS, 'status'],
+      columnOrder: [...PLAY_NEXT_COLS, 'status'],
+    },
+  ],
+  'short-games': [
+    {
+      rangeFilters: { playtime: { min: '', max: '2' }, hltbMain: { min: '', max: '5' } },
+      visibleCols: SHORT_COLS,
+      columnOrder: SHORT_COLS,
+    },
+    {
+      rangeFilters: { playtime: { min: '', max: '2' }, hltbMain: { min: '', max: '5' } },
+      excludeFilters: { status: ['Finished', 'Abandoned'] },
+      visibleCols: [...SHORT_COLS, 'status'],
+      columnOrder: [...SHORT_COLS, 'status'],
+    },
+  ],
+};
+
+test("a template view stored by an earlier version reads as today's, unless it was edited", () => {
+  const { getListViews, VIEW_TEMPLATES, createFromTemplate } = views();
+  const stored = Object.entries(PAST).flatMap(([template, stamps]) =>
+    stamps.flatMap((tableView, i) => [
+      { id: `${template}-${i}`, name: 'Old', template, tableView },
+      {
+        id: `${template}-${i}-edited`,
+        name: 'Mine',
+        template,
+        tableView: { ...tableView, sorts: [{ key: 'name', dir: 'asc' }] },
+      },
+    ]),
+  );
+  require('../public/prefs.ts').setPref('listViews', { owned: stored });
+  const current = Object.fromEntries(
+    Object.keys(PAST).map((id) => [id, createFromTemplate(VIEW_TEMPLATES.find((t) => t.id === id)).tableView]),
+  );
+  for (const [i, view] of getListViews('owned').slice(0, stored.length).entries()) {
+    const expected = stored[i].id.endsWith('-edited') ? stored[i].tableView : current[view.template];
+    assert.deepEqual(view.tableView, expected, view.id);
+  }
 });

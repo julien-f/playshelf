@@ -352,7 +352,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   5. **Pick a random game** (or **R**) for a random pick, or browse with ↑/↓
 - **Or**: steps 2–4 as Owned's **Play next** view, or **Short games** for the short ones (L5).
 - **Done when**: HLTB and rating fill in without a reload; the random pick draws only from the filtered rows and works on a phone; the filter survives a reload in the tab, and every visit once saved (L3).
-- **Edges**: games with no HLTB entry (where do they sort?); a Family account (whose playtime counts?); Plays mostly's **Why these?** on a phone (each tag's games stack under its bar).
+- **Edges**: games with no HLTB entry (where do they sort?); a pre-order (out of Play next and its count); a Family account (whose playtime counts?); Plays mostly's **Why these?** on a phone (each tag's games stack under its bar).
 
 ### F4 What else did this studio make?
 

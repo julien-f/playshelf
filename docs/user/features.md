@@ -37,7 +37,7 @@ A private profile or wishlist looks identical to an empty one from the outside; 
 - **Views** of Owned and Wishlist keep several named layouts of one list (columns, sort, grouping, filters), opened as tabs under its header: **All games**, then each view.
   - **New view** (beside Rank this list) saves the table as it is now, or offers ready-made ones, each showing only the columns that matter to it:
     - **Recently played** (Owned): last played first.
-    - **Play next** (Owned): played 2 h or less and not marked Finished or Abandoned (see [Statuses](#statuses)), best Taste fit first.
+    - **Play next** (Owned): played 2 h or less, out now (not Coming soon) and not marked Finished or Abandoned (see [Statuses](#statuses)), best Taste fit first.
     - **Short games** (Owned): the same, with a main story of 5 h or less on How Long To Beat, best rated first.
     - **Bargains** (Wishlist): at a 1-year or all-time low, biggest discount first.
   - Its **⋯** renames or deletes it.
@@ -52,7 +52,7 @@ A private profile or wishlist looks identical to an empty one from the outside; 
   - **Plays mostly**: the Steam tags the account spends its time on (weighted by playtime, tags most of the library carries counting less), each a bar showing its weight next to the top one, and a button filtering the list by that tag (4 on a phone, 6 otherwise). It says how many played games it's built from.
   - **Story games**: a ring counting the story games played for at least 80% of their main story on How Long To Beat; one you marked Finished counts whatever its hours, one marked Abandoned falls short.
   - **Favourite studios**: the developers and publishers of 2 or more of the played games, most played first (3 each; 1 each on a phone until **Why these?** opens), each name filtering the list by that studio (click again to clear) beside a **Games by …** or **Published by …** link to all its games on Steam. A studio publishing its own games shows once, as a developer.
-  - **Barely played**: how many games were played 2 h or less, with **Play next** opening the **Play next** [view](#lists) — creating it the first time — and a second click going back to All games. Zero hours also covers games played before Steam tracked playtime, or on another account.
+  - **Barely played**: how many released games were played 2 h or less, with **Play next** opening the **Play next** [view](#lists) — creating it the first time — and a second click going back to All games. Zero hours also covers games played before Steam tracked playtime, or on another account.
   - The play style needs 8 played games (an hour or more), the story tile 8 played story games. **Why these?** opens the evidence in place: under each tag, the played games counting most toward it with their hours; in the story tile, each story game's hours against its main story (the 5 most played that reached it, then those that fell short); under each studio, its most played games; and a folded **How it's counted**. Every game opens its panel.
 - **Filtering by Steam tag** (the Tags column, or a tag in a game's panel) ranks the matches by **Tag match**: how strongly players tagged each game with them, from 100% (its top tag) down. With several tags it's their average, or on the filter's **All** mode the weakest one, so a game must carry them all. Filter Tag match (e.g. 50% and up) to keep only the games where the tag really matters. Clearing the tag filter restores the previous sort and drops that Tag match filter. In the game's panel, a gauge under each Steam tag shows that same strength.
 
@@ -163,10 +163,10 @@ Clicking a screenshot or trailer (or **Enter** on it) opens it full-window:
 
 ### Statuses
 
-**Status**, beside the release date of a game you own: mark it **Finished** or **Abandoned**, which Steam can't tell from hours (a game finished on another platform, or dropped after 20 minutes). Play next and Short games leave those games out, the Barely played count too, and the story games tile takes your word over the hours. A **Status** column (hidden by default) shows them on Owned and on your lists.
+**Status**, beside the release date of a game you own: mark it **Finished** or **Abandoned**, which Steam can't tell from hours (a game finished on another platform, or dropped after 20 minutes). Play next and Short games leave those games out, the Barely played count too, and the story games tile takes your word over the hours. A **Status** column (hidden by default) shows them on Owned and on your lists. Games not out yet (a pre-order) are left out of those views and the count too, by the **Availability** column (Released or Coming soon, hidden by default, on every list).
 
 - Statuses are yours: they show on your ★ account (or a Family you're in), or with no ★ account on the one you picked — not on someone else's library, even from a link. Signed in, they sync like your lists.
-- A Play next or Short games view you never edited picks up the exclusion; one you edited stays as you left it.
+- A Play next or Short games view you never edited picks up the exclusion, and leaves out games not out yet; one you edited stays as you left it (exclude **Coming soon** from its **Availability** column to follow).
 
 ### Presenting on a second screen
 

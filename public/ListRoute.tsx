@@ -168,6 +168,7 @@ import { SharedViewBanner } from './SharedViewBanner.tsx';
 import { UnsavedChangesBanner, ViewActions } from './TableViewControls.tsx';
 import {
   PLAY_NEXT_MAX_HOURS,
+  isPlayNextCandidate,
   VIEW_TEMPLATES,
   createFromTemplate,
   getListView,
@@ -3935,12 +3936,10 @@ export default function ListRoute() {
     const rows = profileRows();
     return rows ? favouriteCreators(rows, (g) => (g as Game).playtime ?? 0) : { developers: [], publishers: [] };
   });
-  // The games Play next lists (listViews.ts), counted the same way so the two agree.
+  // The games Play next lists, by its own predicate so the two agree.
   const unplayed = createMemo(() => {
     const rows = profileRows();
-    return rows && !playtimeHidden()
-      ? rows.filter((g) => (g.playtime ?? 0) <= PLAY_NEXT_MAX_HOURS && !ownStatus(g)).length
-      : 0;
+    return rows && !playtimeHidden() ? rows.filter((g) => isPlayNextCandidate(g as Game, ownStatus(g))).length : 0;
   });
   const backlogShown = () => activeView()?.template === PLAY_NEXT;
   // Opens the Play next view (created the first time), or back to All games when it's open.
