@@ -9,6 +9,7 @@ process.env.DB_FILE = '';
 
 const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
+const { ageCache } = require('./ageCache');
 const { getMetrics } = require('../lib/metrics');
 const {
   peekSteamId,
@@ -1721,6 +1722,25 @@ test('getProtonDbStatus: returns tier, confidence and total', async (t) => {
 
   const result = await getProtonDbStatus(400);
   assert.deepEqual(result, { tier: 'gold', confidence: 'strong', total: 2009 });
+});
+
+// "Unreleased" is inferred (a coming-soon browse item and no reviews), so a forced refresh asks rather than wipe a summary.
+test('getProtonDbStatus: a forced lookup of an unreleased game asks ProtonDB instead of wiping its cached summary', async (t) => {
+  _reset();
+  _resetCircuitBreakers();
+  setCache('protondb:401', { tier: 'gold', confidence: 'good', total: 9 });
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({ tier: 'gold', confidence: 'good', total: 10 }),
+  }));
+  assert.deepEqual(await getProtonDbStatus(401, { unreleased: true }), { tier: 'gold', confidence: 'good', total: 9 });
+  assert.equal(fetchMock.mock.callCount(), 0);
+  ageCache();
+  assert.deepEqual(await getProtonDbStatus(401, { unreleased: true, force: true }), {
+    tier: 'gold',
+    confidence: 'good',
+    total: 10,
+  });
 });
 
 // A 404 means "ProtonDB has no reports for this appid" — not an upstream failure —
