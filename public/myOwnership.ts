@@ -196,11 +196,23 @@ export function createMyOwnershipCache() {
   // Subscribes an imperative consumer's effect to what the peeks depend on, before it has anything to peek.
   function trackMyOwnership(): void {
     loaded();
-    const account = getEffectiveCurrentAccount();
-    if (account) dataVersions(account.id);
+    myOwnershipVersion();
   }
 
-  return { getMyOwnershipStatus, peekMyOwnership, peekMyOwnershipStatus, getOwnersFor, trackMyOwnership };
+  // Tracked; changes with the account or when a ↻ replaces its data, for a resource source to key on.
+  function myOwnershipVersion(): string {
+    const account = getEffectiveCurrentAccount();
+    return account ? `${account.id}:${dataVersions(account.id)}` : '';
+  }
+
+  return {
+    getMyOwnershipStatus,
+    peekMyOwnership,
+    peekMyOwnershipStatus,
+    getOwnersFor,
+    trackMyOwnership,
+    myOwnershipVersion,
+  };
 }
 
 const defaultCache = createMyOwnershipCache();
@@ -209,3 +221,4 @@ export const peekMyOwnership = defaultCache.peekMyOwnership;
 export const peekMyOwnershipStatus = defaultCache.peekMyOwnershipStatus;
 export const getOwnersFor = defaultCache.getOwnersFor;
 export const trackMyOwnership = defaultCache.trackMyOwnership;
+export const myOwnershipVersion = defaultCache.myOwnershipVersion;

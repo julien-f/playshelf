@@ -27,7 +27,7 @@ import { decideSwipeAxis, type SwipeAxis } from './lightboxSwipe.ts';
 import { pushOverlayEntry, popOverlayEntry } from './overlayHistory.ts';
 import { buildMediaItems, mediaLabel, resolveShotIndex } from './mediaItems.ts';
 import type { MediaItem } from './mediaItems.ts';
-import { getMyOwnershipStatus, getOwnersFor } from './myOwnership.ts';
+import { getMyOwnershipStatus, getOwnersFor, myOwnershipVersion } from './myOwnership.ts';
 import type { OwnershipStatus } from './myOwnership.ts';
 import { STATUS_LABELS, getStatus, setStatus, type GameStatus } from './gameStatuses.ts';
 import { sortOwners, ownerMeterPct } from './ownerList.ts';
@@ -560,8 +560,13 @@ const panelData = createRoot(() => {
   // Both of these are free in practice — myOwnership.ts already holds the current account's
   // owned/wishlist sets (and per-member playtimes) from one fetch shared with the ✓/☆ markers on
   // every table row, so these await a resolved promise rather than making a request.
-  const ownersKey = createMemo(() => {
+  // A ↻ of the account anywhere moves myOwnershipVersion, so an open panel follows it.
+  const ownershipKey = createMemo(() => {
     const key = appidAndAccount();
+    return key == null ? null : `${key}:${myOwnershipVersion()}`;
+  });
+  const ownersKey = createMemo(() => {
+    const key = ownershipKey();
     return key == null ? null : `${key}:${ownersRev()}`;
   });
   const [owners] = createResource<GameOwner[], string>(ownersKey, () => {
@@ -570,7 +575,7 @@ const panelData = createRoot(() => {
     return panelOptions.getOwners(appid) ?? getOwnersFor(appid);
   });
 
-  const [ownership] = createResource<OwnershipStatus | null, string>(appidAndAccount, () => {
+  const [ownership] = createResource<OwnershipStatus | null, string>(ownershipKey, () => {
     const appid = openAppid();
     return appid == null ? null : getMyOwnershipStatus(appid);
   });

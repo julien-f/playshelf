@@ -4693,6 +4693,31 @@ test("D1 edge: Home's ↻ updates the ✓ marks shown elsewhere", async ({ page 
   await expect(option.locator('.game-search-badge.owned')).toBeVisible();
 });
 
+test("D1 edge: an open panel's In library badge follows a ↻ of the account", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'phone', 'the open panel covers the Updated tile on a phone');
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=bob');
+  await expect(groupRows(page)).toHaveCount(3);
+  await row(page, 'Overcooked! 2').getByText('Overcooked! 2').click(); // Bob's, not Alice's
+  await expect(page.locator('.game-panel')).toContainText('Overcooked! 2');
+  const badge = page.locator('.panel-ownership-badge.owned');
+  await expect(badge).toHaveCount(0);
+
+  // Bought since: Alice's refreshed library has it.
+  await page.route(/\/api\/common-games\?refresh=1$/, (route) => {
+    const req = route.request();
+    const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
+    if (req.postData()?.includes(ALICE.steamid)) {
+      body.games.push({ appid: 728880, name: 'Overcooked! 2' });
+      body.playtime[728880] = { [ALICE.steamid]: 0 };
+    }
+    return route.fulfill({ json: body });
+  });
+  await page.getByRole('button', { name: /^Updated\b/ }).click();
+  await expect(page.locator('.list-stat', { hasText: 'Updated' })).not.toContainText('Refreshing');
+  await expect(badge).toBeVisible();
+});
+
 test('D1 edge: an Owned list that failed to load still offers the Updated tile', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.route('**/api/common-games', (route) =>
