@@ -45,6 +45,8 @@ const {
   resolveSteamTags,
   extractDemoAppid,
   gameBasics,
+  releasedAt,
+  capByAge,
   searchStoreGames,
   searchCreatorGames,
   getProtonDbStatus,
@@ -842,9 +844,13 @@ function settleSources(appid, sources, results) {
   const failed = Object.keys(results).filter((source) => results[source].status === 'rejected');
   // A source refused because this client spent its share: the stream says so once, not per game.
   const refused = Object.values(results).find((r) => r.status === 'rejected' && r.reason?.isClientBudgetExhausted);
-  // Each source's own age: one untouched store page mustn't date the rating fetched yesterday.
+  // Each source's own age: one untouched store page mustn't date the rating fetched yesterday. An expired row's
+  // is the age of a value served after a failed refetch.
   const fetchedAts = Object.fromEntries(
-    Object.entries(sources).map(([source, cacheKey]) => [source, getCachedAt(cacheKey(appid)) ?? null]),
+    Object.entries(sources).map(([source, cacheKey]) => [
+      source,
+      getCachedAt(cacheKey(appid), { expired: true }) ?? null,
+    ]),
   );
   return { fetchedAts, ...(failed.length && { failed }), ...(refused && { limited: refused.reason.message }) };
 }
@@ -907,17 +913,21 @@ function fetchFastDetails(appid, { force = false, priority = false, storeDetails
       if (protondbRes.status === 'rejected') logDetailsError(appid, 'protondb', protondbRes.reason);
       const basics = value(basicsRes);
       // An unreleased game's empty sources expire like misses, to fill in after release; so do they when its phase is
-      // unknown (a browse item without basics, no store page cached), while a delisted game (no item) keeps its tier.
+      // unknown (a browse item without basics, no store page cached). A released or delisted (no item) game's are
+      // aged (capByAge): empty ones fill in rarely, the others settle as the game ages.
       const item = value(browseRes);
       const phase = basics ?? (item && (await gameBasics(item, appid)));
-      if ((item && !phase) || isUnreleased(phase, value(ratingRes))) {
-        for (const [cacheKey, res] of [
-          [ratingCacheKey, ratingRes],
-          [protonDbCacheKey, protondbRes],
-          [hltbCacheKey, hltbRes],
-        ]) {
-          if (res.status === 'fulfilled' && res.value == null) capExpiry(cacheKey(appid), MISS_CACHE_TTL_MS);
-        }
+      const unsure = (item && !phase) || isUnreleased(phase, value(ratingRes));
+      const released = releasedAt(phase?.releaseDate, phase?.comingSoon);
+      for (const [cacheKey, res] of [
+        [ratingCacheKey, ratingRes],
+        [protonDbCacheKey, protondbRes],
+        [hltbCacheKey, hltbRes],
+      ]) {
+        if (res.status !== 'fulfilled') continue;
+        const empty = res.value == null;
+        if (!unsure) capByAge(cacheKey(appid), released, { empty });
+        else if (empty) capExpiry(cacheKey(appid), () => Date.now() + MISS_CACHE_TTL_MS);
       }
       const tags = value(tagsRes);
       return {

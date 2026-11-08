@@ -30,7 +30,7 @@ const { _resetAuth, getHLTB } = require('../lib/hltb');
 const { _resetTagNameMap } = require('../lib/steam');
 const { _resetPickAndMix } = require('../lib/fanatical');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
-const { SESSION_TTL_MS, MISS_CACHE_TTL_MS } = require('../lib/config');
+const { SESSION_TTL_MS, MISS_CACHE_TTL_MS, RATING_CACHE_TTL_MS, EMPTY_CACHE_TTL_MS } = require('../lib/config');
 const { getMetrics } = require('../lib/metrics');
 const { getUpstreamStats } = require('../lib/upstream');
 
@@ -1470,8 +1470,9 @@ test('GET /api/game-details/:appid: ?refresh=1 re-fetches every source despite t
 
 // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times: those misses, and its
 // store page, are only true until release, so they expire like other misses instead of in a year.
+// A released game's fill in rarely: they expire in EMPTY_CACHE_TTL_MS, its store page keeps the tier.
 for (const comingSoon of [true, false]) {
-  test(`GET /api/game-details/:appid: ${comingSoon ? "an unreleased game's" : "a released game's"} empty sources ${comingSoon ? 'expire within a day' : 'keep the long tier'}`, async (t) => {
+  test(`GET /api/game-details/:appid: ${comingSoon ? "an unreleased game's" : "a released game's"} empty sources ${comingSoon ? 'expire within a day' : 'expire in 90 days'}`, async (t) => {
     _reset();
     _resetAuth();
     t.mock.method(globalThis, 'fetch', async (url) => {
@@ -1499,18 +1500,75 @@ for (const comingSoon of [true, false]) {
     });
     await api.get('/api/game-details/777').expect(200);
 
-    const later = Date.now() + MISS_CACHE_TTL_MS + 1000;
-    t.mock.method(Date, 'now', () => later);
+    const start = Date.now();
+    let now = start + MISS_CACHE_TTL_MS + 1000;
+    t.mock.method(Date, 'now', () => now);
     for (const source of ['rating', 'protondb', 'hltb', 'meta']) {
       const cachedAt = getCachedAt(`${source}:777`);
       assert.equal(cachedAt === undefined, comingSoon, source);
     }
     assert.notEqual(getCachedAt('browse:777'), undefined, 'tags are not a miss');
+    if (comingSoon) return;
+    now = start + EMPTY_CACHE_TTL_MS + 1000;
+    for (const source of ['rating', 'protondb', 'hltb']) assert.equal(getCachedAt(`${source}:777`), undefined, source);
+    assert.notEqual(getCachedAt('meta:777'), undefined, 'the store page is not empty');
   });
 }
 
+// A young game's reviews, ProtonDB reports and HLTB times settle over weeks: they live half its age at the fetch.
+test("GET /api/game-details/:appid: a 10-day-old game's sources expire in 5 days, an empty one too", async (t) => {
+  _reset();
+  _resetAuth();
+  const day = 24 * 60 * 60 * 1000;
+  const start = Date.now();
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('appdetails'))
+      return { ok: true, json: async () => ({ 790: { success: true, data: { name: 'New', type: 'game' } } }) };
+    if (url.includes('GetAppReviews'))
+      return {
+        ok: true,
+        json: async () => ({ response: { query_summary: { total_reviews: 230, total_positive: 150 } } }),
+      };
+    if (url.includes('protondb.com')) return { ok: false, status: 404 };
+    if (url.includes('search/site/init'))
+      return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+    if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+    if (url.includes('IStoreBrowseService'))
+      return {
+        ok: true,
+        json: async () => ({
+          response: {
+            store_items: [
+              {
+                success: 1,
+                tagids: [],
+                type: 0,
+                name: 'New',
+                basic_info: {},
+                assets: {},
+                release: { is_coming_soon: false, steam_release_date: Math.round((start - 10 * day) / 1000) },
+              },
+            ],
+          },
+        }),
+      };
+    if (url.includes('ajaxgetstoretags'))
+      return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  await api.get('/api/game-details/790').expect(200);
+  // The basics' date is a day (noon Pacific): its half-age is within 6 hours of the item's.
+  let now = start + 5 * day - 7 * 60 * 60 * 1000;
+  t.mock.method(Date, 'now', () => now);
+  for (const key of ['rating:790', 'protondb:790', 'hltb:790', 'browse:790'])
+    assert.notEqual(getCachedAt(key), undefined, key);
+  now = start + 5 * day + 7 * 60 * 60 * 1000;
+  for (const key of ['rating:790', 'protondb:790', 'hltb:790', 'browse:790'])
+    assert.equal(getCachedAt(key), undefined, key);
+});
+
 // An unreleased game's empty results, or one whose release phase is unknown (a browse item cached before basics were
-// requested, no store page), can't take the long tier; a delisted game's (no browse item, no store page) do.
+// requested, no store page), can't take the long tier; a delisted game's (no browse item, no store page) last 90 days.
 for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
   'a game whose release phase is unknown': { items: [{ success: 1, tagids: [] }], capped: true },
   'an unreleased game whose reviews call failed': {
@@ -1522,7 +1580,7 @@ for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
   },
   'a delisted game': { items: [], capped: false },
 })) {
-  test(`GET /api/game-details/:appid: ${label} has its empty ProtonDB result ${capped ? 'expire within a day' : 'keep the long tier'}`, async (t) => {
+  test(`GET /api/game-details/:appid: ${label} has its empty ProtonDB result ${capped ? 'expire within a day' : 'outlive a day'}`, async (t) => {
     _reset();
     _resetAuth();
     t.mock.method(console, 'warn', () => {});
@@ -1868,6 +1926,36 @@ test('GET /api/game-details/:appid: failed fetch is not cached, held off, then r
   _resetAuth(); // clears the hold-off, as its 10 minutes passing would
   await api.get('/api/game-details/406');
   assert.equal(hltbCalls, 2, 'HLTB should be retried — failed fetch must not be cached');
+});
+
+test('GET /api/game-details/:appid: a rating whose refetch fails is served from its expired row, with its age', async (t) => {
+  _reset();
+  _resetAuth();
+  t.mock.method(console, 'warn', () => {});
+  let reviewsOk = true;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('GetAppReviews'))
+      return reviewsOk
+        ? {
+            ok: true,
+            json: async () => ({
+              response: {
+                query_summary: { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' },
+              },
+            }),
+          }
+        : { ok: false, status: 503 };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const first = (await api.get('/api/game-details/407')).body.rating;
+  assert.ok(first);
+  ageCache(RATING_CACHE_TTL_MS + 1000);
+  const cachedAt = getCachedAt('rating:407', { expired: true });
+  reviewsOk = false;
+  const res = await api.get('/api/game-details/407');
+  assert.deepEqual(res.body.rating, first);
+  assert.ok(!res.body.failed?.includes('rating'));
+  assert.equal(res.body.fetchedAts.rating, cachedAt);
 });
 
 // ── POST /api/game-details/stream ────────────────────────────────────────────

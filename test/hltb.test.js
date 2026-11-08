@@ -746,6 +746,24 @@ test("getHLTB: the search warning keeps a network failure's cause", async (t) =>
   assert.match(warned, /ECONNRESET/);
 });
 
+test('getHLTB: an expired match is served when its refetch fails, and while that game is held off', async (t) => {
+  _reset([
+    ['hltb:1', { value: [{ game_id: 42, game_name: 'Portal', comp_main: 3600 }], ts: 0, expires: Date.now() - 1 }],
+  ]);
+  _resetAuth();
+  t.after(_resetAuth);
+  t.mock.method(console, 'warn', () => {});
+  let searches = 0;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('search/site/init')) return makeInitResponse();
+    searches++;
+    return { ok: false, status: 503 };
+  });
+  assert.equal((await getHLTB(1, 'Portal'))?.id, 42);
+  assert.equal((await getHLTB(1, 'Portal'))?.id, 42, 'held, still served');
+  assert.equal(searches, 1);
+});
+
 // "Unreleased" is inferred (a coming-soon browse item and no reviews), so it never hides or wipes times already cached.
 test('getHLTB: an unreleased game serves cached times, and a forced one searches instead of wiping them', async (t) => {
   _reset();

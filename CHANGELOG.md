@@ -47,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Large lists load HowLongToBeat times at a steadier pace so the site isn't blocked, and fewer requests go out for unreleased games, DLC, soundtracks and repeated refreshes
 - A list whose game details are all cached loads them with about a third less server CPU
 - Game details load with about a quarter less server CPU, reading only the store page fields the app uses
+- A recently released game's reviews, play times, ProtonDB rating and store data now refresh as it ages instead of staying a year old
 
 ### Fixed
 
