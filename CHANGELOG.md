@@ -104,6 +104,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A tag name list cached before tags expired monthly now expires within a month too
 - A game whose Steam store page comes back malformed now reports Steam's error instead of a server error
 - An account whose load and refresh both failed is asked again on the next visit instead of failing for 10 minutes
+- After two quick refreshes of an account where the second failed, the owned and wishlist marks now show the first one's data
 
 ### Development
 

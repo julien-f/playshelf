@@ -86,7 +86,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 
 - `accountsStore.ts` — `myAccount`/`currentAccount`/`recentAccounts` CRUD, `getEffectiveCurrentAccount()`, all reactive (`getEffectiveCurrentAccount()` follows the `?u=` override signal and the stored accounts).
 - `accountOverride.ts` — the `?u=` half: parse, resolve, hand to `accountsStore` as an override that is never adopted into the stored preference.
-- `accountData.ts` — owned/wishlist/friends fetches for a resolved account, each shared through one keyed cache: `CLIENT_CACHE_MAX_AGE_MS`, a ↻ replaces an in-flight fetch, a failed ↻ keeps what it would have replaced, a failed first fetch isn't kept, and `resolveAccountSlot`'s response seeds the library.
+- `accountData.ts` — owned/wishlist/friends fetches for a resolved account, each shared through one keyed cache: `CLIENT_CACHE_MAX_AGE_MS`, a ↻ replaces an in-flight fetch, a failed ↻ falls back to what it replaced (unless that failed too; restoring newer data moves the version), a failed first fetch isn't kept, and `resolveAccountSlot`'s response seeds the library.
 - `listsStore.ts` — folder/list CRUD, soft-delete, and the two structural-cycle guards (a dynamic list can't depend on itself transitively; a folder can't move into its own descendant).
 - `listResolve.ts` — resolves a `ListRef`/`GameList` to appids, with every impure dependency injected so its tests never touch the network or localStorage.
 - `combine.ts` — the pure union/intersect/subtract/group-by-membership engine over resolved sets.

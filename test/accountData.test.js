@@ -505,14 +505,14 @@ test('resolveAccountSlot: an HTML error page reads as the account failing to res
 
 // ── the account cache ─────────────────────────────────────────────────────────
 
-// Records each request's URL; each answers `state.games` as it is when the request is sent.
+// Records each request's URL; each answers (after `state.hold`) `state.games`, or fails on `state.fail`, as when sent.
 function countingFetch(t, state) {
   const urls = [];
   withFetch(t, async (url) => {
     urls.push(url);
-    if (state.fail) return { ok: false, json: async () => ({ error: 'Steam request failed' }) };
-    const appids = state.games;
-    await state.hold;
+    const { fail, games: appids, hold } = state;
+    await hold;
+    if (fail) return { ok: false, json: async () => ({ error: 'Steam request failed' }) };
     return {
       ok: true,
       json: async () => ({
@@ -580,6 +580,46 @@ test('account cache: a fetch and the refresh replacing it both failing leave not
   await assert.rejects(forced);
   state.fail = false;
   assert.equal((await fetchAccountOverview(['1'])).games.length, 1);
+  assert.equal(urls.length, 3);
+});
+
+// Two ↻ in a row, the second failing: the first one's data is the latest, so readers must re-read.
+test('account cache: a refresh that lands before the one replacing it fails is restored, moving the version', async (t) => {
+  let release;
+  const state = { games: [440] };
+  const urls = countingFetch(t, state);
+  await fetchAccountOverview(['1']);
+  const version = () => accountDataVersion('owned', ['1']);
+  const before = version();
+  Object.assign(state, { games: [440, 620], hold: new Promise((resolve) => (release = resolve)) });
+  const landing = fetchAccountOverview(['1'], { refresh: true });
+  let releaseFailure;
+  Object.assign(state, { fail: true, hold: new Promise((resolve) => (releaseFailure = resolve)) });
+  const failing = fetchAccountOverview(['1'], { refresh: true });
+  release();
+  await landing;
+  releaseFailure();
+  await assert.rejects(failing);
+  assert.equal(version(), before + 1);
+  assert.equal((await fetchAccountOverview(['1'])).games.length, 2);
+  assert.equal(urls.length, 3);
+});
+
+test('account cache: a refresh still in flight when the one replacing it fails is restored, moving the version', async (t) => {
+  let release;
+  const state = { games: [440] };
+  const urls = countingFetch(t, state);
+  await fetchAccountOverview(['1']);
+  const version = () => accountDataVersion('owned', ['1']);
+  const before = version();
+  Object.assign(state, { games: [440, 620], hold: new Promise((resolve) => (release = resolve)) });
+  const landing = fetchAccountOverview(['1'], { refresh: true });
+  Object.assign(state, { fail: true, hold: undefined });
+  await assert.rejects(fetchAccountOverview(['1'], { refresh: true }));
+  release();
+  await landing;
+  assert.equal(version(), before + 1);
+  assert.equal((await fetchAccountOverview(['1'])).games.length, 2);
   assert.equal(urls.length, 3);
 });
 

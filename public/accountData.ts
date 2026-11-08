@@ -182,6 +182,8 @@ interface CacheEntry {
   promise: Promise<unknown>;
   at: number;
   failed?: boolean;
+  // Landed while replaced: no reader was told, so restoring it moves the version.
+  unannounced?: boolean;
 }
 // One fetch per kind and account, shared by every caller (Home, a list, the panel's ✓/☆).
 const accountCache = new Map<string, CacheEntry>();
@@ -209,16 +211,22 @@ function storeEntry<T>(key: string, promise: Promise<T>): Promise<T> {
   const replaced = accountCache.get(key);
   const entry: CacheEntry = { promise, at: Date.now() };
   accountCache.set(key, entry);
+  const bump = () => versions.get(key)?.[1]((v) => v + 1);
   promise.then(
     () => {
-      if (replaced && accountCache.get(key) === entry) versions.get(key)?.[1]((v) => v + 1);
+      if (accountCache.get(key) !== entry) entry.unannounced = true;
+      else if (replaced) bump();
     },
     () => {
       entry.failed = true;
       if (accountCache.get(key) !== entry) return;
       // A failed refresh keeps what it replaced unless that failed too; else the next caller asks again.
-      if (replaced && !replaced.failed) accountCache.set(key, replaced);
-      else accountCache.delete(key);
+      if (!replaced || replaced.failed) return void accountCache.delete(key);
+      accountCache.set(key, replaced);
+      if (replaced.unannounced) {
+        replaced.unannounced = false;
+        bump();
+      }
     },
   );
   return promise;
