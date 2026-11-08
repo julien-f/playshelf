@@ -853,6 +853,10 @@ function settleSources(appid, sources, results) {
 
 const value = (res) => (res.status === 'fulfilled' ? res.value : null);
 
+// Not out yet: the store data says so and Steam reviews (sanctioned, asked anyway) agree with none, since the browse
+// item can be a year old.
+const isUnreleased = (basics, rating) => !!basics?.comingSoon && rating === null;
+
 // Everything but appdetails: these upstreams keep a faster pace than Steam's store details cap, so a list's rows fill ahead
 // of it. Force-refresh gets its own lane, never handed a normal request's result (its own reads may still be cached: FORCE_MIN_AGE_MINUTES). `priority`: one
 // game looked up, its HLTB search ahead of a list's backlog (a game already queued by a list joins its place).
@@ -871,10 +875,9 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
         store ? store : { name: (await getGameSchema(appid, { force })).name ?? null, type: null },
       );
     const ratingPromise = getGameRating(appid, { force });
-    // Not out yet: the browse item says so and Steam reviews (sanctioned, asked anyway) agree with none, since the
-    // browse item can be a year old. A failed browse item or reviews call asks ProtonDB and HLTB as usual.
-    const unreleasedPromise = basicsPromise
-      .then(async (basics) => !!basics?.comingSoon && (await ratingPromise) === null)
+    // A failed browse item or reviews call asks ProtonDB and HLTB as usual.
+    const unreleasedPromise = Promise.all([basicsPromise, ratingPromise])
+      .then(([basics, rating]) => isUnreleased(basics, rating))
       .catch(() => false);
     // A meta failure fails HLTB too, so it reads as failed, not as "no data".
     const hltbPromise = Promise.all([namedPromise, unreleasedPromise]).then(([{ name, type }, unreleased]) =>
@@ -901,9 +904,11 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
         logDetailsError(appid, 'demo', demoRes.reason);
       if (protondbRes.status === 'rejected') logDetailsError(appid, 'protondb', protondbRes.reason);
       const basics = value(basicsRes);
-      // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times; those misses
-      // expire like any other miss, so they fill in after release instead of a year later.
-      if (basics?.comingSoon) {
+      // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times; those misses expire like any other
+      // miss, so they fill in after release instead of a year later. So do they when the phase is unknown: the store
+      // part may have cached the page since `basics` was read, and without one the game may be unreleased.
+      const phase = basics ?? gameBasics(null, appid);
+      if (!phase || (ratingRes.status === 'fulfilled' && isUnreleased(phase, ratingRes.value))) {
         for (const [cacheKey, res] of [
           [ratingCacheKey, ratingRes],
           [protonDbCacheKey, protondbRes],

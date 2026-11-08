@@ -2491,3 +2491,33 @@ test('gameBasics: an item cached before basics were requested falls back to cach
   assert.deepEqual(basics.developers, ['D']);
   assert.equal('genres' in basics, false);
 });
+
+// An unreleased game's store data changes on release: rows written before that rule, on the year-long tier, too.
+test('a coming-soon store row expires within a day once read, however it was cached; a released one keeps its tier', async (t) => {
+  const now = Date.now();
+  const soon = { name: 'Soon', type: 'game', release_date: { coming_soon: true, date: 'Q4 2027' } };
+  const soonItem = { success: 1, tagids: [], release: { is_coming_soon: true } };
+  _reset([
+    ['meta:650', { value: soon, ts: now }],
+    ['meta:651', { value: soon, ts: now }],
+    ['browse:652', { value: soonItem, ts: now }],
+    ['meta:653', { value: { ...soon, release_date: { coming_soon: false } }, ts: now }],
+    ['browse:654', { value: { ...soonItem, release: { is_coming_soon: false } }, ts: now }],
+  ]);
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({ response: { store_items: [{ ...soonItem, appid: 655 }] } }),
+  }));
+  await getAppDetails(650);
+  gameBasics({ success: 1, tagids: [] }, 651);
+  await getStoreBrowseItem(652);
+  await getAppDetails(653);
+  await getStoreBrowseItem(654);
+  await getStoreBrowseItem(655);
+
+  const later = now + MISS_CACHE_TTL_MS + 1000;
+  t.mock.method(Date, 'now', () => later);
+  for (const key of ['meta:650', 'meta:651', 'browse:652', 'browse:655'])
+    assert.equal(getCachedAt(key), undefined, key);
+  for (const key of ['meta:653', 'browse:654']) assert.notEqual(getCachedAt(key), undefined, key);
+});

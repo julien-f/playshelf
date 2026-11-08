@@ -90,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A Steam sign-in that expires while the app is open now shows as signed out at the next change, instead of changes silently no longer syncing
 - The site no longer stops answering for several seconds about once an hour.
 - Achievement icons show again for recently released games.
+- An unreleased game's store data, reviews, ProtonDB and HowLongToBeat results are refreshed within a day again, instead of staying up to a year
 
 ### Development
 

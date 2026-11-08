@@ -31,7 +31,7 @@ Every key prefix belongs to a group in `lib/cache.js`'s `GROUPS` (a key matching
 
 - `MISS_CACHE_TTL_MINUTES`: no store page (`getAppDetails`), no Steam listing (`resolveSteamAppIds`/`resolveItadIds`), no achievement schema or rarity (a 403 on both, typical of an unreleased game), an HLTB or ProtonDB lookup skipped by design (a non-played type, an unreleased game, or no name — cached so ↻ can date it and the details limiter counts it as cached), an empty developer or publisher list, a Steam package or bundle with no contents, a Game Pass product with no Microsoft Store title, and store search results kept unfiltered when the demo filter failed.
 - `RESOLVE_MISS_CACHE_TTL_MINUTES`: `resolveSteamId`'s "no such account" (a typo being retried, a custom URL about to be registered). Stored as `null`; re-throws the original client error.
-- An unreleased game (`coming_soon`) gets the miss expiry for its store page and any empty rating, ProtonDB or HLTB result (`capExpiry`, from `fetchFastDetails`, reading the browse item's `is_coming_soon`); a released game's empty results keep their tier.
+- An unreleased game's store page and browse item (`coming_soon`, `is_coming_soon`) get the miss expiry, capped on every read (`capComingSoon`, `lib/steam.js`) so a row cached on the year-long tier follows. Its empty rating, ProtonDB or HLTB results get it too (`capExpiry`, from `fetchFastDetails`) when it's unreleased by the same rule as ProtonDB's skip ([integrations.md](integrations.md#protondb--undocumented-summary-endpoint)), or when its phase is unknown (no browse basics, no store page cached); a released game's empty results keep their tier.
 
 ## Refresh paths
 
