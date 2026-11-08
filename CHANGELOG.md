@@ -103,6 +103,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A released game's ProtonDB and HowLongToBeat lookups no longer wait for its Steam reviews
 - A tag name list cached before tags expired monthly now expires within a month too
 - A game whose Steam store page comes back malformed now reports Steam's error instead of a server error
+- An account whose load and refresh both failed is asked again on the next visit instead of failing for 10 minutes
 
 ### Development
 

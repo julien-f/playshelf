@@ -571,6 +571,18 @@ test('account cache: a failed refresh keeps what it would have replaced', async 
   assert.equal(urls.length, 2);
 });
 
+test('account cache: a fetch and the refresh replacing it both failing leave nothing cached', async (t) => {
+  const state = { games: [440], fail: true };
+  const urls = countingFetch(t, state);
+  const first = fetchAccountOverview(['1']);
+  const forced = fetchAccountOverview(['1'], { refresh: true });
+  await assert.rejects(first);
+  await assert.rejects(forced);
+  state.fail = false;
+  assert.equal((await fetchAccountOverview(['1'])).games.length, 1);
+  assert.equal(urls.length, 3);
+});
+
 test('account cache: an entry past the max age is fetched again', async (t) => {
   t.mock.timers.enable({ apis: ['Date'] });
   const urls = countingFetch(t, { games: [440] });

@@ -181,6 +181,7 @@ type AccountDataKind = 'owned' | 'wishlist' | 'friends';
 interface CacheEntry {
   promise: Promise<unknown>;
   at: number;
+  failed?: boolean;
 }
 // One fetch per kind and account, shared by every caller (Home, a list, the panel's ✓/☆).
 const accountCache = new Map<string, CacheEntry>();
@@ -206,16 +207,17 @@ export function accountDataVersion(kind: AccountDataKind, members: string[]): nu
 
 function storeEntry<T>(key: string, promise: Promise<T>): Promise<T> {
   const replaced = accountCache.get(key);
-  const entry = { promise, at: Date.now() };
+  const entry: CacheEntry = { promise, at: Date.now() };
   accountCache.set(key, entry);
   promise.then(
     () => {
       if (replaced && accountCache.get(key) === entry) versions.get(key)?.[1]((v) => v + 1);
     },
     () => {
+      entry.failed = true;
       if (accountCache.get(key) !== entry) return;
-      // A failed refresh keeps what it replaced; a failed first fetch leaves the next caller to ask again.
-      if (replaced) accountCache.set(key, replaced);
+      // A failed refresh keeps what it replaced unless that failed too; else the next caller asks again.
+      if (replaced && !replaced.failed) accountCache.set(key, replaced);
       else accountCache.delete(key);
     },
   );
