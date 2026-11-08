@@ -91,6 +91,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - The site no longer stops answering for several seconds about once an hour.
 - Achievement icons show again for recently released games.
 - Refreshing an account updates its ✓/☆ marks everywhere, and moving between Home, its lists and a game no longer downloads its library again
+- A game's panel reopened after a while fetches its price, bundles, news and achievements again instead of showing stale ones
 
 ### Development
 

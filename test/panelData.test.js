@@ -9,6 +9,7 @@ const {
   achievementsSteamUrl,
   PANEL_SETTLE_MS,
 } = require('../public/panelData.ts');
+const { CLIENT_CACHE_MAX_AGE_MS } = require('../public/accountData.ts');
 
 const meta = (id) => ({ name: `DLC ${id}`, capsule: `c${id}.jpg`, releaseDate: '1 Jan, 2020', comingSoon: false });
 
@@ -103,6 +104,22 @@ test('a failed forced refresh keeps what each source last loaded', async (t) => 
   // An unforced call answers from the cache synchronously, not with a promise.
   assert.equal(cache.fetchAchievements(620, members), achievements);
   assert.equal(cache.fetchPrice(620, 'FR'), price);
+});
+
+test('an entry past the max age reads as missing: refetched, and not a fallback', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'] });
+  const state = mockPanelRoutes(t, DATA);
+  const cache = createPanelDataCache();
+  await cache.fetchPrice(620, 'FR');
+  t.mock.timers.tick(CLIENT_CACHE_MAX_AGE_MS - 1);
+  assert.equal(cache.fetchPrice(620, 'FR') instanceof Promise, false, 'still fresh');
+  t.mock.timers.tick(1);
+  const asked = state.urls.length;
+  state.down = true;
+  const stale = cache.fetchPrice(620, 'FR');
+  assert.ok(stale instanceof Promise, 'refetched');
+  assert.equal(await stale, null, "yesterday's price isn't shown as a fallback");
+  assert.equal(state.urls.length, asked + 1);
 });
 
 test('price and bundles are cached per region, and asked in it', async (t) => {

@@ -13,7 +13,7 @@
 // re-rendered the entire panel body, not the one field that changed. Keeping this data off the
 // row entirely is what let all of that go; see docs/dev/frontend.md's Reactivity section.
 //
-// Each result is cached for the session, keyed by appid (plus the account, where the result is
+// Each result is cached for CLIENT_CACHE_MAX_AGE_MS, keyed by appid (plus the account, where the result is
 // account-specific), so reopening a game already seen doesn't refetch — the same guarantee the
 // old `game.news !== undefined` row-field guards gave, just held here instead of on the row.
 // A cached value is returned *synchronously* (see sessionCached): createResource resolves a
@@ -29,6 +29,7 @@
 // A factory plus a default instance, same shape (and same testability reasoning) as
 // myOwnership.ts's createMyOwnershipCache.
 import { applyPriceInfo, postPrices } from './priceLoading.ts';
+import { CLIENT_CACHE_MAX_AGE_MS } from './accountData.ts';
 import { fetchJson, refusalMessage } from './utils.ts';
 import type { Achievements, NewsItem, PriceFields } from './types.ts';
 import type { PickAndMixTier } from './bundleRows.ts';
@@ -96,6 +97,9 @@ const DLC_CONCURRENCY = 4;
 // Holding ↓ passes a game every few dozen ms: an uncached unforced load waits this long first.
 export const PANEL_SETTLE_MS = 250;
 
+// A value and when it was loaded.
+type Cached<V> = { value: V | null; at: number };
+
 // `settled`: whether the game a load was asked for is still the one open, once PANEL_SETTLE_MS has passed.
 type LoadOptions = { refresh?: boolean; settled?: () => boolean };
 
@@ -109,13 +113,17 @@ const pendingLoads = new WeakMap<Map<unknown, unknown>, Map<unknown, Promise<unk
 // `settled`, a load the panel moved on from is never sent; its caller discards the uncached null.
 // A superseded load isn't sent, or doesn't write if already sent; a paused one answers with what replaced it.
 function sessionCached<K, V>(
-  cache: Map<K, V | null>,
+  cache: Map<K, Cached<V>>,
   key: K,
   load: () => Promise<V | null>,
   { refresh = false, settled }: LoadOptions,
   refusals?: Map<K, string>,
 ): V | null | Promise<V | null> {
-  const cached = cache.get(key);
+  // Past the max age an entry is gone: neither an answer nor a failed load's fallback.
+  const entry = cache.get(key);
+  if (entry && Date.now() - entry.at >= CLIENT_CACHE_MAX_AGE_MS) cache.delete(key);
+  const cachedValue = () => cache.get(key)?.value;
+  const cached = cachedValue();
   if (!refresh && cached !== undefined) return cached;
   let pending = pendingLoads.get(cache) as Map<K, Promise<V | null>> | undefined;
   if (!pending) pendingLoads.set(cache, (pending = new Map()));
@@ -127,24 +135,24 @@ function sessionCached<K, V>(
       (value) => {
         if (!latest()) return value;
         refusals?.delete(key);
-        cache.set(key, value);
+        cache.set(key, { value, at: Date.now() });
         return value;
       },
       (err: unknown) => {
-        const value = cache.get(key) ?? null;
+        const value = cachedValue() ?? null;
         if (!latest()) return value;
         const refusal = refusalMessage(err);
         if (refusal) refusals?.set(key, refusal);
         else refusals?.delete(key);
         // A refusal passes with its window: the next open asks again.
-        if (!refusal || cache.has(key)) cache.set(key, value);
+        if (!refusal && !cache.has(key)) cache.set(key, { value, at: Date.now() });
         return value;
       },
     );
   const call: Promise<V | null> =
     !refresh && settled
       ? new Promise((resolve) => setTimeout(resolve, PANEL_SETTLE_MS)).then(() =>
-          !settled() ? null : latest() ? run() : (pending.get(key) ?? cache.get(key) ?? null),
+          !settled() ? null : latest() ? run() : (pending.get(key) ?? cachedValue() ?? null),
         )
       : run();
   pending.set(key, call);
@@ -153,15 +161,15 @@ function sessionCached<K, V>(
 }
 
 export function createPanelDataCache() {
-  const news = new Map<number, PanelNews>();
-  const achievements = new Map<string, PanelAchievements>();
-  const price = new Map<string, PanelPrice>(); // keyed `region:appid`, like bundles
+  const news = new Map<number, Cached<NewsItem[]>>();
+  const achievements = new Map<string, Cached<Achievements>>();
+  const price = new Map<string, Cached<PriceFields>>(); // keyed `region:appid`, like bundles
   // Why a key's last achievements, price or bundles lookup was refused, keyed like its cache.
   const achievementsRefused = new Map<string, string>();
   const priceRefused = new Map<string, string>();
   const bundlesRefused = new Map<string, string>();
   const dlcEntries = new Map<number, DlcEntry | null>(); // null: the store has no entry for it
-  const bundles = new Map<string, PanelBundles>();
+  const bundles = new Map<string, Cached<GameBundle[]>>();
 
   // Lazily resolved once per session rather than per-call — a plain GET /api/health, cheap to
   // over-share across every game a price is fetched for and every list mounted (ListRoute.tsx).
