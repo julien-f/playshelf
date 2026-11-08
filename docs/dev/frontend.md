@@ -86,7 +86,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 
 - `accountsStore.ts` — `myAccount`/`currentAccount`/`recentAccounts` CRUD, `getEffectiveCurrentAccount()`, all reactive (`getEffectiveCurrentAccount()` follows the `?u=` override signal and the stored accounts).
 - `accountOverride.ts` — the `?u=` half: parse, resolve, hand to `accountsStore` as an override that is never adopted into the stored preference.
-- `accountData.ts` — owned/wishlist/overview fetches for a resolved account.
+- `accountData.ts` — owned/wishlist/friends fetches for a resolved account, each shared through one keyed cache: `CLIENT_CACHE_MAX_AGE_MS`, a ↻ replaces an in-flight fetch, a failure isn't kept, and `resolveAccountSlot`'s response seeds the library.
 - `listsStore.ts` — folder/list CRUD, soft-delete, and the two structural-cycle guards (a dynamic list can't depend on itself transitively; a folder can't move into its own descendant).
 - `listResolve.ts` — resolves a `ListRef`/`GameList` to appids, with every impure dependency injected so its tests never touch the network or localStorage.
 - `combine.ts` — the pure union/intersect/subtract/group-by-membership engine over resolved sets.
@@ -151,7 +151,7 @@ Four kinds of state, four mechanisms:
 
 - **Shared app state** (prefs, the signed-in user, the `?u=` override and its resolve state, the ownership cache) is a signal owned by its module, read through its getter, so a reader in JSX, a memo, an effect or a table cell `render` follows it with no window event, ready callback or tick counter.
   - `getPref` tracks its key: one signal per key, so a table-view write doesn't rerun a region reader. The account getters build on it; `getAuthUser()`, `getAccountOverride()` and `getAccountOverrideState()` read their own signals.
-  - `myOwnership.ts`'s peeks track a signal bumped once the owned/wishlist sets land. An imperative consumer (the nav search dropdown, `ListRoute`'s row stamps) subscribes with `trackMyOwnership()`, which starts no fetch.
+  - `myOwnership.ts`'s peeks track a signal bumped once the owned/wishlist sets land, and `accountData.ts`'s per-account version, which a ↻ anywhere moves: the sets are re-derived, the old ones shown until then. An imperative consumer (the nav search dropdown, `ListRoute`'s row stamps) subscribes with `trackMyOwnership()`, which starts no fetch.
   - Keyed reloads go through a primitive memo (`createMemo(currentRegion)`, an account's `?.id`), since `getPref` returns a fresh object on every read.
   - An effect that writes prefs reads its pref inside `on(...)` or `untrack`, or it reruns on its own write. `adoptPrefEntry` is the one silent write (the merge reloads the page right after).
 

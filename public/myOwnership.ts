@@ -26,7 +26,12 @@
 // own "no badge at all" behavior.
 import { createSignal } from 'solid-js';
 import { getEffectiveCurrentAccount } from './accountsStore.ts';
-import { fetchAccountOwnedData, fetchAccountWishlistData } from './accountData.ts';
+import {
+  accountDataVersion,
+  fetchAccountOwnedData,
+  fetchAccountWishlistData,
+  membersFromAccountId,
+} from './accountData.ts';
 import type { AccountLibraryGame, GameOwner } from './accountData.ts';
 import { fmtLastPlayed, hoursFromMinutes } from './utils.ts';
 
@@ -62,6 +67,7 @@ export interface MyOwnershipPeek {
 // tests create their own via `createMyOwnershipCache()` instead.
 export function createMyOwnershipCache() {
   let cachedAccountId: string | null = null;
+  let cachedVersions: string | null = null; // dataVersions() the sets were fetched at
   let ownedPromise: Promise<unknown> | null = null;
   let wishlistPromise: Promise<Set<number>> | null = null;
   let ownedGames: Map<number, AccountLibraryGame> | null = null;
@@ -79,22 +85,33 @@ export function createMyOwnershipCache() {
     if (ownedGames && wishlistSet) notifyLoaded();
   }
 
+  // Tracked: the account data's versions, which a ↻ anywhere moves (accountData.ts).
+  function dataVersions(accountId: string): string {
+    const members = membersFromAccountId(accountId);
+    return `${accountDataVersion('owned', members)}:${accountDataVersion('wishlist', members)}`;
+  }
+
   // Starts (or reuses) the two fetches for whatever `currentAccount` currently is. Returns false
   // with no fetch at all when nothing is loaded — the "no badge" case throughout this module.
   function ensureLoading(): boolean {
     const account = getEffectiveCurrentAccount();
     if (!account) {
-      cachedAccountId = null;
+      cachedAccountId = cachedVersions = null;
       ownedPromise = wishlistPromise = null;
       ownedGames = wishlistSet = null;
       return false;
     }
-    if (account.id === cachedAccountId) return true;
+    const versions = dataVersions(account.id);
+    if (account.id === cachedAccountId && versions === cachedVersions) return true;
+    // A refreshed account keeps its sets until the new ones land, so its markers don't blink.
+    if (account.id !== cachedAccountId) {
+      ownedGames = null;
+      wishlistSet = null;
+      ownedFailed = wishlistFailed = false;
+      ownersMap = new Map();
+    }
     cachedAccountId = account.id;
-    ownedGames = null;
-    wishlistSet = null;
-    ownedFailed = wishlistFailed = false;
-    ownersMap = new Map();
+    cachedVersions = versions;
     // Each response writes only while it's still the current fetch: a slower one for an account
     // switched away from must not overwrite the new account's sets.
     const owned: Promise<void> = fetchAccountOwnedData(account.id)
@@ -179,7 +196,8 @@ export function createMyOwnershipCache() {
   // Subscribes an imperative consumer's effect to what the peeks depend on, before it has anything to peek.
   function trackMyOwnership(): void {
     loaded();
-    getEffectiveCurrentAccount();
+    const account = getEffectiveCurrentAccount();
+    if (account) dataVersions(account.id);
   }
 
   return { getMyOwnershipStatus, peekMyOwnership, peekMyOwnershipStatus, getOwnersFor, trackMyOwnership };
