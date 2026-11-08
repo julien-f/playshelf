@@ -29,7 +29,7 @@
 // A factory plus a default instance, same shape (and same testability reasoning) as
 // myOwnership.ts's createMyOwnershipCache.
 import { applyPriceInfo, postPrices } from './priceLoading.ts';
-import { CLIENT_CACHE_MAX_AGE_MS, fetchJson, refusalMessage } from './utils.ts';
+import { isClientCacheFresh, fetchJson, refusalMessage } from './utils.ts';
 import type { Achievements, NewsItem, PriceFields } from './types.ts';
 import type { PickAndMixTier } from './bundleRows.ts';
 
@@ -120,7 +120,7 @@ function sessionCached<K, V>(
 ): V | null | Promise<V | null> {
   // Past the max age an entry is gone: neither an answer nor a failed load's fallback.
   const entry = cache.get(key);
-  if (entry && Date.now() - entry.at >= CLIENT_CACHE_MAX_AGE_MS) cache.delete(key);
+  if (entry && !isClientCacheFresh(entry.at)) cache.delete(key);
   const cachedValue = () => cache.get(key)?.value;
   const cached = cachedValue();
   if (!refresh && cached !== undefined) return cached;

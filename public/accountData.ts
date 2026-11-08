@@ -6,7 +6,7 @@
 // that belongs here; ListRoute.tsx owns the equivalent orchestration generically, for any list
 // kind, not just account-scoped ones.
 import { createSignal, type Signal } from 'solid-js';
-import { CLIENT_CACHE_MAX_AGE_MS, steamVanity, fmtLastPlayed, postJson, safeHref } from './utils.ts';
+import { isClientCacheFresh, steamVanity, fmtLastPlayed, postJson, safeHref } from './utils.ts';
 import { accountIdFor } from './accountsStore.ts';
 import type { AccountSlot } from './types.ts';
 
@@ -191,7 +191,7 @@ const versions = new Map<string, Signal<number>>();
 
 const cacheKey = (kind: AccountDataKind, members: string[]) => `${kind}:${accountIdFor(members)}`;
 const isFresh = (entry: CacheEntry | undefined): entry is CacheEntry =>
-  entry !== undefined && Date.now() - entry.at < CLIENT_CACHE_MAX_AGE_MS;
+  entry !== undefined && isClientCacheFresh(entry.at);
 
 function versionSignal(key: string): Signal<number> {
   let signal = versions.get(key);
