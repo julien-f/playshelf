@@ -45,6 +45,8 @@ const {
   resolveSteamTags,
   extractDemoAppid,
   gameBasics,
+  releasedAt,
+  capByAge,
   searchStoreGames,
   searchCreatorGames,
   getProtonDbStatus,
@@ -109,7 +111,7 @@ const {
   prefFits,
   PREFS_MAX_BYTES,
 } = require('./lib/auth');
-const { SESSION_TTL_MS, MISS_CACHE_TTL_MS, EMPTY_CACHE_TTL_MS, TRUST_PROXY, PUBLIC_ORIGIN } = require('./lib/config');
+const { SESSION_TTL_MS, MISS_CACHE_TTL_MS, TRUST_PROXY, PUBLIC_ORIGIN } = require('./lib/config');
 
 const HOST = process.env.HOST;
 const PORT = process.env.PORT;
@@ -911,20 +913,21 @@ function fetchFastDetails(appid, { force = false, priority = false, storeDetails
       if (protondbRes.status === 'rejected') logDetailsError(appid, 'protondb', protondbRes.reason);
       const basics = value(basicsRes);
       // An unreleased game's empty sources expire like misses, to fill in after release; so do they when its phase is
-      // unknown (a browse item without basics, no store page cached). A released or delisted (no item) game's fill in
-      // rarely: EMPTY_CACHE_TTL_MS from their fetch.
+      // unknown (a browse item without basics, no store page cached). A released or delisted (no item) game's are
+      // aged (capByAge): empty ones fill in rarely, the others settle as the game ages.
       const item = value(browseRes);
       const phase = basics ?? (item && (await gameBasics(item, appid)));
-      const capOf =
-        (item && !phase) || isUnreleased(phase, value(ratingRes))
-          ? () => Date.now() + MISS_CACHE_TTL_MS
-          : (ts) => ts + EMPTY_CACHE_TTL_MS;
+      const unsure = (item && !phase) || isUnreleased(phase, value(ratingRes));
+      const released = releasedAt(phase?.releaseDate, phase?.comingSoon);
       for (const [cacheKey, res] of [
         [ratingCacheKey, ratingRes],
         [protonDbCacheKey, protondbRes],
         [hltbCacheKey, hltbRes],
       ]) {
-        if (res.status === 'fulfilled' && res.value == null) capExpiry(cacheKey(appid), capOf);
+        if (res.status !== 'fulfilled') continue;
+        const empty = res.value == null;
+        if (!unsure) capByAge(cacheKey(appid), released, { empty });
+        else if (empty) capExpiry(cacheKey(appid), () => Date.now() + MISS_CACHE_TTL_MS);
       }
       const tags = value(tagsRes);
       return {

@@ -32,6 +32,8 @@ const {
   getGameSchema,
   getPlayerAchievements,
   getGlobalAchievementPercentages,
+  releasedAt,
+  capByAge,
   getGameNews,
   _resetTagNameMap,
   _resetPauses,
@@ -41,7 +43,7 @@ const { _reset, getCachedAt, setCache } = require('../lib/cache');
 const { getCircuitBreakers, _resetCircuitBreakers } = require('../lib/circuitBreaker');
 const { DatabaseSync } = require('node:sqlite');
 const { db, migrate, MIGRATIONS } = require('../lib/db');
-const { MISS_CACHE_TTL_MS, META_CACHE_TTL_MS } = require('../lib/config');
+const { MISS_CACHE_TTL_MS, META_CACHE_TTL_MS, EMPTY_CACHE_TTL_MS } = require('../lib/config');
 
 // The tag-name map's failure hold-off outlives _reset(), which only empties the cache.
 beforeEach(_resetTagNameMap);
@@ -2675,4 +2677,99 @@ test('an empty reviews `response`, a browse item without success and an empty Ge
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ response: {} }) }));
   assert.equal(await getStoreBrowseItem(667), null);
   assert.notEqual(getCachedAt('browse:667'), undefined);
+});
+
+// ── age-based expiry (C317) ──────────────────────────────────────────────────
+
+const DAY = 24 * 60 * 60 * 1000;
+
+test('releasedAt: a full date at noon Pacific; a partial date, coming soon or none is unknown', () => {
+  assert.equal(releasedAt('Oct 21, 2026', false), Date.parse('2026-10-21T20:00:00Z'));
+  for (const date of ['2026', 'Oct 2026', 'October 2026', 'Fall 2026', 'Q4 2026', 'Coming soon', '', undefined])
+    assert.equal(releasedAt(date, false), null, String(date));
+  assert.equal(releasedAt('Oct 21, 2026', true), null);
+});
+
+// Each case: a row written at `ts` of a game released at `released`; when it expires.
+for (const [label, { age, released = 'known', empty = false, expiresIn }] of Object.entries({
+  'a 10-day-old game lives 5 days': { age: 10 * DAY, expiresIn: 5 * DAY },
+  'a game fetched before its release lives a day': { age: -3 * DAY, expiresIn: DAY },
+  'a game fetched on release day lives a day': { age: 0, expiresIn: DAY },
+  'a 3-year-old game keeps its tier': { age: 3 * 365 * DAY, expiresIn: META_CACHE_TTL_MS },
+  'an empty result of a 3-year-old game lives 90 days': {
+    age: 3 * 365 * DAY,
+    empty: true,
+    expiresIn: EMPTY_CACHE_TTL_MS,
+  },
+  'an unknown release keeps the tier': { age: 10 * DAY, released: null, expiresIn: META_CACHE_TTL_MS },
+  "an unknown release's empty result lives 90 days": {
+    age: 10 * DAY,
+    released: null,
+    empty: true,
+    expiresIn: EMPTY_CACHE_TTL_MS,
+  },
+})) {
+  test(`capByAge: ${label}`, (t) => {
+    const ts = Date.now();
+    _reset([['hltb:1', { value: [], ts }]]);
+    capByAge('hltb:1', released === null ? null : ts - age, { empty });
+    let now = ts + expiresIn - 1000;
+    t.mock.method(Date, 'now', () => now);
+    assert.notEqual(getCachedAt('hltb:1'), undefined, 'live just before');
+    now = ts + expiresIn + 1000;
+    assert.equal(getCachedAt('hltb:1'), undefined, 'expired just after');
+  });
+}
+
+test('capByAge: a cap already past moves to within a week, spread by appid, and stays put on the next read', (t) => {
+  const now = Date.now();
+  const ts = now - 20 * DAY;
+  _reset([
+    ['rating:0', { value: {}, ts }],
+    ['rating:30', { value: {}, ts }],
+  ]);
+  const writes = () => db.prepare('SELECT total_changes() AS n').get().n;
+  for (const key of ['rating:0', 'rating:30']) capByAge(key, ts - 10 * DAY); // cap at ts + 5 days: past
+  const before = writes();
+  capByAge('rating:30', ts - 10 * DAY);
+  assert.equal(writes(), before, 'no second write');
+  t.mock.method(Date, 'now', () => now + 1000);
+  assert.equal(getCachedAt('rating:0'), undefined, 'appid 0: now');
+  assert.equal(getCachedAt('rating:30', { expired: true }), ts);
+  t.mock.method(Date, 'now', () => now + 30 * 60 * 60 * 1000 - 1000);
+  assert.notEqual(getCachedAt('rating:30'), undefined, 'appid 30: 30 hours from now');
+});
+
+test('a store page, its browse item and its rarity expire by the age of the game; the page rows together', async (t) => {
+  const now = Date.now();
+  const released = now - 10 * DAY;
+  const date = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'America/Los_Angeles',
+  }).format(released);
+  const page = { name: 'New', type: 'game', release_date: { coming_soon: false, date } };
+  const item = { success: 1, tagids: [], release: { is_coming_soon: false, steam_release_date: released / 1000 } };
+  _reset([
+    ['appdetails:660', { value: page, ts: now }],
+    ['meta:660', { value: page, ts: now }],
+    ['browse:660', { value: item, ts: now }],
+  ]);
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({ achievementpercentages: { achievements: [{ name: 'A', percent: '50.0' }] } }),
+  }));
+  await getAppDetails(660);
+  await getStoreBrowseItem(660);
+  await getGlobalAchievementPercentages(660);
+
+  // The page's date is a day (noon Pacific), so its half-age is within 6 hours of the item's.
+  let at = now + 5 * DAY - 7 * 60 * 60 * 1000;
+  t.mock.method(Date, 'now', () => at);
+  for (const key of ['appdetails:660', 'meta:660', 'browse:660', 'achrarity:660'])
+    assert.notEqual(getCachedAt(key), undefined, key);
+  at = now + 5 * DAY + 7 * 60 * 60 * 1000;
+  for (const key of ['appdetails:660', 'meta:660', 'browse:660', 'achrarity:660'])
+    assert.equal(getCachedAt(key), undefined, key);
 });

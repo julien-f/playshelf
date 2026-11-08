@@ -1515,6 +1515,58 @@ for (const comingSoon of [true, false]) {
   });
 }
 
+// A young game's reviews, ProtonDB reports and HLTB times settle over weeks: they live half its age at the fetch.
+test("GET /api/game-details/:appid: a 10-day-old game's sources expire in 5 days, an empty one too", async (t) => {
+  _reset();
+  _resetAuth();
+  const day = 24 * 60 * 60 * 1000;
+  const start = Date.now();
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('appdetails'))
+      return { ok: true, json: async () => ({ 790: { success: true, data: { name: 'New', type: 'game' } } }) };
+    if (url.includes('GetAppReviews'))
+      return {
+        ok: true,
+        json: async () => ({ response: { query_summary: { total_reviews: 230, total_positive: 150 } } }),
+      };
+    if (url.includes('protondb.com')) return { ok: false, status: 404 };
+    if (url.includes('search/site/init'))
+      return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+    if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+    if (url.includes('IStoreBrowseService'))
+      return {
+        ok: true,
+        json: async () => ({
+          response: {
+            store_items: [
+              {
+                success: 1,
+                tagids: [],
+                type: 0,
+                name: 'New',
+                basic_info: {},
+                assets: {},
+                release: { is_coming_soon: false, steam_release_date: Math.round((start - 10 * day) / 1000) },
+              },
+            ],
+          },
+        }),
+      };
+    if (url.includes('ajaxgetstoretags'))
+      return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  await api.get('/api/game-details/790').expect(200);
+  // The basics' date is a day (noon Pacific): its half-age is within 6 hours of the item's.
+  let now = start + 5 * day - 7 * 60 * 60 * 1000;
+  t.mock.method(Date, 'now', () => now);
+  for (const key of ['rating:790', 'protondb:790', 'hltb:790', 'browse:790'])
+    assert.notEqual(getCachedAt(key), undefined, key);
+  now = start + 5 * day + 7 * 60 * 60 * 1000;
+  for (const key of ['rating:790', 'protondb:790', 'hltb:790', 'browse:790'])
+    assert.equal(getCachedAt(key), undefined, key);
+});
+
 // An unreleased game's empty results, or one whose release phase is unknown (a browse item cached before basics were
 // requested, no store page), can't take the long tier; a delisted game's (no browse item, no store page) last 90 days.
 for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
@@ -1528,7 +1580,7 @@ for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
   },
   'a delisted game': { items: [], capped: false },
 })) {
-  test(`GET /api/game-details/:appid: ${label} has its empty ProtonDB result ${capped ? 'expire within a day' : 'keep the long tier'}`, async (t) => {
+  test(`GET /api/game-details/:appid: ${label} has its empty ProtonDB result ${capped ? 'expire within a day' : 'outlive a day'}`, async (t) => {
     _reset();
     _resetAuth();
     t.mock.method(console, 'warn', () => {});
