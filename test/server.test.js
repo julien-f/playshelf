@@ -3092,6 +3092,42 @@ test('GET /api/bundles: the expired pages a first page walks date it, and ?refre
   assert.ok(res.body.fetchedAt >= now, String(res.body.fetchedAt));
 });
 
+test('GET /api/bundles?refresh=1: a forced expired page that fails falls back to its cached row', async (t) => {
+  process.env.ITAD_API_KEY = 'test-itad-key';
+  const now = Date.now();
+  const killer = {
+    id: 16542,
+    title: 'Build Your Own Killer Bundle',
+    page: { name: 'Fanatical' },
+    url: 'https://www.fanatical.com/en/pick-and-mix/byo-killer',
+    publish: '2026-09-07T13:00:00Z',
+    tiers: [],
+  };
+  const oldTs = now - 6 * 60 * 60 * 1000;
+  _reset([
+    ['itad-bundles:US:-publish:false:0:50', { value: [{ id: 1, title: 'Humble One' }], ts: oldTs }],
+    ['itad-bundles:US:-publish:true:0:50', { value: [killer], ts: oldTs }],
+    [
+      'fanatical-pnm:v3',
+      {
+        value: { 'byo-killer': { tiers: [], products: [], type: 'bundle', validUntil: '2099-11-13T23:59:00.000Z' } },
+        ts: now,
+      },
+    ],
+  ]);
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (new URL(url).searchParams.get('expired') === 'true') return { ok: false, status: 503, json: async () => ({}) };
+    return { ok: true, json: async () => [{ id: 1, title: 'Humble One' }] };
+  });
+
+  const res = await api.get('/api/bundles?limit=50&refresh=1').expect(200);
+  assert.deepEqual(
+    res.body.bundles.map((b) => b.id),
+    [1, 16542],
+  );
+  assert.equal(res.body.fetchedAt, oldTs);
+});
+
 test('GET /api/game-bundles/:appid: a bundle ITAD expired early is added from the cached list pages', async (t) => {
   _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';

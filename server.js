@@ -1012,7 +1012,11 @@ app.get('/api/bundles', bundlesListLimit, requireItad, async (req, res) => {
     if (!expired && offset === 0 && bundles.length < limit) {
       const revived = await findEarlyExpired(bundles, (params) => {
         pageKeys.push(bundlesCacheKey({ country, ...params }));
-        return getBundles({ country, ...params, force });
+        // A forced revival page that fails keeps its cached row: the ↻ shouldn't lose the whole list over it.
+        return getBundles({ country, ...params, force }).catch((err) => {
+          if (!force) throw err;
+          return getBundles({ country, ...params });
+        });
       });
       bundles = [...bundles, ...revived];
     }
