@@ -3414,7 +3414,7 @@ test('L5 edge: Short games keeps barely played games with a short main story, kn
   await expect(page.locator('.pref-unsaved-banner')).toBeHidden(); // a fresh view has nothing to save
 });
 
-test('L5 edge: Runs on Linux keeps ProtonDB Gold or better, native ports included', async ({ page }) => {
+test('L5 edge: Runs on Linux keeps ProtonDB Gold or better', async ({ page }) => {
   await asPlayer(page, CAROL);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(CAROL.owned.length);

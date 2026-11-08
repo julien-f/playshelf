@@ -5,7 +5,7 @@ import { getPref, setPref } from './prefs.ts';
 import { stripTransientViewFields } from './tableViewSync.ts';
 import type { SavedView } from './types.ts';
 import { DEAL_RECORD_TIERS } from './utils.ts';
-import { STATUS_LABELS } from './gameStatuses.ts';
+import { STATUS_LABELS, type GameStatus } from './gameStatuses.ts';
 import { COMING_SOON, availabilityOf, protonDbValue } from './gameColumns.ts';
 
 export type ViewKind = 'owned' | 'wishlist';
@@ -79,9 +79,14 @@ export interface ViewTemplate {
 // Barely played isn't unplayed: a game finished elsewhere or dropped early isn't one to play next, nor one not out yet.
 const NOT_DONE = { status: [STATUS_LABELS.finished, STATUS_LABELS.abandoned], availability: [COMING_SOON] };
 
-// Whether Play next lists `game`, given the viewer's status for it: its bounds, for the count that opens it.
-export const isPlayNextCandidate = (game: { playtime?: number; comingSoon?: boolean }, status: unknown): boolean =>
-  (game.playtime ?? 0) <= PLAY_NEXT_MAX_HOURS && !status && availabilityOf(game) !== COMING_SOON;
+// Whether Play next lists `game`, given the viewer's status for it: its own bounds, for the count that opens it.
+export const isPlayNextCandidate = (
+  game: { playtime?: number; comingSoon?: boolean },
+  status: GameStatus | null | undefined,
+): boolean =>
+  (game.playtime ?? 0) <= PLAY_NEXT_MAX_HOURS &&
+  !(status && NOT_DONE.status.includes(STATUS_LABELS[status])) &&
+  !NOT_DONE.availability.includes(availabilityOf(game));
 
 // Price Status at a 1-year low or better.
 const BARGAIN_STATUSES = DEAL_RECORD_TIERS.filter((t) => t.tier !== '3mo').map((t) => t.statusLabel);

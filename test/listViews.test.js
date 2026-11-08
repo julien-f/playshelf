@@ -115,7 +115,8 @@ test('isPlayNextCandidate: played 2 h or less, no status, released', () => {
   assert.equal(isPlayNextCandidate({ playtime: 2 }, null), true);
   assert.equal(isPlayNextCandidate({}, null), true);
   assert.equal(isPlayNextCandidate({ playtime: 2.1 }, null), false);
-  assert.equal(isPlayNextCandidate({ playtime: 0 }, 'Finished'), false);
+  assert.equal(isPlayNextCandidate({ playtime: 0 }, 'finished'), false);
+  assert.equal(isPlayNextCandidate({ playtime: 0 }, 'abandoned'), false);
   assert.equal(isPlayNextCandidate({ playtime: 0, comingSoon: true }, null), false);
 });
 
