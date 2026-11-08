@@ -123,6 +123,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Pushing after a UI commit runs only the phone e2e half: each width's pass is remembered
 - db-query.js reads the statement from stdin, so a multi-line query needs no shell quoting
 - Shipped migrations no longer change when a cache group is added
+- The test suite checks that the cache tier table in docs/dev/data.md matches the cache groups in the code
 
 ## [0.12.0] - 2026-10-30
 

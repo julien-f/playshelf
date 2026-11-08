@@ -9,6 +9,7 @@ const {
   getCacheEntryCounts,
   createCachedFetch,
   isAnsweredFromCache,
+  isCached,
   capExpiry,
   _reset,
 } = require('../lib/cache');
@@ -192,7 +193,7 @@ test('getCached: a forced read of a library row refetches however young', () => 
   _reset([['games:k', { value: 'v', ts: Date.now() - 60_000 }]]);
   assert.equal(getCached('games:k', { force: true }), undefined);
   assert.equal(isAnsweredFromCache('games:k', { force: true }), false);
-  assert.equal(isAnsweredFromCache('games:k'), true);
+  assert.equal(isCached('games:k'), true);
 });
 
 // ── createCachedFetch ─────────────────────────────────────────────────────────
