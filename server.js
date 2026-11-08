@@ -896,7 +896,8 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
       protondbPromise,
       basicsPromise,
       namedPromise,
-    ]).then(([ratingRes, hltbRes, tagsRes, demoRes, protondbRes, basicsRes, namedRes]) => {
+      browsePromise,
+    ]).then(([ratingRes, hltbRes, tagsRes, demoRes, protondbRes, basicsRes, namedRes, browseRes]) => {
       if (ratingRes.status === 'rejected') logDetailsError(appid, 'rating', ratingRes.reason);
       if (hltbRes.status === 'rejected') logDetailsError(appid, 'hltb', hltbRes.reason);
       if (tagsRes.status === 'rejected') logDetailsError(appid, 'tags', tagsRes.reason);
@@ -905,10 +906,11 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
       if (protondbRes.status === 'rejected') logDetailsError(appid, 'protondb', protondbRes.reason);
       const basics = value(basicsRes);
       // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times; those misses expire like any other
-      // miss, so they fill in after release instead of a year later. So do they when the phase is unknown: the store
-      // part may have cached the page since `basics` was read, and without one the game may be unreleased.
-      const phase = basics ?? gameBasics(null, appid);
-      if (!phase || (ratingRes.status === 'fulfilled' && isUnreleased(phase, ratingRes.value))) {
+      // miss, so they fill in after release instead of a year later (a failed reviews call counts as none: the cautious
+      // side). So when the phase is unknown: an item without basics, no store page cached by now. No item is a delisted game.
+      const item = value(browseRes);
+      const phase = basics ?? (item && gameBasics(item, appid));
+      if ((item && !phase) || isUnreleased(phase, value(ratingRes))) {
         for (const [cacheKey, res] of [
           [ratingCacheKey, ratingRes],
           [protonDbCacheKey, protondbRes],

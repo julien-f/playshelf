@@ -1484,31 +1484,51 @@ for (const comingSoon of [true, false]) {
   });
 }
 
-// With neither the browse item's basics nor a store page, the game may be unreleased: its misses can't take the long tier.
-test('GET /api/game-details/:appid: a game whose release phase is unknown has its empty sources expire within a day', async (t) => {
-  _reset();
-  _resetAuth();
-  t.mock.method(console, 'warn', () => {});
-  t.mock.method(globalThis, 'fetch', async (url) => {
-    if (url.includes('appdetails')) return { ok: false, status: 503 };
-    if (url.includes('GetAppReviews'))
-      return {
-        ok: true,
-        json: async () => ({ response: { query_summary: { total_reviews: 0, total_positive: 0 } } }),
-      };
-    if (url.includes('protondb.com')) return { ok: false, status: 404 };
-    if (url.includes('IStoreBrowseService'))
-      return { ok: true, json: async () => ({ response: { store_items: [{ success: 1, tagids: [] }] } }) };
-    if (url.includes('ajaxgetstoretags'))
-      return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
-    throw new Error(`Unexpected fetch: ${url}`);
-  });
-  await api.get('/api/game-details/780').expect(200);
+// An unreleased game's empty results, or one whose release phase is unknown (a browse item cached before basics were
+// requested, no store page), can't take the long tier; a delisted game's (no browse item, no store page) do.
+for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
+  'a game whose release phase is unknown': { items: [{ success: 1, tagids: [] }], capped: true },
+  'an unreleased game whose reviews call failed': {
+    items: [
+      { success: 1, tagids: [], type: 0, name: 'G', basic_info: {}, assets: {}, release: { is_coming_soon: true } },
+    ],
+    reviewsFail: true,
+    capped: true,
+  },
+  'a delisted game': { items: [], capped: false },
+})) {
+  test(`GET /api/game-details/:appid: ${label} has its empty ProtonDB result ${capped ? 'expire within a day' : 'keep the long tier'}`, async (t) => {
+    _reset();
+    _resetAuth();
+    t.mock.method(console, 'warn', () => {});
+    t.mock.method(globalThis, 'fetch', async (url) => {
+      if (url.includes('appdetails')) return { ok: true, json: async () => ({ 780: { success: false } }) };
+      if (url.includes('GetSchemaForGame')) return { ok: true, json: async () => ({ game: {} }) };
+      if (url.includes('GetAppReviews')) {
+        if (reviewsFail) return { ok: false, status: 503 };
+        return {
+          ok: true,
+          json: async () => ({ response: { query_summary: { total_reviews: 0, total_positive: 0 } } }),
+        };
+      }
+      if (url.includes('protondb.com')) return { ok: false, status: 404 };
+      if (url.includes('search/site/init'))
+        return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+      if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+      if (url.includes('IStoreBrowseService'))
+        return { ok: true, json: async () => ({ response: { store_items: items } }) };
+      if (url.includes('ajaxgetstoretags'))
+        return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    await api.get('/api/game-details/780').expect(200);
+    assert.notEqual(getCachedAt('protondb:780'), undefined, 'asked and cached');
 
-  const later = Date.now() + MISS_CACHE_TTL_MS + 1000;
-  t.mock.method(Date, 'now', () => later);
-  for (const source of ['rating', 'protondb']) assert.equal(getCachedAt(`${source}:780`), undefined, source);
-});
+    const later = Date.now() + MISS_CACHE_TTL_MS + 1000;
+    t.mock.method(Date, 'now', () => later);
+    assert.equal(getCachedAt('protondb:780') === undefined, capped);
+  });
+}
 
 // ProtonDB has no reports, nor HLTB times, for a game not out yet: one the browse item calls coming soon and
 // Steam reviews (asked anyway) call unreviewed, since the browse item can be a year old (data.md). Nor ProtonDB for
