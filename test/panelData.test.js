@@ -9,7 +9,7 @@ const {
   achievementsSteamUrl,
   PANEL_SETTLE_MS,
 } = require('../public/panelData.ts');
-const { CLIENT_CACHE_MAX_AGE_MS } = require('../public/accountData.ts');
+const { CLIENT_CACHE_MAX_AGE_MS } = require('../public/utils.ts');
 
 const meta = (id) => ({ name: `DLC ${id}`, capsule: `c${id}.jpg`, releaseDate: '1 Jan, 2020', comingSoon: false });
 

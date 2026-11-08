@@ -6,7 +6,7 @@
 // that belongs here; ListRoute.tsx owns the equivalent orchestration generically, for any list
 // kind, not just account-scoped ones.
 import { createSignal, type Signal } from 'solid-js';
-import { steamVanity, fmtLastPlayed, postJson, safeHref } from './utils.ts';
+import { CLIENT_CACHE_MAX_AGE_MS, steamVanity, fmtLastPlayed, postJson, safeHref } from './utils.ts';
 import { accountIdFor } from './accountsStore.ts';
 import type { AccountSlot } from './types.ts';
 
@@ -177,9 +177,6 @@ export interface AccountWishlist {
 
 const refreshQuery = (refresh: boolean) => (refresh ? '?refresh=1' : '');
 
-// How long a fetch is reused before asking the server again: here and panelData.ts's session caches.
-export const CLIENT_CACHE_MAX_AGE_MS = 10 * 60_000;
-
 type AccountDataKind = 'owned' | 'wishlist' | 'friends';
 interface CacheEntry {
   promise: Promise<unknown>;
@@ -208,15 +205,18 @@ export function accountDataVersion(kind: AccountDataKind, members: string[]): nu
 }
 
 function storeEntry<T>(key: string, promise: Promise<T>): Promise<T> {
-  const replaces = accountCache.has(key);
+  const replaced = accountCache.get(key);
   const entry = { promise, at: Date.now() };
   accountCache.set(key, entry);
   promise.then(
     () => {
-      if (replaces && accountCache.get(key) === entry) versionSignal(key)[1]((v) => v + 1);
+      if (replaced && accountCache.get(key) === entry) versions.get(key)?.[1]((v) => v + 1);
     },
     () => {
-      if (accountCache.get(key) === entry) accountCache.delete(key); // the next caller asks again
+      if (accountCache.get(key) !== entry) return;
+      // A failed refresh keeps what it replaced; a failed first fetch leaves the next caller to ask again.
+      if (replaced) accountCache.set(key, replaced);
+      else accountCache.delete(key);
     },
   );
   return promise;

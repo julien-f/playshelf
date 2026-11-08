@@ -29,8 +29,7 @@
 // A factory plus a default instance, same shape (and same testability reasoning) as
 // myOwnership.ts's createMyOwnershipCache.
 import { applyPriceInfo, postPrices } from './priceLoading.ts';
-import { CLIENT_CACHE_MAX_AGE_MS } from './accountData.ts';
-import { fetchJson, refusalMessage } from './utils.ts';
+import { CLIENT_CACHE_MAX_AGE_MS, fetchJson, refusalMessage } from './utils.ts';
 import type { Achievements, NewsItem, PriceFields } from './types.ts';
 import type { PickAndMixTier } from './bundleRows.ts';
 

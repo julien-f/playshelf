@@ -15,8 +15,8 @@ const {
   fetchAccountOwnedData,
   accountDataVersion,
   clearAccountDataCache,
-  CLIENT_CACHE_MAX_AGE_MS,
 } = require('../public/accountData.ts');
+const { CLIENT_CACHE_MAX_AGE_MS } = require('../public/utils.ts');
 
 function withFetch(t, handler) {
   clearAccountDataCache();
@@ -557,6 +557,16 @@ test('account cache: a failed fetch is not kept', async (t) => {
   const urls = countingFetch(t, state);
   await assert.rejects(fetchAccountOverview(['1']), /Steam request failed/);
   state.fail = false;
+  assert.equal((await fetchAccountOverview(['1'])).games.length, 1);
+  assert.equal(urls.length, 2);
+});
+
+test('account cache: a failed refresh keeps what it would have replaced', async (t) => {
+  const state = { games: [440] };
+  const urls = countingFetch(t, state);
+  await fetchAccountOverview(['1']);
+  state.fail = true;
+  await assert.rejects(fetchAccountOverview(['1'], { refresh: true }));
   assert.equal((await fetchAccountOverview(['1'])).games.length, 1);
   assert.equal(urls.length, 2);
 });

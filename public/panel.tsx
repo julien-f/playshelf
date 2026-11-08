@@ -412,7 +412,7 @@ async function handlePanelRefresh() {
   setPanelRefreshing(true);
   try {
     // Each `refetch()` re-runs that resource's fetcher with `refetching` set, which is what its
-    // fetcher reads as "force" (bypass both this app's session cache and the server's own TTL).
+    // fetcher reads as `refresh` (bypass both this app's session cache and the server's own TTL).
     // A refetch of a resource whose source is currently null — price, for a game its list
     // already priced — is a no-op by construction, no extra check needed here. DLC isn't
     // refetched: forcing every one of a game's DLC would cost one store lookup each.
