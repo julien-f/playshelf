@@ -196,6 +196,15 @@ test('getCached: a forced read of a library row refetches however young', () => 
   assert.equal(isCached('games:k'), true);
 });
 
+// ── setCache ──────────────────────────────────────────────────────────────────
+
+// A store page's two rows must not be left half written (lib/steam.js's getAppDetails).
+test('setCache: rows written alongside are written all or none', () => {
+  _reset();
+  assert.throws(() => setCache('appdetails:1', 'trimmed', { alongside: [['nope:1', 'whole']] }), /no TTL group/);
+  assert.equal(getCachedAt('appdetails:1'), undefined);
+});
+
 // ── createCachedFetch ─────────────────────────────────────────────────────────
 
 test('createCachedFetch: a hit skips the load; concurrent misses load once; force reloads', async () => {
