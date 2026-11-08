@@ -366,7 +366,7 @@ test('A2 edge: an account picked mid-refresh does not read "Refreshing…" while
   // Holds Alice's refresh and Bob's load (not the resolve, sent by name), so both are in flight.
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/common-games', async (route) => {
+  await page.route(/\/api\/common-games(\?refresh=1)?$/, async (route) => {
     const body = route.request().postData() ?? '';
     if (body.includes(ALICE.steamid) || body.includes(BOB.steamid)) await held;
     await route.fallback();
@@ -778,7 +778,7 @@ test('A5 edge: a profile too thin for an archetype or story tile shows neither, 
 test('A5 edge: the profile stays on screen through a refresh that keeps every game', async ({ page }) => {
   await asPlayer(page, ALICE);
   // 10 h on each game: enough for Plays mostly.
-  await page.route('**/api/common-games', (route) => {
+  await page.route(/\/api\/common-games(\?refresh=1)?$/, (route) => {
     const req = route.request();
     const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
     for (const perPlayer of Object.values(body.playtime) as Record<string, number>[])
@@ -804,7 +804,7 @@ test('A5 edge: the profile stays on screen while a refresh streams in a new game
   await asPlayer(page, ALICE);
   let refreshed = false;
   // 10 h on each game: enough for Plays mostly; the refresh adds Don't Starve Together (322330).
-  await page.route('**/api/common-games', (route) => {
+  await page.route(/\/api\/common-games(\?refresh=1)?$/, (route) => {
     const req = route.request();
     const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
     if (refreshed) {
@@ -4600,7 +4600,7 @@ test('D1 edge: the Updated tile keeps the rows and the selection while it refres
   // Holds the library refresh, so the table can be checked mid-way.
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/common-games', async (route) => {
+  await page.route(/\/api\/common-games\?refresh=1$/, async (route) => {
     await held;
     await route.fallback();
   });
@@ -4620,7 +4620,7 @@ test('D1 edge: the Updated tile keeps focus while it refreshes', async ({ page }
   await expect(rows(page)).toHaveCount(6);
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/common-games', async (route) => {
+  await page.route(/\/api\/common-games\?refresh=1$/, async (route) => {
     await held;
     await route.fallback();
   });
@@ -4637,7 +4637,7 @@ test('D1 edge: a failed Updated refresh leaves the tile there to try again', asy
   await asPlayer(page, ALICE);
   await page.goto('/lists/compare?u=alice&u=bob');
   await expect(groupRows(page)).toHaveCount(3);
-  await page.route('**/api/common-games', (route) =>
+  await page.route(/\/api\/common-games\?refresh=1$/, (route) =>
     route.fulfill({ status: 502, json: { error: 'Steam request failed' } }),
   );
   const updated = page.locator('.list-stat', { hasText: 'Updated' });
@@ -4647,7 +4647,7 @@ test('D1 edge: a failed Updated refresh leaves the tile there to try again', asy
   await expect(updated).not.toContainText('Refreshing');
   await expect(page.locator('.list-formula')).toBeVisible();
 
-  await page.unroute('**/api/common-games');
+  await page.unroute(/\/api\/common-games\?refresh=1$/);
   await updatedBtn.click();
   await expect(page.getByRole('main')).not.toContainText('Steam request failed');
 });

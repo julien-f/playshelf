@@ -114,7 +114,7 @@ export class BundleNotFoundError extends Error {
 
 // One page of GET /api/bundles (the browse list).
 export async function fetchBundlePage({
-  force = false,
+  refresh = false,
   ...params
 }: {
   country: string;
@@ -122,7 +122,7 @@ export async function fetchBundlePage({
   expired: boolean;
   offset: number;
   limit: number;
-  force?: boolean;
+  refresh?: boolean;
 }): Promise<{ bundles: BundleListItem[]; fetchedAt: number | null }> {
   const qs = new URLSearchParams({
     country: params.country,
@@ -131,7 +131,7 @@ export async function fetchBundlePage({
     offset: String(params.offset),
     limit: String(params.limit),
   });
-  if (force) qs.set('refresh', '1');
+  if (refresh) qs.set('refresh', '1');
   try {
     const data = await fetchJson<{ bundles: BundleListItem[]; fetchedAt?: number | null }>(
       `/api/bundles?${qs}`,

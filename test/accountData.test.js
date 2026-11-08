@@ -46,7 +46,7 @@ test('fetchAccountOverview: sends { members }, sums playtime and maxes lastPlaye
   });
 
   const { games } = await fetchAccountOverview(['1', '2']);
-  assert.deepEqual(seenBody, { members: ['1', '2'], refresh: false });
+  assert.deepEqual(seenBody, { members: ['1', '2'] });
   assert.deepEqual(games, [{ appid: 440, name: 'Team Fortress 2', playtimeMinutes: 150, lastPlayedUnix: 2000 }]);
 });
 
@@ -70,14 +70,14 @@ test('fetchAccountOverview: throws with the server error message on a non-2xx re
   await assert.rejects(() => fetchAccountOverview(['1']), /rate limited/);
 });
 
-test('fetchAccountOverview: passes refresh through', async (t) => {
-  let seenBody;
-  withFetch(t, async (url, opts) => {
-    seenBody = JSON.parse(opts.body);
+test('fetchAccountOverview: passes refresh as ?refresh=1', async (t) => {
+  let seenUrl;
+  withFetch(t, async (url) => {
+    seenUrl = url;
     return { ok: true, json: async () => ({ games: [], players: [], playtime: {}, lastPlayed: {} }) };
   });
   await fetchAccountOverview(['1'], { refresh: true });
-  assert.equal(seenBody.refresh, true);
+  assert.equal(seenUrl, '/api/common-games?refresh=1');
 });
 
 test('fetchAccountWishlist: sends { members }, returns items as-is', async (t) => {
@@ -88,7 +88,7 @@ test('fetchAccountWishlist: sends { members }, returns items as-is', async (t) =
   });
 
   const { items } = await fetchAccountWishlist(['1']);
-  assert.deepEqual(seenBody, { members: ['1'], refresh: false });
+  assert.deepEqual(seenBody, { members: ['1'] });
   assert.deepEqual(items, [{ appid: 620, priority: 1, dateAdded: '2024-01-01' }]);
 });
 
@@ -326,7 +326,7 @@ test('toAccountPlayer: a missing gameCount is null, not 0', () => {
 test('fetchAccountFriends: maps friends and passes through memberSince/countryCode/realName', async (t) => {
   withFetch(t, async (url, opts) => {
     assert.equal(url, '/api/friends');
-    assert.deepEqual(JSON.parse(opts.body), { members: ['1'], refresh: false });
+    assert.deepEqual(JSON.parse(opts.body), { members: ['1'] });
     return {
       ok: true,
       json: async () => ({

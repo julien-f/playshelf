@@ -44,10 +44,10 @@ export function achievementsAccountKey(memberIds: string[]): string {
   return memberIds.slice().sort().join(',');
 }
 
-export function achievementsRequestUrl(appid: number, memberIds: string[], { force = false } = {}): string {
+export function achievementsRequestUrl(appid: number, memberIds: string[], { refresh = false } = {}): string {
   const qs = new URLSearchParams();
   if (memberIds.length) qs.set('steamids', memberIds.join(','));
-  if (force) qs.set('refresh', '1');
+  if (refresh) qs.set('refresh', '1');
   const query = qs.toString();
   return `/api/achievements/${appid}${query ? `?${query}` : ''}`;
 }
@@ -97,12 +97,12 @@ const DLC_CONCURRENCY = 4;
 export const PANEL_SETTLE_MS = 250;
 
 // `settled`: whether the game a load was asked for is still the one open, once PANEL_SETTLE_MS has passed.
-type LoadOptions = { force?: boolean; settled?: () => boolean };
+type LoadOptions = { refresh?: boolean; settled?: () => boolean };
 
 // Each cache's latest load per key, until it settles: a paused call joins it, any other replaces it.
 const pendingLoads = new WeakMap<Map<unknown, unknown>, Map<unknown, Promise<unknown>>>();
 
-// The cached value when there is one and `force` is unset, else a load that caches its result. A
+// The cached value when there is one and `refresh` is unset, else a load that caches its result. A
 // failed load keeps whatever was last loaded rather than wiping it on a failed forced refresh;
 // `null` ("couldn't load") only the first time, when there's no fallback. `refusals` keeps the
 // server's message for the key's last load when it was a 429 (refusalMessage), left uncached. With
@@ -112,15 +112,15 @@ function sessionCached<K, V>(
   cache: Map<K, V | null>,
   key: K,
   load: () => Promise<V | null>,
-  { force = false, settled }: LoadOptions,
+  { refresh = false, settled }: LoadOptions,
   refusals?: Map<K, string>,
 ): V | null | Promise<V | null> {
   const cached = cache.get(key);
-  if (!force && cached !== undefined) return cached;
+  if (!refresh && cached !== undefined) return cached;
   let pending = pendingLoads.get(cache) as Map<K, Promise<V | null>> | undefined;
   if (!pending) pendingLoads.set(cache, (pending = new Map()));
   const joined = pending.get(key);
-  if (!force && settled && joined) return joined;
+  if (!refresh && settled && joined) return joined;
   const latest = () => pending.get(key) === call;
   const run = () =>
     load().then(
@@ -142,7 +142,7 @@ function sessionCached<K, V>(
       },
     );
   const call: Promise<V | null> =
-    !force && settled
+    !refresh && settled
       ? new Promise((resolve) => setTimeout(resolve, PANEL_SETTLE_MS)).then(() =>
           !settled() ? null : latest() ? run() : (pending.get(key) ?? cache.get(key) ?? null),
         )
@@ -191,19 +191,19 @@ export function createPanelDataCache() {
   // News is deliberately NOT part of the host route's rating/HLTB/meta/tags stream (see
   // server.js's newsLimit comment for why) — it's fetched per game, on demand, the first time
   // that game's panel opens.
-  function fetchNews(appid: number, { force = false, settled }: LoadOptions = {}): PanelNews | Promise<PanelNews> {
+  function fetchNews(appid: number, { refresh = false, settled }: LoadOptions = {}): PanelNews | Promise<PanelNews> {
     return sessionCached(
       news,
       appid,
       async () =>
         (
           await fetchJson<{ news: PanelNews }>(
-            `/api/game-news/${appid}${force ? '?refresh=1' : ''}`,
+            `/api/game-news/${appid}${refresh ? '?refresh=1' : ''}`,
             undefined,
             'News lookup failed',
           )
         ).news,
-      { force, settled },
+      { refresh, settled },
     );
   }
 
@@ -223,7 +223,7 @@ export function createPanelDataCache() {
   function fetchAchievements(
     appid: number,
     memberIds: string[],
-    { force = false, settled, achievementCount }: LoadOptions & { achievementCount?: number | null } = {},
+    { refresh = false, settled, achievementCount }: LoadOptions & { achievementCount?: number | null } = {},
   ): PanelAchievements | Promise<PanelAchievements> {
     return sessionCached(
       achievements,
@@ -241,14 +241,14 @@ export function createPanelDataCache() {
             steamUrl: null,
           };
         const data = await fetchJson<Achievements>(
-          achievementsRequestUrl(appid, memberIds, { force }),
+          achievementsRequestUrl(appid, memberIds, { refresh }),
           undefined,
           'Achievements lookup failed',
         );
         data.steamUrl = achievementsSteamUrl(appid, memberIds);
         return data;
       },
-      { force, settled: achievementCount === 0 ? undefined : settled },
+      { refresh, settled: achievementCount === 0 ? undefined : settled },
       achievementsRefused,
     );
   }
@@ -261,19 +261,19 @@ export function createPanelDataCache() {
   function fetchPrice(
     appid: number,
     region: string,
-    { force = false, settled }: LoadOptions = {},
+    { refresh = false, settled }: LoadOptions = {},
   ): PanelPrice | Promise<PanelPrice> {
     return sessionCached(
       price,
       `${region}:${appid}`,
       async () => {
         if (!(await isItadConfigured())) return null;
-        const { prices } = await postPrices({ appids: [appid], country: region, force });
+        const { prices } = await postPrices({ appids: [appid], country: region, refresh });
         const fields = {} as PriceFields;
         applyPriceInfo(fields, prices[appid]);
         return fields;
       },
-      { force, settled: itadOff ? undefined : settled },
+      { refresh, settled: itadOff ? undefined : settled },
       priceRefused,
     );
   }
@@ -282,7 +282,7 @@ export function createPanelDataCache() {
   function fetchBundles(
     appid: number,
     region: string,
-    { force = false, settled }: LoadOptions = {},
+    { refresh = false, settled }: LoadOptions = {},
   ): PanelBundles | Promise<PanelBundles> {
     return sessionCached(
       bundles,
@@ -290,7 +290,7 @@ export function createPanelDataCache() {
       async () => {
         if (!(await isItadConfigured())) return null;
         const qs = new URLSearchParams({ country: region });
-        if (force) qs.set('refresh', '1');
+        if (refresh) qs.set('refresh', '1');
         const data = await fetchJson<{ bundles: PanelBundles }>(
           `/api/game-bundles/${appid}?${qs}`,
           undefined,
@@ -298,7 +298,7 @@ export function createPanelDataCache() {
         );
         return data.bundles;
       },
-      { force, settled: itadOff ? undefined : settled },
+      { refresh, settled: itadOff ? undefined : settled },
       bundlesRefused,
     );
   }

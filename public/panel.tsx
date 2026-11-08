@@ -538,7 +538,7 @@ const panelData = createRoot(() => {
   const [news, { refetch: refetchNews }] = createResource<PanelNews, number>(openAppid, (appid, info) => {
     // A cached value comes back synchronously, so reopening a game paints its real News card
     // instead of flashing the loading skeleton at it again.
-    return fetchNews(appid, { force: isForced(info), settled: () => openAppid() === appid });
+    return fetchNews(appid, { refresh: isForced(info), settled: () => openAppid() === appid });
   });
 
   const [achievements, { refetch: refetchAchievements }] = createResource<PanelAchievements, string>(
@@ -550,7 +550,7 @@ const panelData = createRoot(() => {
       const g = panelGame();
       if (!g) return null;
       return fetchAchievements(g.appid, currentMembers(), {
-        force: isForced(info),
+        refresh: isForced(info),
         settled: () => appidAndAccount() === key,
         achievementCount: g.details?.meta?.achievementCount,
       });
@@ -588,13 +588,13 @@ const panelData = createRoot(() => {
 
   const [price, { refetch: refetchPrice }] = createResource<PanelPrice, string>(priceSource, (key, info) => {
     const [appid, region] = key.split(':');
-    return fetchPrice(Number(appid), region, { force: isForced(info), settled: () => priceSource() === key });
+    return fetchPrice(Number(appid), region, { refresh: isForced(info), settled: () => priceSource() === key });
   });
 
   const bundlesSource = createMemo(() => (openAppid() == null ? null : `${openAppid()}:${currentRegion()}`));
   const [bundles, { refetch: refetchBundles }] = createResource<PanelBundles, string>(bundlesSource, (key, info) => {
     const [appid, region] = key.split(':');
-    return fetchBundles(Number(appid), region, { force: isForced(info), settled: () => bundlesSource() === key });
+    return fetchBundles(Number(appid), region, { refresh: isForced(info), settled: () => bundlesSource() === key });
   });
 
   // DLC is the one card whose fetch is gated behind actually expanding it (see panelData.ts's

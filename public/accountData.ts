@@ -174,6 +174,8 @@ export interface AccountWishlist {
   fetchedAt: number | null;
 }
 
+const refreshQuery = (refresh: boolean) => (refresh ? '?refresh=1' : '');
+
 // Fetches one account's owned games (its members' libraries unioned, same Family-simulation
 // /api/common-games already does server-side for a single slot) with per-game playtime/last-
 // played summed/maxed across members, plus its member accounts' display data.
@@ -182,8 +184,8 @@ export async function fetchAccountOverview(
   { refresh = false }: { refresh?: boolean } = {},
 ): Promise<AccountOverview> {
   const data = await postJson<CommonGamesResponse>(
-    '/api/common-games',
-    { members, refresh },
+    `/api/common-games${refreshQuery(refresh)}`,
+    { members },
     'Failed to fetch owned games',
   );
 
@@ -226,7 +228,11 @@ export async function fetchAccountWishlist(
   members: string[],
   { refresh = false }: { refresh?: boolean } = {},
 ): Promise<AccountWishlist> {
-  const data = await postJson<WishlistResponse>('/api/wishlist', { members, refresh }, 'Failed to fetch wishlist');
+  const data = await postJson<WishlistResponse>(
+    `/api/wishlist${refreshQuery(refresh)}`,
+    { members },
+    'Failed to fetch wishlist',
+  );
   return { items: data.items, fetchedAt: data.fetchedAt ?? null };
 }
 
@@ -282,7 +288,11 @@ export async function fetchAccountFriends(
   members: string[],
   { refresh = false }: { refresh?: boolean } = {},
 ): Promise<AccountFriends> {
-  const data = await postJson<FriendsResponse>('/api/friends', { members, refresh }, 'Failed to fetch friends');
+  const data = await postJson<FriendsResponse>(
+    `/api/friends${refreshQuery(refresh)}`,
+    { members },
+    'Failed to fetch friends',
+  );
   return {
     friends: data.friends.map((f) => ({
       steamid: f.steamid,

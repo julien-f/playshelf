@@ -1997,7 +1997,7 @@ export default function ListRoute() {
   async function loadPrices(
     games: readonly { appid: number; gid?: string }[],
     gen: number,
-    force = false,
+    refresh = false,
   ): Promise<void> {
     setPriceStatusText('');
     const configured = await itadConfiguredPromise;
@@ -2015,8 +2015,8 @@ export default function ListRoute() {
       try {
         const { prices, fetchedAt: at } = await postPrices(
           byGid
-            ? { gids: chunk.map((g) => g.gid!), country, force }
-            : { appids: chunk.map((g) => g.appid), country, force },
+            ? { gids: chunk.map((g) => g.gid!), country, refresh }
+            : { appids: chunk.map((g) => g.appid), country, refresh },
         );
         // A wishlist is chunked across several calls, so the readout takes the oldest of them —
         // same "never claim data is fresher than its stalest part" rule as the account routes'.
