@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A tiered bundle's tier headers say what each step adds for you and whether it beats buying those games apart
 - Recently Looked Up shows when you last looked up each game.
 - An amber dot on the account chip when your Steam sign-in has expired, with Sign in again or Stay signed out in its menu
+- A Runs on Linux (ProtonDB) suggested view on Owned: games rated Native, Platinum or Gold on ProtonDB
 
 ### Changed
 
@@ -48,6 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A list whose game details are all cached loads them with about a third less server CPU
 - Game details load with about a quarter less server CPU, reading only the store page fields the app uses
 - A recently released game's reviews, play times, ProtonDB rating and store data now refresh as it ages instead of staying a year old
+- Play next, Short games and the Barely played count leave out games not out yet, like a pre-order; a hidden Availability column says which are Coming soon
+- Play next lists best rated first when the account has too few games played for Taste fit, and says so
 
 ### Fixed
 
@@ -135,6 +138,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Shipped migrations no longer change when a cache group is added
 - Account refreshes send ?refresh=1 like every other route, and the frontend's refresh option has one name
 - The test suite checks that the cache tier table in docs/dev/data.md matches the cache groups in the code
+- The mock server sends a game's platforms as the real server does
 
 ## [0.12.0] - 2026-10-30
 

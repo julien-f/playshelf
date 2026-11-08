@@ -873,13 +873,13 @@ test('A5.4: the barely-played count opens Play next, best Taste fit first, on a 
   await asPlayer(page, DAVE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(DAVE.owned.length);
-  const backlog = page.getByRole('button', { name: 'Play next: 4 games played 2 h or less' }); // a preorder included
+  const backlog = page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' });
   await backlog.click();
   await expect(page).toHaveURL(/view=/);
   await expect(
     page.getByRole('navigation', { name: 'Views' }).getByRole('link', { name: 'Play next' }),
   ).toHaveAttribute('aria-current', 'page');
-  await expect(rows(page)).toHaveCount(4);
+  await expect(rows(page)).toHaveCount(3);
   await expect(backlog).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
   // Scored against the taste this visit just learned: nothing was stored before it.
@@ -913,14 +913,38 @@ test('A5 edge: Why these? lists the story games with their hours against the mai
   await expect(page.locator('#panel-title')).toHaveText('Hogwarts Legacy');
 });
 
-test('A5 edge: what to play next counts a preorder, which its Released date shows as upcoming', async ({ page }) => {
+test('A5 edge: what to play next leaves a preorder out, count included', async ({ page }) => {
   await asPlayer(page, DAVE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(DAVE.owned.length);
-  await page.getByRole('button', { name: 'Play next: 4 games played 2 h or less' }).click();
-  await expect(rows(page)).toHaveCount(4); // a saved view can't hold "released by today"
-  await expect(row(page, 'Someday Saga')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' }).click();
+  await expect(rows(page)).toHaveCount(3);
+  await expect(row(page, 'Someday Saga')).toHaveCount(0);
   await expect(row(page, 'Counter-Strike 2')).toHaveCount(1); // free, but playable now
+});
+
+// Play next as stored before unreleased games were left out of it.
+const STATUS_ERA_PLAY_NEXT = {
+  id: 'pn',
+  name: 'Play next',
+  template: 'play-next',
+  tableView: {
+    rangeFilters: { playtime: { min: '', max: '2' } },
+    excludeFilters: { status: ['Finished', 'Abandoned'] },
+    sorts: [{ key: 'tasteFit', dir: 'desc' }],
+    visibleCols: ['capsule', 'name', 'tasteFit', 'steamdbRating', 'hltbAll', 'playtime', 'genres', 'status'],
+    columnOrder: ['capsule', 'name', 'tasteFit', 'steamdbRating', 'hltbAll', 'playtime', 'genres', 'status'],
+  },
+};
+
+test('A5 edge: a Play next view saved before leaves the preorder out too', async ({ page }) => {
+  await asPlayer(page, DAVE, { listViews: { owned: [STATUS_ERA_PLAY_NEXT] } });
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(DAVE.owned.length);
+  await page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' }).click();
+  await expect(page).toHaveURL(/view=pn/);
+  await expect(rows(page)).toHaveCount(3);
+  await expect(row(page, 'Someday Saga')).toHaveCount(0);
 });
 
 test('F3 edge: a game marked Finished in its panel leaves Play next and its count, and stays marked', async ({
@@ -929,17 +953,17 @@ test('F3 edge: a game marked Finished in its panel leaves Play next and its coun
   await asPlayer(page, DAVE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(DAVE.owned.length);
-  await page.getByRole('button', { name: 'Play next: 4 games played 2 h or less' }).click();
-  await expect(rows(page)).toHaveCount(4);
+  await page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' }).click();
+  await expect(rows(page)).toHaveCount(3);
   await row(page, 'Counter-Strike 2').getByText('Counter-Strike 2').click();
   const status = page.locator('.game-panel').getByRole('combobox', { name: 'Status' });
   await status.selectOption('Finished');
-  await expect(rows(page)).toHaveCount(3);
-  await expect(page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' })).toBeVisible();
+  await expect(rows(page)).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Play next: 2 games played 2 h or less' })).toBeVisible();
   await page.reload();
-  await expect(rows(page)).toHaveCount(3);
+  await expect(rows(page)).toHaveCount(2);
   await page.keyboard.press('Escape'); // the reload reopened the panel, over the page on a phone
-  await page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' }).click(); // back to All games
+  await page.getByRole('button', { name: 'Play next: 2 games played 2 h or less' }).click(); // back to All games
   await expect(row(page, 'Counter-Strike 2').getByRole('cell', { name: 'Finished' })).toHaveCount(0); // Status is hidden
   await row(page, 'Counter-Strike 2').getByText('Counter-Strike 2').click();
   await expect(status).toHaveValue('finished');
@@ -3326,7 +3350,13 @@ test('L5.1-3: a suggested view opens as its own tab, and is suggested once', asy
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(6);
   let menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Recently played', 'Play next', 'Short games', 'Save as view']);
+  await expect(menu.getByRole('button')).toHaveText([
+    'Recently played',
+    'Play next',
+    'Short games',
+    'Runs on Linux (ProtonDB)',
+    'Save as view',
+  ]);
   await menu.getByRole('button', { name: 'Play next' }).click();
 
   await expect(page).toHaveURL(/view=/);
@@ -3338,21 +3368,63 @@ test('L5.1-3: a suggested view opens as its own tab, and is suggested once', asy
   await expect(page.getByRole('button', { name: 'New view' })).toBeFocused();
 
   menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Recently played', 'Short games', 'Save as view']);
+  await expect(menu.getByRole('button')).toHaveText([
+    'Recently played',
+    'Short games',
+    'Runs on Linux (ProtonDB)',
+    'Save as view',
+  ]);
   await page.reload();
   await expect(rows(page)).toHaveCount(4);
+});
+
+test('L5 edge: with too few games played for Taste fit, Play next lists best rated first and says so', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE); // 3 played: no taste profile
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(6);
+  const menu = await newView(page);
+  await menu.getByRole('button', { name: 'Play next' }).click();
+  await expect(page).toHaveURL(/view=/);
+  await expect(rows(page)).toHaveCount(4);
+  const names = () =>
+    rows(page)
+      .getByRole('checkbox')
+      .evaluateAll((boxes) => boxes.map((b) => b.getAttribute('aria-label')!.replace('Select row ', '')));
+  await expect.poll(names).toEqual(['Stardew Valley', 'Hades', 'Hollow Knight', 'Valheim']);
+  await expect(page.getByText('Taste fit: Alice has too few games played, so best rated first')).toBeVisible();
 });
 
 test('L5 edge: Short games keeps barely played games with a short main story, known', async ({ page }) => {
   await asPlayer(page, CAROL);
   await page.goto('/lists/owned');
   const menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Recently played', 'Play next', 'Short games', 'Save as view']);
+  await expect(menu.getByRole('button')).toHaveText([
+    'Recently played',
+    'Play next',
+    'Short games',
+    'Runs on Linux (ProtonDB)',
+    'Save as view',
+  ]);
   await menu.getByRole('button', { name: 'Short games' }).click();
   await expect(page).toHaveURL(/view=/);
   await expect(rows(page)).toHaveCount(1); // not Portal 2 (6.3 h main), nor Counter-Strike 2 (no HLTB entry)
   await expect(rows(page).first()).toContainText('Quiet Little Game');
   await expect(page.locator('.pref-unsaved-banner')).toBeHidden(); // a fresh view has nothing to save
+});
+
+test('L5 edge: Runs on Linux keeps ProtonDB Gold or better', async ({ page }) => {
+  await asPlayer(page, CAROL);
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(CAROL.owned.length);
+  const menu = await newView(page);
+  await menu.getByRole('button', { name: 'Runs on Linux (ProtonDB)' }).click();
+  await expect(page).toHaveURL(/view=/);
+  await expect(rows(page)).toHaveCount(3);
+  await expect(row(page, 'It Takes Two')).toHaveCount(0); // Silver
+  await expect(row(page, 'Quiet Little Game')).toHaveCount(0); // no ProtonDB report
+  await expect(page.getByRole('columnheader', { name: /ProtonDB/ })).toBeVisible();
 });
 
 test('L5.2: the table as it is saves as a named view', async ({ page }) => {

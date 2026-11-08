@@ -25,6 +25,7 @@ const {
   withMissingGroup,
   tagMatchScore,
   CORE_COLUMNS,
+  availabilityOf,
 } = require('../public/gameColumns.ts');
 
 const { fmtLocalDate } = require('../public/utils.ts');
@@ -243,4 +244,12 @@ test('tagMatchScore: no score without a tag filter or tag weights', () => {
   assert.equal(tagMatchScore({ Action: 1 }, undefined), null);
   assert.equal(tagMatchScore({ Action: 1 }, new Set()), null);
   assert.equal(tagMatchScore(null, new Set(['Action'])), null);
+});
+
+test("Availability: Coming soon by Steam's flag, a column templates can exclude", () => {
+  assert.equal(availabilityOf({ comingSoon: true }), 'Coming soon');
+  assert.equal(availabilityOf({ comingSoon: false }), 'Released');
+  assert.equal(availabilityOf({}), 'Released');
+  const column = CORE_COLUMNS.find((c) => c.key === 'availability');
+  assert.equal(column.value({ comingSoon: true }), 'Coming soon');
 });

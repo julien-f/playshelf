@@ -38,14 +38,11 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U198 · minor · F3, D3** — no sign that a game got better or worse since release (Steam's "Recent Reviews"). A **Recent rating** from `GetAppReviews`' date range (last 30 days) — one more review call per uncached game, and a shorter TTL than the rating's ([integrations.md](integrations.md)).
 - **U199 · minor · F3, R2** — the rating mixes first impressions with long-term verdicts. A **Rating (10 h+)** from `GetAppReviews`' `playtime_min_hours`; one more review call per uncached game, threshold to measure first.
 - **U194 · minor · L1, I2** — focus still drops to `<body>` when the selection bar unmounts after Exclude, Remove from this list, Clear selection or Re-rank (Add now hands focus to a selected row). Have the bar hand focus back on unmount whenever it held focus.
-- **U214 · minor · F3, L5** — Play next ranks an owned game that isn't out yet ("Coming soon", e.g. a pre-order) at the top, though it can't be played tonight. Leave unreleased games out of Play next and Short games.
-- **U216 · minor · F3, L5, P1** — no view answers "runs on my Linux PC or Steam Deck": filtering on ProtonDB Gold or better (or native Linux) is several clicks each time. A suggested view on Owned, and on Wishlist if it proves useful; rated the most useful missing view in a persona review.
 - **U236 · polish · L1** — Home's folder/list tree deletes through a plain `window.confirm`, moves only through each row's "Move to…" select (no drag-and-drop), and soft-deleted lists have no trash or restore.
 
 ## Taste profile
 
 - **U204 · minor · F3, B1** — idled games (card farming, left running) skew Plays mostly, Taste fit and Group fit, and nothing tells them apart from real play. An "exclude from my profile" toggle per game.
-- **U215 · minor · F3, L5** — with too few played games, Taste fit is "—" on every row, so Play next (sorted by it) shows its games in no useful order; only a line above the table says why. Fall back to the rating, or say in the view that it sorts by rating until Taste fit can be computed.
 - **U230 · minor · R1, C7, F3** — a ranking stays inside its own list: Owned and Compare can't show or use it, and Taste fit learns from hours, not from what the player said they prefer. A **My rank** column on Owned, and the ranking as a taste signal where one exists. From the Backloggd study (2026-10-30).
 - **U231 · polish · A5** — no look back over a year of play (Backloggd's stats pages). Steam gives only the last launch date per game, no history: at best "played this year" with total hours, not per-year hours or first launches. From the Backloggd study (2026-10-30).
 

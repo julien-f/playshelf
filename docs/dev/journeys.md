@@ -78,7 +78,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   2. read Plays mostly and how many played games it's built from
   3. read the profile line: solo, co-op or PvP; whether story games are played through
   4. read Favourite studios; click one to filter Owned by it, or its **Games by …** link to see what else it made (F4)
-  5. click the count of games played 2 h or less: it opens Owned's **Play next** view (L5), best Taste fit first
+  5. click the count of games played 2 h or less: it opens Owned's **Play next** view (L5), best Taste fit first (best rated first with too few games played)
 - **Done when**: every figure says what it's counted from, and stays silent rather than guessing below its threshold; software (Wallpaper Engine) counts toward none of it.
 - **Edges**: private playtime (no profile, and it says so); fewer than 5 played games; a profile too thin for an archetype or tiles (no empty box); a Family, whose profile mixes its members (no archetype); a studio that publishes its own games (shown once); no studio with 2 played games (no tile).
 
@@ -221,7 +221,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
 
 ### L5 Switch between views of my library
 
-- **Who / goal**: keep "Recently played", "Play next" and "Short games" on Owned, or "Bargains" on Wishlist, and switch between them without filtering again.
+- **Who / goal**: keep "Recently played", "Play next", "Short games" and "Runs on Linux (ProtonDB)" on Owned, or "Bargains" on Wishlist, and switch between them without filtering again.
 - **Steps**:
   1. Owned
   2. **New view**: a suggested view, or **Save as view** for the table as it is
@@ -352,7 +352,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   5. **Pick a random game** (or **R**) for a random pick, or browse with ↑/↓
 - **Or**: steps 2–4 as Owned's **Play next** view, or **Short games** for the short ones (L5).
 - **Done when**: HLTB and rating fill in without a reload; the random pick draws only from the filtered rows and works on a phone; the filter survives a reload in the tab, and every visit once saved (L3).
-- **Edges**: games with no HLTB entry (where do they sort?); a Family account (whose playtime counts?); Plays mostly's **Why these?** on a phone (each tag's games stack under its bar).
+- **Edges**: games with no HLTB entry (where do they sort?); a pre-order (out of Play next and its count); a Family account (whose playtime counts?); Plays mostly's **Why these?** on a phone (each tag's games stack under its bar).
 
 ### F4 What else did this studio make?
 

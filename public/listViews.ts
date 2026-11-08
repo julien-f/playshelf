@@ -5,7 +5,8 @@ import { getPref, setPref } from './prefs.ts';
 import { stripTransientViewFields } from './tableViewSync.ts';
 import type { SavedView } from './types.ts';
 import { DEAL_RECORD_TIERS } from './utils.ts';
-import { STATUS_LABELS } from './gameStatuses.ts';
+import { STATUS_LABELS, type GameStatus } from './gameStatuses.ts';
+import { COMING_SOON, availabilityOf, protonDbValue } from './gameColumns.ts';
 
 export type ViewKind = 'owned' | 'wishlist';
 type ListViews = Partial<Record<ViewKind, SavedView[]>>;
@@ -14,7 +15,7 @@ export const LIST_VIEWS_KEY = 'listViews';
 
 function read(): ListViews {
   const views = getPref<ListViews>(LIST_VIEWS_KEY, {});
-  return { ...views, owned: views.owned?.map(withStatusExclusion) };
+  return { ...views, owned: views.owned?.map(upgraded) };
 }
 function write(kind: ViewKind, views: SavedView[]): void {
   setPref(LIST_VIEWS_KEY, { ...read(), [kind]: views });
@@ -75,8 +76,17 @@ export interface ViewTemplate {
   needsPrices?: boolean;
 }
 
-// Barely played isn't unplayed: a game finished elsewhere or dropped early isn't one to play next.
-const NOT_DONE = { status: [STATUS_LABELS.finished, STATUS_LABELS.abandoned] };
+// Barely played isn't unplayed: a game finished elsewhere or dropped early isn't one to play next, nor one not out yet.
+const NOT_DONE = { status: [STATUS_LABELS.finished, STATUS_LABELS.abandoned], availability: [COMING_SOON] };
+
+// Whether Play next lists `game`, given the viewer's status for it: its own bounds, for the count that opens it.
+export const isPlayNextCandidate = (
+  game: { playtime?: number; comingSoon?: boolean },
+  status: GameStatus | null | undefined,
+): boolean =>
+  (game.playtime ?? 0) <= PLAY_NEXT_MAX_HOURS &&
+  !(status && NOT_DONE.status.includes(STATUS_LABELS[status])) &&
+  !NOT_DONE.availability.includes(availabilityOf(game));
 
 // Price Status at a 1-year low or better.
 const BARGAIN_STATUSES = DEAL_RECORD_TIERS.filter((t) => t.tier !== '3mo').map((t) => t.statusLabel);
@@ -97,7 +107,11 @@ export const VIEW_TEMPLATES: readonly ViewTemplate[] = [
     view: {
       rangeFilters: { playtime: { min: '', max: String(PLAY_NEXT_MAX_HOURS) } },
       excludeFilters: NOT_DONE,
-      sorts: [{ key: 'tasteFit', dir: 'desc' }],
+      // Rating breaks ties, and orders it all when the account has too few games played for Taste fit.
+      sorts: [
+        { key: 'tasteFit', dir: 'desc' },
+        { key: 'steamdbRating', dir: 'desc' },
+      ],
     },
     cols: ['capsule', 'name', 'tasteFit', 'steamdbRating', 'hltbAll', 'playtime', 'genres', 'status'],
   },
@@ -114,6 +128,15 @@ export const VIEW_TEMPLATES: readonly ViewTemplate[] = [
       // No sort: Owned's default, best rated first.
     },
     cols: ['capsule', 'name', 'hltbMain', 'steamdbRating', 'tasteFit', 'playtime', 'genres', 'status'],
+  },
+  {
+    id: 'runs-on-linux',
+    kind: 'owned',
+    // Named for its source: not Steam Deck Verified. Filters AND across columns, so a native port with no report is out.
+    name: 'Runs on Linux (ProtonDB)',
+    view: { filters: { protondb: ['native', 'platinum', 'gold'].map((tier) => protonDbValue(tier) as string) } },
+    // No sort: Owned's default, best rated first.
+    cols: ['capsule', 'name', 'protondb', 'platforms', 'steamdbRating', 'tasteFit', 'playtime', 'hltbAll'],
   },
   {
     id: 'bargains',
@@ -154,12 +177,43 @@ export function createFromTemplate(template: ViewTemplate): SavedView {
   return createListView(template.kind, template.name, stamp(template), template.id);
 }
 
-// A view created before statuses existed, never edited since, gets their exclusion; an edited one is left as it is.
-// Remove once no stored view predates it.
-function withStatusExclusion(saved: SavedView): SavedView {
-  const template = VIEW_TEMPLATES.find((t) => t.id === saved.template && t.view.excludeFilters === NOT_DONE);
-  if (!template) return saved;
-  const { excludeFilters: _added, ...view } = template.view;
-  const before = stamp({ view, cols: template.cols.filter((c) => c !== 'status') });
-  return JSON.stringify(saved.tableView) === JSON.stringify(before) ? { ...saved, tableView: stamp(template) } : saved;
+// Each template's earlier stamps as stored then, key order included (compared as JSON). A stored view still equal to
+// one was never edited, so it reads as today's stamp; an edited one is left as it is.
+const PLAYTIME_MAX_2 = { playtime: { min: '', max: '2' } };
+const SHORT_RANGES = { ...PLAYTIME_MAX_2, hltbMain: { min: '', max: '5' } };
+const STATUS_ONLY = { status: ['Finished', 'Abandoned'] };
+const PLAY_NEXT_COLS = ['capsule', 'name', 'tasteFit', 'steamdbRating', 'hltbAll', 'playtime', 'genres'];
+const SHORT_COLS = ['capsule', 'name', 'hltbMain', 'steamdbRating', 'tasteFit', 'playtime', 'genres'];
+const BY_TASTE_FIT = [{ key: 'tasteFit', dir: 'desc' }];
+const PAST_STAMPS: Record<string, readonly unknown[]> = {
+  'play-next': [
+    // Before statuses.
+    { rangeFilters: PLAYTIME_MAX_2, sorts: BY_TASTE_FIT, visibleCols: PLAY_NEXT_COLS, columnOrder: PLAY_NEXT_COLS },
+    // Before unreleased games were left out.
+    {
+      rangeFilters: PLAYTIME_MAX_2,
+      excludeFilters: STATUS_ONLY,
+      sorts: BY_TASTE_FIT,
+      visibleCols: [...PLAY_NEXT_COLS, 'status'],
+      columnOrder: [...PLAY_NEXT_COLS, 'status'],
+    },
+  ],
+  'short-games': [
+    { rangeFilters: SHORT_RANGES, visibleCols: SHORT_COLS, columnOrder: SHORT_COLS },
+    {
+      rangeFilters: SHORT_RANGES,
+      excludeFilters: STATUS_ONLY,
+      visibleCols: [...SHORT_COLS, 'status'],
+      columnOrder: [...SHORT_COLS, 'status'],
+    },
+  ],
+};
+const PAST_JSON = new Map(
+  Object.entries(PAST_STAMPS).map(([id, past]) => [id, new Set(past.map((v) => JSON.stringify(v)))]),
+);
+
+function upgraded(saved: SavedView): SavedView {
+  const template = VIEW_TEMPLATES.find((t) => t.id === saved.template);
+  if (!template || !PAST_JSON.get(template.id)?.has(JSON.stringify(saved.tableView))) return saved;
+  return { ...saved, tableView: stamp(template) };
 }

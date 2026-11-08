@@ -168,6 +168,7 @@ import { SharedViewBanner } from './SharedViewBanner.tsx';
 import { UnsavedChangesBanner, ViewActions } from './TableViewControls.tsx';
 import {
   PLAY_NEXT_MAX_HOURS,
+  isPlayNextCandidate,
   VIEW_TEMPLATES,
   createFromTemplate,
   getListView,
@@ -384,10 +385,12 @@ interface TasteSource {
   linked: boolean; // someone else's account from a `?u=` link, whose Owned the viewer has no reason to open
 }
 
-function tasteFitNote({ label, taste, linked }: TasteSource): string | null {
+// `byFitThenRating`: with no profile, Taste fit leaves the order to the rating sorted next (Play next's).
+function tasteFitNote({ label, taste, linked }: TasteSource, byFitThenRating: boolean): string | null {
   if (!label) return 'Taste fit needs an account: pick one on Home';
   if (!taste) return linked ? null : `Taste fit needs ${label}'s Owned list opened on this device`;
-  if (!taste.profile) return `Taste fit: ${label} has too few games played`;
+  if (!taste.profile)
+    return `Taste fit: ${label} has too few games played${byFitThenRating ? ', so best rated first' : ''}`;
   return `Taste fit: ${label}'s taste as of ${fmtLocalDate(new Date(taste.at))}`;
 }
 
@@ -3889,7 +3892,9 @@ export default function ListRoute() {
     const visible = filterTable()?.columns.visible();
     const notes: string[] = [];
     const source = tasteFitSource();
-    const tasteNote = source && visible?.has(TASTE_FIT_KEY) && tasteFitNote(source);
+    const [first, next] = filterTable()?.sort.entries() ?? [];
+    const byFitThenRating = first?.key === TASTE_FIT_KEY && next?.key === 'steamdbRating' && next.dir === 'desc';
+    const tasteNote = source && visible?.has(TASTE_FIT_KEY) && tasteFitNote(source, byFitThenRating);
     if (tasteNote) notes.push(tasteNote);
     // An open Players says who has no profile; folded (a phone's default), nothing would.
     if (kind === 'compare' && visible?.has(GROUP_FIT_KEY) && loadedRows() && !(playerProfiles() && playersOpen())) {
@@ -3935,12 +3940,10 @@ export default function ListRoute() {
     const rows = profileRows();
     return rows ? favouriteCreators(rows, (g) => (g as Game).playtime ?? 0) : { developers: [], publishers: [] };
   });
-  // The games Play next lists (listViews.ts), counted the same way so the two agree.
+  // The games Play next lists, by its own predicate so the two agree.
   const unplayed = createMemo(() => {
     const rows = profileRows();
-    return rows && !playtimeHidden()
-      ? rows.filter((g) => (g.playtime ?? 0) <= PLAY_NEXT_MAX_HOURS && !ownStatus(g)).length
-      : 0;
+    return rows && !playtimeHidden() ? rows.filter((g) => isPlayNextCandidate(g as Game, ownStatus(g))).length : 0;
   });
   const backlogShown = () => activeView()?.template === PLAY_NEXT;
   // Opens the Play next view (created the first time), or back to All games when it's open.
