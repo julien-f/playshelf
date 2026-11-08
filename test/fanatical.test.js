@@ -230,3 +230,13 @@ test("withCachedPickAndMix: Fanatical's end date from the cached feed only, neve
   setCache('fanatical-pnm:v3', parsePickAndMix(FEED));
   assert.equal(withCachedPickAndMix(bundle).expiry, '2026-11-13T23:59:00.000Z');
 });
+
+// The list keeps the last map through a failure after its row expired: so does the preview of a bundle on it.
+test('withCachedPickAndMix: falls back to the last map once its row expired', async (t) => {
+  _reset();
+  setCache('fanatical-pnm:v3', parsePickAndMix(FEED));
+  await getPickAndMix();
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => assert.fail('should not fetch'));
+  assert.equal(withCachedPickAndMix(fanaticalBundle()).expiry, '2026-11-13T23:59:00.000Z');
+});
