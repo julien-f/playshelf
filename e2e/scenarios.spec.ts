@@ -3350,7 +3350,13 @@ test('L5.1-3: a suggested view opens as its own tab, and is suggested once', asy
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(6);
   let menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Recently played', 'Play next', 'Short games', 'Save as view']);
+  await expect(menu.getByRole('button')).toHaveText([
+    'Recently played',
+    'Play next',
+    'Short games',
+    'Runs on Linux (ProtonDB)',
+    'Save as view',
+  ]);
   await menu.getByRole('button', { name: 'Play next' }).click();
 
   await expect(page).toHaveURL(/view=/);
@@ -3362,7 +3368,12 @@ test('L5.1-3: a suggested view opens as its own tab, and is suggested once', asy
   await expect(page.getByRole('button', { name: 'New view' })).toBeFocused();
 
   menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Recently played', 'Short games', 'Save as view']);
+  await expect(menu.getByRole('button')).toHaveText([
+    'Recently played',
+    'Short games',
+    'Runs on Linux (ProtonDB)',
+    'Save as view',
+  ]);
   await page.reload();
   await expect(rows(page)).toHaveCount(4);
 });
@@ -3389,12 +3400,31 @@ test('L5 edge: Short games keeps barely played games with a short main story, kn
   await asPlayer(page, CAROL);
   await page.goto('/lists/owned');
   const menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Recently played', 'Play next', 'Short games', 'Save as view']);
+  await expect(menu.getByRole('button')).toHaveText([
+    'Recently played',
+    'Play next',
+    'Short games',
+    'Runs on Linux (ProtonDB)',
+    'Save as view',
+  ]);
   await menu.getByRole('button', { name: 'Short games' }).click();
   await expect(page).toHaveURL(/view=/);
   await expect(rows(page)).toHaveCount(1); // not Portal 2 (6.3 h main), nor Counter-Strike 2 (no HLTB entry)
   await expect(rows(page).first()).toContainText('Quiet Little Game');
   await expect(page.locator('.pref-unsaved-banner')).toBeHidden(); // a fresh view has nothing to save
+});
+
+test('L5 edge: Runs on Linux keeps ProtonDB Gold or better, native ports included', async ({ page }) => {
+  await asPlayer(page, CAROL);
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(CAROL.owned.length);
+  const menu = await newView(page);
+  await menu.getByRole('button', { name: 'Runs on Linux (ProtonDB)' }).click();
+  await expect(page).toHaveURL(/view=/);
+  await expect(rows(page)).toHaveCount(3);
+  await expect(row(page, 'It Takes Two')).toHaveCount(0); // Silver
+  await expect(row(page, 'Quiet Little Game')).toHaveCount(0); // no ProtonDB report
+  await expect(page.getByRole('columnheader', { name: /ProtonDB/ })).toBeVisible();
 });
 
 test('L5.2: the table as it is saves as a named view', async ({ page }) => {

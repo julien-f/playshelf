@@ -39,6 +39,7 @@ A private profile or wishlist looks identical to an empty one from the outside; 
     - **Recently played** (Owned): last played first.
     - **Play next** (Owned): played 2 h or less, out now (not Coming soon) and not marked Finished or Abandoned (see [Statuses](#statuses)), best Taste fit first, then best rated: with too few games played for Taste fit, best rated first, as the line under the list header says.
     - **Short games** (Owned): the same, with a main story of 5 h or less on How Long To Beat, best rated first.
+    - **Runs on Linux (ProtonDB)** (Owned): rated Native, Platinum or Gold on ProtonDB (a pending rating counts), best rated first. Not Steam Deck Verified; a game with a native Linux port but no ProtonDB report, or whose ProtonDB rating didn't load, is left out.
     - **Bargains** (Wishlist): at a 1-year or all-time low, biggest discount first.
   - Its **⋯** renames or deletes it.
   - A view follows the account you're exploring, like Owned and Wishlist themselves; Home's Owned and Wishlist cards link each one.

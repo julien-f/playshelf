@@ -6,7 +6,7 @@ import { stripTransientViewFields } from './tableViewSync.ts';
 import type { SavedView } from './types.ts';
 import { DEAL_RECORD_TIERS } from './utils.ts';
 import { STATUS_LABELS } from './gameStatuses.ts';
-import { COMING_SOON, availabilityOf } from './gameColumns.ts';
+import { COMING_SOON, availabilityOf, protonDbValue } from './gameColumns.ts';
 
 export type ViewKind = 'owned' | 'wishlist';
 type ListViews = Partial<Record<ViewKind, SavedView[]>>;
@@ -123,6 +123,15 @@ export const VIEW_TEMPLATES: readonly ViewTemplate[] = [
       // No sort: Owned's default, best rated first.
     },
     cols: ['capsule', 'name', 'hltbMain', 'steamdbRating', 'tasteFit', 'playtime', 'genres', 'status'],
+  },
+  {
+    id: 'runs-on-linux',
+    kind: 'owned',
+    // Named for its source: not Steam Deck Verified. Filters AND across columns, so a native port with no report is out.
+    name: 'Runs on Linux (ProtonDB)',
+    view: { filters: { protondb: ['native', 'platinum', 'gold'].map((tier) => protonDbValue(tier) as string) } },
+    // No sort: Owned's default, best rated first.
+    cols: ['capsule', 'name', 'protondb', 'platforms', 'steamdbRating', 'tasteFit', 'playtime', 'hltbAll'],
   },
   {
     id: 'bargains',
