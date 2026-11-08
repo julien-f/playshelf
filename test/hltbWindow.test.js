@@ -25,9 +25,11 @@ function setup(t, { searchStatus = () => 200 } = {}) {
   const inits = [];
   const searches = []; // { name, token }
   let token = 't1';
+  let initStatus = 200;
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     if (url.includes('search/site/init')) {
       inits.push(token);
+      if (initStatus !== 200) return { ok: false, status: initStatus };
       return { ok: true, status: 200, json: async () => ({ token, hpKey: 'k', hpVal: 'v' }) };
     }
     const name = JSON.parse(init.body).searchTerms.join(' ');
@@ -35,7 +37,7 @@ function setup(t, { searchStatus = () => 200 } = {}) {
     const status = searchStatus(name);
     return { ok: status === 200, status, headers: new Headers(), json: async () => ({ data: [] }) };
   });
-  return { inits, searches, rotate: (next) => (token = next) };
+  return { inits, searches, rotate: (next) => (token = next), failInit: () => (initStatus = 503) };
 }
 
 test('HLTB search: at most HLTB_SEARCH_MAX_PER_5_MIN sent in any 5 minutes; the token init takes no place', async (t) => {
@@ -103,4 +105,18 @@ test('HLTB search: a search refused with 429 still used its place', async (t) =>
     (await calls).map((r) => r.status),
     ['rejected', 'fulfilled', 'fulfilled'],
   );
+});
+
+test('HLTB search: without a usable token, a search fails at once instead of queueing for the window', async (t) => {
+  const { searches, failInit } = setup(t);
+  t.mock.method(console, 'warn', () => {});
+  await Promise.all([1, 2].map((i) => getHLTB(i, `Game ${i}`)));
+  _resetAuth();
+  failInit();
+  let settled = false;
+  const call = assert.rejects(getHLTB(3, 'Game 3'), /HLTB auth unavailable/).finally(() => (settled = true));
+  await flush();
+  assert.equal(settled, true, 'failed while the window is still full');
+  await call;
+  assert.equal(searches.length, 2);
 });
