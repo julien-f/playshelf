@@ -846,8 +846,9 @@ function settleSources(appid, sources, results) {
 const value = (res) => (res.status === 'fulfilled' ? res.value : null);
 
 // Everything but appdetails: these upstreams keep a faster pace than Steam's store details cap, so a list's rows fill ahead
-// of it. Force-refresh gets its own lane, never handed a normal request's possibly cached result.
-function fetchFastDetails(appid, { force = false } = {}) {
+// of it. Force-refresh gets its own lane, never handed a normal request's possibly cached result. `priority`: one
+// game looked up, its HLTB search ahead of a list's backlog (a game already queued by a list joins its place).
+function fetchFastDetails(appid, { force = false, priority = false } = {}) {
   return dedupDetails(`details:fast:${force ? 'force:' : ''}${appid}`, () => {
     const browsePromise = getStoreBrowseItem(appid, { force });
     const basicsPromise = browsePromise.then((item) => gameBasics(item, appid));
@@ -862,7 +863,7 @@ function fetchFastDetails(appid, { force = false } = {}) {
         store ? store : { name: (await getGameSchema(appid, { force })).name ?? null, type: null },
       );
     // A meta failure fails HLTB too, so it reads as failed, not as "no data".
-    const hltbPromise = namedPromise.then(({ name, type }) => getHLTB(appid, name, { type, force }));
+    const hltbPromise = namedPromise.then(({ name, type }) => getHLTB(appid, name, { type, force, priority }));
     const tagsPromise = resolveSteamTags(browsePromise);
     const demoPromise = browsePromise.then(extractDemoAppid);
     return Promise.allSettled([
@@ -1142,7 +1143,7 @@ app.get('/api/game-bundles/:appid', gameBundlesLimit, requireItad, async (req, r
 
 app.get('/api/game-details/:appid', detailsLimit, async (req, res) => {
   const { appid } = req;
-  res.json(await fetchGameDetails(appid, { force: isForceRefresh(req) }));
+  res.json(await fetchGameDetails(appid, { force: isForceRefresh(req), priority: true }));
 });
 
 app.get('/api/game-meta/:appid', metaLimit, async (req, res) => {

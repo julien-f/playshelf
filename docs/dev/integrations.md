@@ -13,6 +13,7 @@ Every upstream this app talks to, and what is undocumented about each. Cache tie
   - Steam's store takes 2 requests in flight, each slot pausing `STORE_MIN_INTERVAL_MS` before reuse; HLTB's search, ProtonDB, the store browse API and Steam reviews take 3 each, pausing `UPSTREAM_MIN_INTERVAL_MS` — enough to keep pace with the store on a cold load.
   - A 429 pauses every request of its call group — the store, store details, reviews, the store browse API, the other key-less `api.steampowered.com` calls (wishlist, news, achievement percentages), HLTB search, ProtonDB — for its `Retry-After` (seconds or an HTTP date), uncapped; without one, 2 s doubling per 429 up to 30 s, the requests refused together counting once (`createRetryingFetch`, `lib/upstream.js`).
   - Store details (`getAppDetails`) are capped at `STORE_DETAILS_MAX_PER_5_MIN` sends in any rolling 5 minutes, retries included, under Steam's limit ([appdetails](#store-metadata--appdetails)). The cap is taken before a store slot, so a backlog never holds the slots search and bundle lookups share (`createWindow`, `lib/upstream.js`).
+  - HLTB searches are capped the same way at `HLTB_SEARCH_MAX_PER_5_MIN` ([HLTB](#hltb--no-npm-package)); a single-game lookup (`GET /api/game-details/:appid`) reserves ahead of a list's backlog, unless its game is already queued by that list.
   - A store or reviews request is retried at most twice before failing; the other groups aren't retried, and every request still queued waits out the pause.
   - Each group pauses alone: whether key-less calls share one Steam quota (store browse, reviews and the rest) is unconfirmed.
 
@@ -45,7 +46,8 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 2. `POST https://howlongtobeat.com/api/search/site` with `X-Auth-Token`, `X-Hp-Key`, `X-Hp-Val` headers and `{ [hpKey]: hpVal, ...payload }` in the body
 
 - **When it breaks**: HLTB renames these endpoints from time to time (they were `api/bleed/*`); recent npm packages such as `howlongtobeat-ts` reverse-engineer the new flow quickly and are the first place to look.
-- **Token**: cached in memory for 5 minutes (session-bound, not on disk). A 401/403 from search clears it.
+- **Rate limit (assumed, not documented)**: on the three days a large cold load ran at ≈ 3 searches/s (2026-10-23, 10-26, 11-02), HLTB answered 25–95 × 429, then 2–13 × 403 (a block); quiet days (≤ 103 searches) never erred. `daily` has no timing, so the limit is unknown: `HLTB_SEARCH_MAX_PER_5_MIN` is a conservative guess. Confirmed when a large cold load shows `windowWaits['hltb-search']` with 0 × 429.
+- **Token**: cached in memory for 5 minutes (session-bound, not on disk), read when a search gets its slot, not when it queues: a search that waited in the window would otherwise send an expired one. A 401/403 from search clears it.
   - A 403, or a 401 on the current fresh token (one no search has accepted yet), is a block: it holds off re-init for 30 s, and two in a row trip the breaker. 401s on searches queued behind a token already rejected count once, not each; every 403 counts.
   - A 401 on a token searches already accepted is expiry: re-init at once. Assumed, not documented: HLTB's real token lifetime is unknown, so a fresh token idle long enough to expire reads as a block: a 30 s hold.
   - A 200 counts as a success only with a `data` array: any other body fails that search uncached, without accepting the token or resetting the breaker's streak.

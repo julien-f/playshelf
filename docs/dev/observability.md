@@ -26,7 +26,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
               limiterTrips: { [name]: count },
               dedupHits:    { [name]: count },
               cache:        { [group]: { hits, misses, forced } },
-              windowWaits:  { 'store-details': { waits, avgWaitMs, maxWaitMs } },
+              windowWaits:  { 'store-details' | 'hltb-search': { waits, avgWaitMs, maxWaitMs } },
               heldAnswers:  { hltb: count },
               streams:      { count, games, fastUncached, storeUncached, closedEarly, closedEarlyCold, limited,
                               concurrentMax, cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs },
@@ -83,7 +83,7 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
   - `closedEarly`: the client left before the end; `closedEarlyCold` of those, ones with something to fetch — the slowest loads, missing from the timings.
   - `concurrentMax`: streams open (every client's) when one started, the largest; `server.openStreams` is the live count.
   - Timings only from `cold` streams (something to fetch, ran to the end): `listed` when every game's fast part was sent (all rows listed), `done` at the end (store parts too). `null` with no cold stream. Absent from `lastHour` with no stream in it.
-- `windowWaits`: reservations that queued for a rolling cap's place (`createWindow`, `lib/upstream.js`), and how long. Counted per attempt: a 429's retry reserves again. Waits with no 429s on `getAppDetails` mean the cap, not Steam, is the limit; 429s with no waits, a cap too high.
+- `windowWaits`: reservations that queued for a rolling cap's place (`createWindow`, `lib/upstream.js`), and how long. Counted per attempt: a 429's retry reserves again. Waits with no 429s on `getAppDetails` (or HLTB's `search`) mean the cap, not the upstream, is the limit; 429s with no waits, a cap too high.
 - `heldAnswers.hltb`: lookups HLTB's failed-lookup hold answered without a request; `upstreams.hltb.held`, games held now.
 - Already answered elsewhere: appdetails 429s (`outbound['steam-store'].getAppDetails.statuses`), whether `UPSTREAM_MIN_INTERVAL_MS` is the limit (`upstreams[group].semaphores`' queues and the labels' latency).
 
