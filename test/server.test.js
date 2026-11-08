@@ -3020,6 +3020,54 @@ test("GET /api/bundles: a Fanatical pick-and-mix ITAD expired early is appended 
   assert.equal(fetchMock.mock.callCount(), calls, 'every page cached');
 });
 
+// The list's age is its oldest contributor's, and ↻ refreshes every page the list came from (data.md).
+test('GET /api/bundles: the expired pages a first page walks date it, and ?refresh=1 forces them too', async (t) => {
+  process.env.ITAD_API_KEY = 'test-itad-key';
+  const now = Date.now();
+  const killer = {
+    id: 16542,
+    title: 'Build Your Own Killer Bundle',
+    page: { name: 'Fanatical' },
+    url: 'https://www.fanatical.com/en/pick-and-mix/byo-killer',
+    publish: '2026-09-07T13:00:00Z',
+    tiers: [],
+  };
+  const oldTs = now - 6 * 60 * 60 * 1000;
+  _reset([
+    ['itad-bundles:US:-publish:false:0:50', { value: [{ id: 1, title: 'Humble One' }], ts: now }],
+    ['itad-bundles:US:-publish:true:0:50', { value: [killer], ts: oldTs }],
+    [
+      'fanatical-pnm:v3',
+      {
+        value: {
+          'byo-killer': {
+            tiers: [],
+            products: [],
+            type: 'bundle',
+            validFrom: '2026-09-07T13:00:00.000Z',
+            validUntil: '2099-11-13T23:59:00.000Z',
+          },
+        },
+        ts: now,
+      },
+    ],
+  ]);
+  const urls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(String(url));
+    const expired = new URL(url).searchParams.get('expired') === 'true';
+    return { ok: true, json: async () => (expired ? [killer] : [{ id: 1, title: 'Humble One' }]) };
+  });
+
+  assert.equal((await api.get('/api/bundles?limit=50').expect(200)).body.fetchedAt, oldTs);
+  const res = await api.get('/api/bundles?limit=50&refresh=1').expect(200);
+  assert.ok(
+    urls.some((u) => u.includes('expired=true')),
+    'the expired page is forced',
+  );
+  assert.ok(res.body.fetchedAt >= now, String(res.body.fetchedAt));
+});
+
 test('GET /api/game-bundles/:appid: a bundle ITAD expired early is added from the cached list pages', async (t) => {
   _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';

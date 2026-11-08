@@ -999,22 +999,29 @@ app.get('/api/bundles', bundlesListLimit, requireItad, async (req, res) => {
   try {
     // ?refresh=1 backs the browse page's own "↻ Refresh" — a bundle can go live or expire at any
     // time, so "the list I'm looking at is out of date" needs an answer that isn't "wait out the
-    // TTL". Only this page of the list is forced; GET /api/bundles/:id deliberately has no
+    // TTL". Only the pages this list comes from are forced; GET /api/bundles/:id deliberately has no
     // equivalent (findBundleById walks up to BUNDLE_SEARCH_MAX_PAGES pages, so forcing it would
     // cost several upstream calls to answer one deep link).
-    let bundles = await getBundles({ country, offset, limit, sort, expired, force: isForceRefresh(req) });
+    const force = isForceRefresh(req);
+    const pageKeys = [bundlesCacheKey({ country, offset, limit, sort, expired })];
+    let bundles = await getBundles({ country, offset, limit, sort, expired, force });
     // Only on a first page that holds the whole active list: the client stops paging there, so no
-    // later page repeats them. Its revival pages aren't forced by ?refresh=1: one call stays one call.
-    if (!expired && offset === 0 && bundles.length < limit)
-      bundles = [...bundles, ...(await findEarlyExpired(bundles, (params) => getBundles({ country, ...params })))];
-    // Age of this page of the list, for the "Updated <when>" beside the browse page's own ↻ —
+    // later page repeats them. Its revival pages (usually 1–2) are forced along with it.
+    if (!expired && offset === 0 && bundles.length < limit) {
+      const revived = await findEarlyExpired(bundles, (params) => {
+        pageKeys.push(bundlesCacheKey({ country, ...params }));
+        return getBundles({ country, ...params, force });
+      });
+      bundles = [...bundles, ...revived];
+    }
+    // Age of the pages this list came from, for the "Updated <when>" beside the browse page's own ↻ —
     // a bundle going live or expiring is exactly what that button is for, and that question is
-    // unanswerable without knowing how old the list on screen is.
+    // unanswerable without knowing how old the list on screen is. Fanatical's map has its own refetch rule.
     res.json({
       bundles: await withPickAndMix(withChoiceEnd(bundles)),
       offset,
       limit,
-      fetchedAt: getCachedAt(bundlesCacheKey({ country, offset, limit, sort, expired })) ?? null,
+      fetchedAt: oldestCachedAt(pageKeys),
     });
   } catch (err) {
     sendRouteError(res, 'bundles', err);
