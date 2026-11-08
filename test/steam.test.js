@@ -1621,6 +1621,15 @@ test('resolveSteamTags: re-fetches the tag name map once its row expires', async
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'New', weight: null }]);
 });
 
+// Steam adds tags meanwhile: the map lives a month, not the meta tier's year.
+test('resolveSteamTags: a fetched tag name map expires within a month', async (t) => {
+  _reset();
+  mockTagEndpoints(t);
+  await resolveSteamTags(Promise.resolve({ tagids: [1] }));
+  const { expires } = db.prepare("SELECT expires FROM cache_meta WHERE key = 'tagnames:all'").get();
+  assert.ok(expires !== null && expires - Date.now() <= 30 * 24 * 60 * 60 * 1000, String(expires));
+});
+
 test('resolveSteamTags: reads a tag name map row rewritten since the last read', async () => {
   const now = Date.now();
   _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now - 1000 }]]);
