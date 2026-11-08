@@ -120,6 +120,7 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 Documented endpoints whose "no data" answers are error statuses, treated as answers rather than failures:
 
 - **`GetSchemaForGame/v2`** (key): a 403 with a **JSON** body means no achievements (cached as none, on the short miss TTL since a game gets them at release); a 403 with an **HTML** body is a rejected key, a real failure. `game.gameName` survives a delisting, so it names a game appdetails has no page for (observed: 28050 → `Deus Ex Human Revolution`, the store title without its colon).
+  - Its `icon`/`icongray` URLs point at `steamcdn-a.akamaihd.net/steamcommunity/public/images/`, which 404s on recent games' icons (observed: 1215940, 0/58). `getGameSchema` rewrites them on read to `shared.fastly.steamstatic.com/community_assets/images/`, the host Steam's own stats pages use. **Assumption**: that host serves every icon; it served 1192/1192 across 13 games from 2004 to 2026. Drop the rewrite once the API returns that host.
 - **`GetPlayerAchievements/v1`** (key): **400** means no stats, **403** a private profile; both cached as `null`, like a reply without `playerstats.success`.
 - **`GetGlobalAchievementPercentagesForApp/v2`**: **no key** needed. A 403 with an empty body answers both "no achievements" and "unknown appid", cached as `null` on the short miss TTL. `percent` is a numeric string.
 

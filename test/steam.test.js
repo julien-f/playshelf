@@ -2083,6 +2083,50 @@ test('getGameSchema: extracts the game name and achievement fields', async (t) =
   });
 });
 
+const LEGACY_ICON = 'https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/400/abc.jpg';
+const NEW_ICON = 'https://shared.fastly.steamstatic.com/community_assets/images/apps/400/abc.jpg';
+
+test('getGameSchema: moves legacy-CDN icons to the host that has them, leaving other values alone', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({
+      game: {
+        availableGameStats: {
+          achievements: [
+            { name: 'A', icon: LEGACY_ICON, icongray: LEGACY_ICON },
+            { name: 'B', icon: 'https://example.com/b.jpg', icongray: null },
+          ],
+        },
+      },
+    }),
+  }));
+  const [a, b] = (await getGameSchema(400)).achievements;
+  assert.equal(a.icon, NEW_ICON);
+  assert.equal(a.icongray, NEW_ICON);
+  assert.equal(b.icon, 'https://example.com/b.jpg');
+  assert.equal(b.icongray, null);
+});
+
+test('getGameSchema: fixes legacy-CDN icons already in the cache without refetching', async (t) => {
+  _reset();
+  setCache('gameschema:400', {
+    name: 'X',
+    achievements: [
+      { apiname: 'A', name: 'A', icon: LEGACY_ICON, icongray: LEGACY_ICON, hidden: false },
+      { apiname: 'B', name: 'B', hidden: false },
+    ],
+  });
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('should not fetch');
+  });
+  const [a, b] = (await getGameSchema(400)).achievements;
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.equal(a.icon, NEW_ICON);
+  assert.equal(a.icongray, NEW_ICON);
+  assert.deepEqual(b, { apiname: 'B', name: 'B', hidden: false });
+});
+
 test('getGameSchema: returns no name and no achievements for an empty schema', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ game: {} }) }));
