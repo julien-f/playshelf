@@ -99,6 +99,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - On the Bundles page, ↻ also refreshes the bundles shown past their ITAD end date, and "Updated" gives the oldest page's age
 - Fanatical pick-and-mix prices stay shown when Fanatical's feed fails after its cached copy expired
 - A released game's ProtonDB and HowLongToBeat lookups no longer wait for its Steam reviews
+- A tag name list cached before tags expired monthly now expires within a month too
 
 ### Development
 
