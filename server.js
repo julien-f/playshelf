@@ -842,9 +842,13 @@ function settleSources(appid, sources, results) {
   const failed = Object.keys(results).filter((source) => results[source].status === 'rejected');
   // A source refused because this client spent its share: the stream says so once, not per game.
   const refused = Object.values(results).find((r) => r.status === 'rejected' && r.reason?.isClientBudgetExhausted);
-  // Each source's own age: one untouched store page mustn't date the rating fetched yesterday.
+  // Each source's own age: one untouched store page mustn't date the rating fetched yesterday. An expired row's
+  // is the age of a value served after a failed refetch.
   const fetchedAts = Object.fromEntries(
-    Object.entries(sources).map(([source, cacheKey]) => [source, getCachedAt(cacheKey(appid)) ?? null]),
+    Object.entries(sources).map(([source, cacheKey]) => [
+      source,
+      getCachedAt(cacheKey(appid), { expired: true }) ?? null,
+    ]),
   );
   return { fetchedAts, ...(failed.length && { failed }), ...(refused && { limited: refused.reason.message }) };
 }

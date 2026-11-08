@@ -30,7 +30,7 @@ const { _resetAuth, getHLTB } = require('../lib/hltb');
 const { _resetTagNameMap } = require('../lib/steam');
 const { _resetPickAndMix } = require('../lib/fanatical');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
-const { SESSION_TTL_MS, MISS_CACHE_TTL_MS } = require('../lib/config');
+const { SESSION_TTL_MS, MISS_CACHE_TTL_MS, RATING_CACHE_TTL_MS } = require('../lib/config');
 const { getMetrics } = require('../lib/metrics');
 const { getUpstreamStats } = require('../lib/upstream');
 
@@ -1868,6 +1868,36 @@ test('GET /api/game-details/:appid: failed fetch is not cached, held off, then r
   _resetAuth(); // clears the hold-off, as its 10 minutes passing would
   await api.get('/api/game-details/406');
   assert.equal(hltbCalls, 2, 'HLTB should be retried — failed fetch must not be cached');
+});
+
+test('GET /api/game-details/:appid: a rating whose refetch fails is served from its expired row, with its age', async (t) => {
+  _reset();
+  _resetAuth();
+  t.mock.method(console, 'warn', () => {});
+  let reviewsOk = true;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('GetAppReviews'))
+      return reviewsOk
+        ? {
+            ok: true,
+            json: async () => ({
+              response: {
+                query_summary: { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' },
+              },
+            }),
+          }
+        : { ok: false, status: 503 };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const first = (await api.get('/api/game-details/407')).body.rating;
+  assert.ok(first);
+  ageCache(RATING_CACHE_TTL_MS + 1000);
+  const cachedAt = getCachedAt('rating:407', { expired: true });
+  reviewsOk = false;
+  const res = await api.get('/api/game-details/407');
+  assert.deepEqual(res.body.rating, first);
+  assert.ok(!res.body.failed?.includes('rating'));
+  assert.equal(res.body.fetchedAts.rating, cachedAt);
 });
 
 // ── POST /api/game-details/stream ────────────────────────────────────────────

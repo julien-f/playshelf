@@ -11,12 +11,13 @@ const {
   isAnsweredFromCache,
   isCached,
   capExpiry,
+  STALE_GRACE_MS,
   _reset,
 } = require('../lib/cache');
 const { db } = require('../lib/db');
 const { getMetrics } = require('../lib/metrics');
 const { createDedup } = require('../lib/dedup');
-const { LIBRARY_CACHE_TTL_MS, BUNDLES_CACHE_TTL_MS, FORCE_MIN_AGE_MS } = require('../lib/config');
+const { LIBRARY_CACHE_TTL_MS, BUNDLES_CACHE_TTL_MS, FORCE_MIN_AGE_MS, RATING_CACHE_TTL_MS } = require('../lib/config');
 
 // ── getCached ─────────────────────────────────────────────────────────────────
 
@@ -36,10 +37,10 @@ test('getCached: returns undefined when entry is expired', () => {
   assert.equal(getCached('games:k'), undefined);
 });
 
-test('getCached: deletes expired entry from the cache', () => {
+test('getCached: an expired entry reads as a miss and stays for the sweep', () => {
   _reset([['games:k', { value: 'stale', ts: Date.now() - LIBRARY_CACHE_TTL_MS - 1 }]]);
-  getCached('games:k');
   assert.equal(getCached('games:k'), undefined);
+  assert.equal(getCacheEntryCounts().library, 1);
 });
 
 test('getCached: returns undefined for entry just past TTL boundary', () => {
@@ -84,12 +85,6 @@ test('getCacheEntryCounts: counts rows per group label, zero for an untouched gr
   assert.equal(counts.library, 2);
   assert.equal(counts.resolve, 1);
   assert.equal(counts.rating, 0);
-});
-
-test('getCacheEntryCounts: a deleted (expired, then read) entry is no longer counted', () => {
-  _reset([['games:k', { value: 'stale', ts: Date.now() - LIBRARY_CACHE_TTL_MS - 1 }]]);
-  getCached('games:k'); // triggers the expired-entry delete
-  assert.equal(getCacheEntryCounts().library, 0);
 });
 
 // ── getCachedAt ───────────────────────────────────────────────────────────────
@@ -234,6 +229,33 @@ test("createCachedFetch: the load's ttlMs sets the entry's expiry; a throw cache
     }),
   );
   assert.equal(getCached('games:bad'), undefined);
+});
+
+test('createCachedFetch: a failed refetch serves an expired row within its grace, with its age', async () => {
+  const ts = Date.now() - RATING_CACHE_TTL_MS - 1000;
+  _reset([['rating:1', { value: { pct: 90 }, ts }]]);
+  const cachedFetch = createCachedFetch(createDedup());
+  const fail = async () => {
+    throw Object.assign(new Error('upstream'), { isLogged: true });
+  };
+  assert.deepEqual(await cachedFetch('rating:1', {}, fail), { pct: 90 });
+  assert.equal(getCachedAt('rating:1'), undefined);
+  assert.equal(getCachedAt('rating:1', { expired: true }), ts);
+  await assert.rejects(cachedFetch('rating:1', { force: true }, fail), /upstream/, 'a forced refresh reports it');
+});
+
+test('createCachedFetch: no fallback past the grace, nor for a group without one', async () => {
+  _reset([
+    ['rating:1', { value: 'old', ts: Date.now() - RATING_CACHE_TTL_MS - STALE_GRACE_MS - 1 }],
+    ['games:1', { value: 'old', ts: Date.now() - LIBRARY_CACHE_TTL_MS - 1 }],
+  ]);
+  const cachedFetch = createCachedFetch(createDedup());
+  const fail = async () => {
+    throw Object.assign(new Error('upstream'), { isLogged: true });
+  };
+  await assert.rejects(cachedFetch('rating:1', {}, fail));
+  await assert.rejects(cachedFetch('games:1', {}, fail));
+  assert.equal(getCachedAt('games:1', { expired: true }), undefined);
 });
 
 // Capped on every read of a coming-soon row (lib/steam.js): one already within the cap costs no write.

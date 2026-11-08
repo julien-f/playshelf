@@ -6,9 +6,9 @@ const assert = require('node:assert/strict');
 
 // Faked before lib/cache loads, so the eviction interval it arms on load runs on this clock.
 mock.timers.enable({ apis: ['Date', 'setInterval'], now: Date.now() });
-const { getCacheEntryCounts, getCachedAt, _reset, _evictSql } = require('../lib/cache');
+const { getCacheEntryCounts, getCachedAt, _reset, _evictSql, STALE_GRACE_MS } = require('../lib/cache');
 const { db, CACHE_TABLES } = require('../lib/db');
-const { LIBRARY_CACHE_TTL_MS } = require('../lib/config');
+const { LIBRARY_CACHE_TTL_MS, RATING_CACHE_TTL_MS } = require('../lib/config');
 
 test('expired rows are evicted every hour, not only at startup', () => {
   const rows = () => getCacheEntryCounts().library;
@@ -31,6 +31,19 @@ test('the sweep evicts rows past their own expiry and rows past their TTL, and k
   assert.equal(getCacheEntryCounts().library, 2);
   assert.notEqual(getCachedAt('games:own-future'), undefined);
   assert.notEqual(getCachedAt('games:ttl-fresh'), undefined);
+});
+
+test("the sweep keeps a grace group's expired rows until the grace is over", () => {
+  const now = Date.now();
+  _reset([
+    ['rating:own', { value: 'v', ts: now, expires: now - STALE_GRACE_MS + 2 * 60 * 60 * 1000 }],
+    ['rating:ttl', { value: 'v', ts: now - RATING_CACHE_TTL_MS - STALE_GRACE_MS + 2 * 60 * 60 * 1000 }],
+    ['rating:gone', { value: 'v', ts: now, expires: now - STALE_GRACE_MS - 1 }],
+  ]);
+  mock.timers.tick(60 * 60 * 1000);
+  assert.equal(getCacheEntryCounts().rating, 2);
+  mock.timers.tick(2 * 60 * 60 * 1000);
+  assert.equal(getCacheEntryCounts().rating, 0);
 });
 
 test("every cache table's sweep reads only its expiry index, never scans the table", () => {
