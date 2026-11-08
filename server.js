@@ -954,8 +954,10 @@ function fetchStoreDetails(appid, { force = false } = {}) {
 
 // Both parts as one reply: GET /api/game-details and a stream's fully cached games.
 async function fetchGameDetails(appid, options) {
+  // Only a store page answered from the cache: one being fetched would hold the fast part behind Steam's store cap.
+  const storeCached = isAnsweredFromCache(appDetailsCacheKey(appid), { force: !!options?.force });
   const storePromise = fetchStoreDetails(appid, options);
-  const storeDetails = () => storePromise.then(({ meta }) => meta);
+  const storeDetails = storeCached ? () => storePromise.then(({ meta }) => meta) : undefined;
   const [fast, store] = await Promise.all([fetchFastDetails(appid, { ...options, storeDetails }), storePromise]);
   const fetchedAts = { ...fast.fetchedAts, ...store.fetchedAts };
   const failed = [...(fast.failed ?? []), ...(store.failed ?? [])];

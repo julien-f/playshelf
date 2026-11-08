@@ -1555,6 +1555,64 @@ for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
   });
 }
 
+// The fast part runs ahead of Steam's store details cap: only a cached store page stands in for missing basics.
+test("GET /api/game-details/:appid: a browse row without basics doesn't hold ProtonDB behind an uncached store page", async (t) => {
+  _reset();
+  _resetAuth();
+  setCache('browse:780', { tagids: [] });
+  setCache('tagnames:all', TAG_NAME_MAP);
+  let releasePage;
+  const pageHeld = new Promise((r) => (releasePage = r));
+  let protondbAsked = false;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('appdetails')) {
+      await pageHeld;
+      return { ok: true, json: async () => ({ 780: { success: true, data: { name: 'G', type: 'game' } } }) };
+    }
+    if (url.includes('protondb.com')) {
+      protondbAsked = true;
+      return { ok: true, status: 200, json: async () => ({ tier: 'gold', confidence: 'good', total: 3 }) };
+    }
+    if (url.includes('GetAppReviews'))
+      return { ok: true, json: async () => ({ response: { query_summary: { total_reviews: 1, total_positive: 1 } } }) };
+    if (url.includes('search/site/init'))
+      return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+    if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const response = api.get('/api/game-details/780').then((res) => res);
+  try {
+    await until(() => protondbAsked, 'ProtonDB asked while the store page is pending');
+  } finally {
+    releasePage();
+    assert.equal((await response).status, 200);
+  }
+});
+
+// A failed forced store fetch still leaves the cached page's basics.
+test('GET /api/game-details/:appid?refresh=1: a failed store refetch keeps the basics of the cached page', async (t) => {
+  _reset();
+  _resetAuth();
+  setCache('appdetails:781', { name: 'Cached', type: 'game' });
+  setCache('tagnames:all', TAG_NAME_MAP);
+  ageCache();
+  t.mock.method(console, 'warn', () => {});
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('appdetails')) return { ok: false, status: 503 };
+    if (url.includes('IStoreBrowseService'))
+      return { ok: true, json: async () => ({ response: { store_items: [{ success: 1, tagids: [] }] } }) };
+    if (url.includes('protondb.com')) return { ok: true, status: 200, json: async () => ({ tier: 'gold' }) };
+    if (url.includes('GetAppReviews'))
+      return { ok: true, json: async () => ({ response: { query_summary: { total_reviews: 1, total_positive: 1 } } }) };
+    if (url.includes('search/site/init'))
+      return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+    if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const { body } = await api.get('/api/game-details/781?refresh=1').expect(200);
+  assert.equal(body.basics?.name, 'Cached');
+});
+
 // Only a game the browse item calls coming soon waits on its reviews to tell whether it's out.
 test("GET /api/game-details/:appid: a released game's ProtonDB lookup doesn't wait for its reviews", async (t) => {
   _reset();
