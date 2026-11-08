@@ -194,7 +194,7 @@ test('search limiter: counts cache misses but never counts cache hits (common-ga
   // A third uncached search, on either route, is over budget → 429.
   const over = await api.post('/api/common-games').send({ members: ['76561198000000003'] });
   assert.equal(over.status, 429, 'a cache miss past the budget should be rate limited');
-  const refresh = await api.post('/api/wishlist').send({ members: [CACHED_WISHLIST], refresh: true });
+  const refresh = await api.post('/api/wishlist?refresh=1').send({ members: [CACHED_WISHLIST] });
   assert.equal(refresh.status, 429, 'a forced refresh of a cached key past the budget should be rate limited');
 
   // The fully-cached accounts are still served even though the budget is exhausted, and make no

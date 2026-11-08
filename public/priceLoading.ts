@@ -83,15 +83,15 @@ export async function postPrices({
   gids,
   appids,
   country,
-  force = false,
+  refresh = false,
 }: {
   gids?: string[];
   appids?: number[];
   country: string;
-  force?: boolean;
+  refresh?: boolean;
 }): Promise<PriceLookup> {
   const qs = new URLSearchParams({ country });
-  if (force) qs.set('refresh', '1');
+  if (refresh) qs.set('refresh', '1');
   const data = await postJson<{ prices?: Record<string, PriceInfo>; fetchedAt?: number | null }>(
     `/api/prices?${qs}`,
     gids ? { gids } : { appids },

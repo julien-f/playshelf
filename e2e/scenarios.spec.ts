@@ -49,6 +49,22 @@ test('A1: first visit — resolve my account, then open my library', async ({ pa
   await expect(rows(page)).toHaveCount(6);
 });
 
+test('A1 edge: Home, then Owned, then a game download the library and wishlist once', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const asked: string[] = [];
+  page.on('request', (req) => {
+    const path = new URL(req.url()).pathname;
+    if (path === '/api/common-games' || path === '/api/wishlist') asked.push(path);
+  });
+  await page.goto('/');
+  await expect(page.locator('.account-counts')).toContainText('Owned: 6');
+  await page.getByRole('main').getByRole('link', { name: 'Owned', exact: true }).click();
+  await expect(rows(page)).toHaveCount(6);
+  await row(page, 'Hades').getByText('Hades').click();
+  await expect(page.locator('.panel-ownership-badge.owned')).toBeVisible();
+  expect(asked.sort()).toEqual(['/api/common-games', '/api/wishlist']);
+});
+
 test('A1 edge: a first visit says what the app does, and the account field looks it up', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.home-intro')).toContainText('ratings, completion times and prices');
@@ -363,10 +379,10 @@ test('A2 edge: an account picked mid-refresh does not read "Refreshing…" while
   await asPlayer(page, ALICE);
   await page.goto('/');
   await expect(page.locator('.account-counts')).toContainText('Owned: 6');
-  // Holds Alice's refresh and Bob's load (not the resolve, sent by name), so both are in flight.
+  // Holds Alice's refresh and Bob's wishlist (his library comes with his resolve), so both are in flight.
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/common-games', async (route) => {
+  await page.route(/\/api\/(common-games\?refresh=1|wishlist)$/, async (route) => {
     const body = route.request().postData() ?? '';
     if (body.includes(ALICE.steamid) || body.includes(BOB.steamid)) await held;
     await route.fallback();
@@ -385,18 +401,18 @@ test('A2 edge: an account picked mid-refresh does not read "Refreshing…" while
 
 test("A2 edge: a picked account whose library fails doesn't show the previous one's age", async ({ page }) => {
   await mockApi(page, { states: ['stale'] });
-  await asPlayer(page, ALICE);
+  // A stored account, so no resolve brings its library along.
+  await asPlayer(page, ALICE, { otherAccounts: ['Bob'] });
   await page.goto('/');
   const updated = page.locator('.account-updated-btn');
   await expect(updated).toContainText('12 days ago');
   await page.route('**/api/common-games', (route) =>
-    route.request().postData()?.includes(BOB.steamid)
+    route.request().postData()?.includes('9000') // otherAccounts' id
       ? route.fulfill({ status: 502, json: { error: 'Steam request failed' } })
       : route.fallback(),
   );
 
-  await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('bob');
-  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await page.locator('.account-tiles .account-tile').filter({ hasText: 'Bob' }).click();
   await expect(page.locator('.account-counts')).toContainText("Owned: couldn't load");
   await expect(updated).not.toContainText('12 days ago');
 });
@@ -778,7 +794,7 @@ test('A5 edge: a profile too thin for an archetype or story tile shows neither, 
 test('A5 edge: the profile stays on screen through a refresh that keeps every game', async ({ page }) => {
   await asPlayer(page, ALICE);
   // 10 h on each game: enough for Plays mostly.
-  await page.route('**/api/common-games', (route) => {
+  await page.route(/\/api\/common-games(\?refresh=1)?$/, (route) => {
     const req = route.request();
     const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
     for (const perPlayer of Object.values(body.playtime) as Record<string, number>[])
@@ -804,7 +820,7 @@ test('A5 edge: the profile stays on screen while a refresh streams in a new game
   await asPlayer(page, ALICE);
   let refreshed = false;
   // 10 h on each game: enough for Plays mostly; the refresh adds Don't Starve Together (322330).
-  await page.route('**/api/common-games', (route) => {
+  await page.route(/\/api\/common-games(\?refresh=1)?$/, (route) => {
     const req = route.request();
     const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
     if (refreshed) {
@@ -4600,7 +4616,7 @@ test('D1 edge: the Updated tile keeps the rows and the selection while it refres
   // Holds the library refresh, so the table can be checked mid-way.
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/common-games', async (route) => {
+  await page.route(/\/api\/common-games\?refresh=1$/, async (route) => {
     await held;
     await route.fallback();
   });
@@ -4620,7 +4636,7 @@ test('D1 edge: the Updated tile keeps focus while it refreshes', async ({ page }
   await expect(rows(page)).toHaveCount(6);
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/common-games', async (route) => {
+  await page.route(/\/api\/common-games\?refresh=1$/, async (route) => {
     await held;
     await route.fallback();
   });
@@ -4637,7 +4653,7 @@ test('D1 edge: a failed Updated refresh leaves the tile there to try again', asy
   await asPlayer(page, ALICE);
   await page.goto('/lists/compare?u=alice&u=bob');
   await expect(groupRows(page)).toHaveCount(3);
-  await page.route('**/api/common-games', (route) =>
+  await page.route(/\/api\/common-games\?refresh=1$/, (route) =>
     route.fulfill({ status: 502, json: { error: 'Steam request failed' } }),
   );
   const updated = page.locator('.list-stat', { hasText: 'Updated' });
@@ -4647,9 +4663,59 @@ test('D1 edge: a failed Updated refresh leaves the tile there to try again', asy
   await expect(updated).not.toContainText('Refreshing');
   await expect(page.locator('.list-formula')).toBeVisible();
 
-  await page.unroute('**/api/common-games');
+  await page.unroute(/\/api\/common-games\?refresh=1$/);
   await updatedBtn.click();
   await expect(page.getByRole('main')).not.toContainText('Steam request failed');
+});
+
+test("D1 edge: Home's ↻ updates the ✓ marks shown elsewhere", async ({ page }) => {
+  await asPlayer(page, ALICE, { recentGames: [728880] }); // Overcooked! 2: Bob's, not Alice's
+  await page.goto('/');
+  await expect(page.locator('.account-counts')).toContainText('Owned: 6');
+  const box = page.getByPlaceholder('Look up any game…');
+  const option = page.getByRole('option', { name: /Overcooked! 2/ });
+  await box.focus();
+  await expect(option).toBeVisible();
+  await expect(option.locator('.game-search-badge.owned')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // Bought since: the refreshed library has it.
+  await page.route(/\/api\/common-games\?refresh=1$/, (route) => {
+    const req = route.request();
+    const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
+    body.games.push({ appid: 728880, name: 'Overcooked! 2' });
+    body.playtime[728880] = { [ALICE.steamid]: 0 };
+    return route.fulfill({ json: body });
+  });
+  await page.locator('.account-updated-btn').click();
+  await expect(page.locator('.account-counts')).toContainText('Owned: 7');
+  await box.focus();
+  await expect(option.locator('.game-search-badge.owned')).toBeVisible();
+});
+
+test("D1 edge: an open panel's In library badge follows a ↻ of the account", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'phone', 'the open panel covers the Updated tile on a phone');
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=bob');
+  await expect(groupRows(page)).toHaveCount(3);
+  await row(page, 'Overcooked! 2').getByText('Overcooked! 2').click(); // Bob's, not Alice's
+  await expect(page.locator('.game-panel')).toContainText('Overcooked! 2');
+  const badge = page.locator('.panel-ownership-badge.owned');
+  await expect(badge).toHaveCount(0);
+
+  // Bought since: Alice's refreshed library has it.
+  await page.route(/\/api\/common-games\?refresh=1$/, (route) => {
+    const req = route.request();
+    const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
+    if (req.postData()?.includes(ALICE.steamid)) {
+      body.games.push({ appid: 728880, name: 'Overcooked! 2' });
+      body.playtime[728880] = { [ALICE.steamid]: 0 };
+    }
+    return route.fulfill({ json: body });
+  });
+  await page.getByRole('button', { name: /^Updated\b/ }).click();
+  await expect(page.locator('.list-stat', { hasText: 'Updated' })).not.toContainText('Refreshing');
+  await expect(badge).toBeVisible();
 });
 
 test('D1 edge: an Owned list that failed to load still offers the Updated tile', async ({ page }) => {

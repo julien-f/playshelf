@@ -146,7 +146,7 @@ const rateLimitBypassed = () => process.env.NODE_ENV === 'test' && process.env.R
 // One client as the limiters key it: an IPv4 address, or an IPv6 client's /56.
 const clientKey = (req) => rateLimit.ipKeyGenerator(req.ip);
 
-const isForceRefresh = (req) => req.query.refresh === '1' || req.query.refresh === 'true';
+const isForceRefresh = (req) => req.query.refresh === '1';
 
 // /api/bundles' query, shared with bundlesListLimit's skip so both compute the same cache key.
 const MAX_BUNDLES_OFFSET = 10_000; // 200 "Load more" pages: past it, an empty page ends the list
@@ -398,7 +398,6 @@ function parseMembers(req, res) {
   }
   return members;
 }
-const isBodyRefresh = (req) => req.body.refresh === true;
 const resolveSteamIds = async (raw) => [...new Set(await Promise.all(raw.map(resolveSteamId)))];
 
 // Stricter limit for searches — each uncached user triggers Steam API calls. Shared by
@@ -412,9 +411,8 @@ const searchLimit = namedRateLimit('search', {
   max: SEARCH_RATE_LIMIT_MAX,
   message: { error: 'Too many searches. Please wait a minute and try again.' },
   skip: (req) => {
-    // A full refresh always re-fetches every account, so it must always count — same rule
-    // isForceRefresh gets elsewhere in this file.
-    if (isBodyRefresh(req)) return false;
+    // A full refresh always re-fetches every account, so it must always count.
+    if (isForceRefresh(req)) return false;
 
     const ids = cachedSteamIds(req.body.members);
     if (!ids) return false;
@@ -432,7 +430,7 @@ const friendsLimit = namedRateLimit('friends', {
   max: FRIENDS_RATE_LIMIT_MAX,
   message: { error: 'Too many friends lookups. Please wait a minute and try again.' },
   skip: (req) => {
-    if (isBodyRefresh(req)) return false;
+    if (isForceRefresh(req)) return false;
     const ids = cachedSteamIds(req.body.members);
     return !!ids && [...ids].every((id) => isCached(friendsCacheKey(id)));
   },
@@ -692,7 +690,7 @@ app.post('/api/common-games', searchLimit, async (req, res) => {
   // Explicit refresh (a user-clicked "↻ Refresh", not a normal search) bypasses the
   // library-tier cache (owned games + player summaries) so a just-bought game or a
   // changed display name shows up immediately, without waiting out the TTL.
-  const refresh = isBodyRefresh(req);
+  const refresh = isForceRefresh(req);
 
   try {
     const ids = await resolveSteamIds(members);
@@ -759,7 +757,7 @@ app.post('/api/wishlist', searchLimit, async (req, res) => {
   const members = parseMembers(req, res);
   if (!members) return;
 
-  const refresh = isBodyRefresh(req);
+  const refresh = isForceRefresh(req);
 
   try {
     const ids = await resolveSteamIds(members);
@@ -803,7 +801,7 @@ app.post('/api/friends', friendsLimit, async (req, res) => {
   const members = parseMembers(req, res);
   if (!members) return;
 
-  const refresh = isBodyRefresh(req);
+  const refresh = isForceRefresh(req);
 
   try {
     const ids = await resolveSteamIds(members);

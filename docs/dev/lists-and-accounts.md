@@ -29,6 +29,7 @@ Both are full `AccountSlot` objects (see the schema below), not id references, s
 - **Account header**: avatar, persona name and profile link, online status (as of the last library refresh), owned and wishlist counts.
 - **Display fields stay current**: `label`/`avatarUrl`/`vanities` are captured when the account is picked; Home's account card refreshes them wherever the account is stored (`refreshAccountInfo`) from the profile it fetches anyway.
 - **Copyable identifier**: ⧉ copies each member's nicest identifier (`accountsStore.ts`'s `accountIdentifiers`): its Steam custom-URL name (`AccountSlot.vanities`, captured at resolve time from `/api/common-games`' `profileurl`), else its steam64 id. One per member: a Family's joined label is nothing an input accepts back. Offered wherever an account is named (account card, the nav chip and its recents), with no fetch.
+- **Fetched once per account**: Home, the Owned/Wishlist lists, a comparison and the ✓/☆ markers share each account's fetches (`accountData.ts`, [data.md](data.md#refresh-paths)), so switching back to an account or opening its list after Home costs no request; a ↻ anywhere replaces them, and the ✓/☆ markers follow.
 - **Reactive**: changing `currentAccount` while `/lists/owned` or `/lists/wishlist` is open re-fetches that route in place: its load effect reads the account reactively.
 
 ### `?u=` URL semantics

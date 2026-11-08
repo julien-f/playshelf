@@ -27,7 +27,7 @@ import { decideSwipeAxis, type SwipeAxis } from './lightboxSwipe.ts';
 import { pushOverlayEntry, popOverlayEntry } from './overlayHistory.ts';
 import { buildMediaItems, mediaLabel, resolveShotIndex } from './mediaItems.ts';
 import type { MediaItem } from './mediaItems.ts';
-import { getMyOwnershipStatus, getOwnersFor } from './myOwnership.ts';
+import { getMyOwnershipStatus, getOwnersFor, myOwnershipVersion } from './myOwnership.ts';
 import type { OwnershipStatus } from './myOwnership.ts';
 import { STATUS_LABELS, getStatus, setStatus, type GameStatus } from './gameStatuses.ts';
 import { sortOwners, ownerMeterPct } from './ownerList.ts';
@@ -412,7 +412,7 @@ async function handlePanelRefresh() {
   setPanelRefreshing(true);
   try {
     // Each `refetch()` re-runs that resource's fetcher with `refetching` set, which is what its
-    // fetcher reads as "force" (bypass both this app's session cache and the server's own TTL).
+    // fetcher reads as `refresh` (bypass both this app's session cache and the server's own TTL).
     // A refetch of a resource whose source is currently null — price, for a game its list
     // already priced — is a no-op by construction, no extra check needed here. DLC isn't
     // refetched: forcing every one of a game's DLC would cost one store lookup each.
@@ -538,7 +538,7 @@ const panelData = createRoot(() => {
   const [news, { refetch: refetchNews }] = createResource<PanelNews, number>(openAppid, (appid, info) => {
     // A cached value comes back synchronously, so reopening a game paints its real News card
     // instead of flashing the loading skeleton at it again.
-    return fetchNews(appid, { force: isForced(info), settled: () => openAppid() === appid });
+    return fetchNews(appid, { refresh: isForced(info), settled: () => openAppid() === appid });
   });
 
   const [achievements, { refetch: refetchAchievements }] = createResource<PanelAchievements, string>(
@@ -550,7 +550,7 @@ const panelData = createRoot(() => {
       const g = panelGame();
       if (!g) return null;
       return fetchAchievements(g.appid, currentMembers(), {
-        force: isForced(info),
+        refresh: isForced(info),
         settled: () => appidAndAccount() === key,
         achievementCount: g.details?.meta?.achievementCount,
       });
@@ -560,8 +560,13 @@ const panelData = createRoot(() => {
   // Both of these are free in practice — myOwnership.ts already holds the current account's
   // owned/wishlist sets (and per-member playtimes) from one fetch shared with the ✓/☆ markers on
   // every table row, so these await a resolved promise rather than making a request.
-  const ownersKey = createMemo(() => {
+  // A ↻ of the account anywhere moves myOwnershipVersion, so an open panel follows it.
+  const ownershipKey = createMemo(() => {
     const key = appidAndAccount();
+    return key == null ? null : `${key}:${myOwnershipVersion()}`;
+  });
+  const ownersKey = createMemo(() => {
+    const key = ownershipKey();
     return key == null ? null : `${key}:${ownersRev()}`;
   });
   const [owners] = createResource<GameOwner[], string>(ownersKey, () => {
@@ -570,7 +575,7 @@ const panelData = createRoot(() => {
     return panelOptions.getOwners(appid) ?? getOwnersFor(appid);
   });
 
-  const [ownership] = createResource<OwnershipStatus | null, string>(appidAndAccount, () => {
+  const [ownership] = createResource<OwnershipStatus | null, string>(ownershipKey, () => {
     const appid = openAppid();
     return appid == null ? null : getMyOwnershipStatus(appid);
   });
@@ -588,13 +593,13 @@ const panelData = createRoot(() => {
 
   const [price, { refetch: refetchPrice }] = createResource<PanelPrice, string>(priceSource, (key, info) => {
     const [appid, region] = key.split(':');
-    return fetchPrice(Number(appid), region, { force: isForced(info), settled: () => priceSource() === key });
+    return fetchPrice(Number(appid), region, { refresh: isForced(info), settled: () => priceSource() === key });
   });
 
   const bundlesSource = createMemo(() => (openAppid() == null ? null : `${openAppid()}:${currentRegion()}`));
   const [bundles, { refetch: refetchBundles }] = createResource<PanelBundles, string>(bundlesSource, (key, info) => {
     const [appid, region] = key.split(':');
-    return fetchBundles(Number(appid), region, { force: isForced(info), settled: () => bundlesSource() === key });
+    return fetchBundles(Number(appid), region, { refresh: isForced(info), settled: () => bundlesSource() === key });
   });
 
   // DLC is the one card whose fetch is gated behind actually expanding it (see panelData.ts's

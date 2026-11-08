@@ -350,7 +350,11 @@ export function respond(
 
   // A refresh is fetched now; otherwise as of server start, or 12 days before it under `stale`.
   const accountFetchedAt = () =>
-    body.refresh ? Date.now() : states.has('stale') ? Date.now() - 12 * 86400_000 : Date.now();
+    url.searchParams.get('refresh') === '1'
+      ? Date.now()
+      : states.has('stale')
+        ? Date.now() - 12 * 86400_000
+        : Date.now();
 
   if (path === '/api/common-games') {
     const identifiers: string[] = body.members ?? [];

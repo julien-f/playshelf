@@ -87,7 +87,7 @@ test('search limiter: a cached vanity name skips it like a cached Steam64 id', a
   const commonGames =
     (members, refresh = false) =>
     () =>
-      api.post('/api/common-games').send({ members, refresh });
+      api.post(`/api/common-games${refresh ? '?refresh=1' : ''}`).send({ members });
   await assertMissesCountHitsDont(calls, {
     misses: {
       'uncached Steam64': commonGames(['76561198000000001']),
@@ -112,7 +112,7 @@ test('friends limiter: counts cache misses but never counts cache hits', async (
   const friends =
     (members, refresh = false) =>
     () =>
-      api.post('/api/friends').send({ members, refresh });
+      api.post(`/api/friends${refresh ? '?refresh=1' : ''}`).send({ members });
   await assertMissesCountHitsDont(calls, {
     misses: {
       'uncached Steam64': friends(['76561198000000001']),

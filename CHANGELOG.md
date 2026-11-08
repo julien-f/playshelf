@@ -96,6 +96,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Achievements a game adds after its first look show once its store page lists them, instead of up to a year later
 - On the Bundles page, ↻ also refreshes the bundles shown past their ITAD end date, and "Updated" gives the oldest page's age
 - Fanatical pick-and-mix prices stay shown when Fanatical's feed fails after its cached copy expired
+- Refreshing an account updates its ✓/☆ marks everywhere, and moving between Home, its lists and a game no longer downloads its library again
+- A game's panel reopened after a while fetches its price, bundles, news and achievements again instead of showing stale ones
 
 ### Development
 
@@ -123,6 +125,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Pushing after a UI commit runs only the phone e2e half: each width's pass is remembered
 - db-query.js reads the statement from stdin, so a multi-line query needs no shell quoting
 - Shipped migrations no longer change when a cache group is added
+- Account refreshes send ?refresh=1 like every other route, and the frontend's refresh option has one name
 
 ## [0.12.0] - 2026-10-30
 
