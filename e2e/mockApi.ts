@@ -183,7 +183,7 @@ function details(appid: number, states: ReadonlySet<string>) {
       // So the panel's More links menu has an entry.
       website: appid === MEDIA_APPID ? 'https://example.com/' : null,
       achievementCount: appid === MEDIA_APPID ? ACHIEVEMENTS.length : 0,
-      platforms: { windows: true, mac: false, linux: false },
+      platforms: ['Windows'], // lib/steam.js's shape
       languages: big?.languages ?? [],
       isFree: g.free ?? false,
       priceInitial: null,
