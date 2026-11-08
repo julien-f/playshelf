@@ -416,10 +416,10 @@ export async function fetchJson<T>(url: string, init: RequestInit | undefined, f
   return data as T;
 }
 
-// fetchJson for a POST with a JSON body.
 // How long a fetch is reused before asking the server again: accountData.ts's and panelData.ts's caches.
 export const CLIENT_CACHE_MAX_AGE_MS = 10 * 60_000;
 
+// fetchJson for a POST with a JSON body.
 export function postJson<T>(url: string, body: unknown, fallback: string): Promise<T> {
   return fetchJson<T>(
     url,
