@@ -1405,10 +1405,12 @@ test('GET /api/game-details/:appid: ?refresh=1 alongside a normal request shares
 
   const hits = dedupHits('steam');
   const both = Promise.all([api.get('/api/game-details/503'), api.get('/api/game-details/503?refresh=1')]);
-  // A lone request makes no 'steam' dedup hit; the forced one joins all five of its upstream calls.
-  await until(() => dedupHits('steam') === hits + 5, 'the forced calls joining the normal ones');
+  // A lone request makes no 'steam' dedup hit; the forced one joins its four started calls, then ProtonDB's,
+  // which waits for the browse item.
+  await until(() => dedupHits('steam') === hits + 4, 'the forced calls joining the normal ones');
   release();
   const [normal, forced] = await both;
+  assert.equal(dedupHits('steam'), hits + 5);
   assert.equal(normal.status, 200);
   assert.equal(forced.status, 200);
   assert.equal(forced.body.rating.score, normal.body.rating.score);
@@ -1468,6 +1470,63 @@ for (const comingSoon of [true, false]) {
       assert.equal(cachedAt === undefined, comingSoon, source);
     }
     assert.notEqual(getCachedAt('browse:777'), undefined, 'tags are not a miss');
+  });
+}
+
+// ProtonDB has no reports for a game not out yet, a DLC or a soundtrack (integrations.md), so it isn't asked.
+// "Unreleased" needs appdetails to agree: the browse item can be a year old (data.md).
+for (const [label, { browse, appdetailsComingSoon = false, asked }] of Object.entries({
+  'an unreleased game': { browse: { release: { is_coming_soon: true } }, appdetailsComingSoon: true, asked: false },
+  'a game released since its browse item was cached': { browse: { release: { is_coming_soon: true } }, asked: true },
+  'a released game': { browse: { release: { is_coming_soon: false } }, asked: true },
+  'a DLC': { browse: { type: 4 }, asked: false },
+  'a soundtrack': { browse: { type: 11 }, asked: false },
+  'a game whose browse item failed': { browse: null, asked: true },
+})) {
+  test(`GET /api/game-details/:appid: ProtonDB is ${asked ? '' : 'not '}asked for ${label}`, async (t) => {
+    _reset();
+    _resetAuth();
+    const urls = [];
+    t.mock.method(console, 'warn', () => {});
+    t.mock.method(globalThis, 'fetch', async (url) => {
+      urls.push(url);
+      if (url.includes('appdetails'))
+        return {
+          ok: true,
+          json: async () => ({
+            778: {
+              success: true,
+              data: { name: 'G', type: 'game', release_date: { coming_soon: appdetailsComingSoon } },
+            },
+          }),
+        };
+      if (url.includes('GetAppReviews'))
+        return {
+          ok: true,
+          json: async () => ({ response: { query_summary: { total_reviews: 0, total_positive: 0 } } }),
+        };
+      if (url.includes('protondb.com'))
+        return { ok: true, status: 200, json: async () => ({ tier: 'gold', confidence: 'good', total: 3 }) };
+      if (url.includes('search/site/init'))
+        return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+      if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+      if (url.includes('IStoreBrowseService')) {
+        if (!browse) throw new TypeError('fetch failed');
+        const item = { success: 1, tagids: [], type: 0, name: 'G', basic_info: {}, assets: {}, ...browse };
+        return { ok: true, json: async () => ({ response: { store_items: [item] } }) };
+      }
+      if (url.includes('ajaxgetstoretags'))
+        return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const { body } = await api.get('/api/game-details/778').expect(200);
+    assert.equal(
+      urls.some((u) => u.includes('protondb.com')),
+      asked,
+    );
+    assert.deepEqual(body.protondb, asked ? { tier: 'gold', confidence: 'good', total: 3 } : null);
+    assert.ok(!body.failed?.includes('protondb'));
+    assert.notEqual(getCachedAt('protondb:778'), undefined, 'the source has an age');
   });
 }
 

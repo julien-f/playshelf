@@ -53,7 +53,7 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
   - A 200 counts as a success only with a `data` array: any other body fails that search uncached, without accepting the token or resetting the breaker's streak.
 - **A failed lookup** (429, block, network, malformed body) isn't cached, since it would read as no data: the game's lookups fail without a request for 10 minutes instead (`failedLookups`, `lib/hltb.js`), unless forced by ↻. A client-budget refusal doesn't count.
 - **Matching**: Levenshtein similarity (`stringSimilarity`); below 0.35 is discarded.
-- **What's searched**: the store metadata's `type` skips soundtracks, videos, series, episodes, hardware, demos and ads (`NOT_PLAYED_TYPES`, `lib/hltb.js`), which read as no data rather than failed. Tools are still searched: none of the types the app knows (`TYPE_LABELS`) marks them — an assumption from observed data, not Steam's docs.
+- **What's searched**: the store metadata's `type` skips the types nobody launches (`NEVER_LAUNCHED_TYPES`, `lib/steam.js`), demos and ads (`NOT_PLAYED_TYPES`, `lib/hltb.js`), which read as no data rather than failed. Tools are still searched: none of the types the app knows (`TYPE_LABELS`) marks them — an assumption from observed data, not Steam's docs.
 - **Times** (`pickBestMatch`): `main` (`comp_main`), `extra` (`comp_plus`), `completionist` (`comp_100`) and `all` (`comp_all`), seconds converted to hours rounded to the half hour, as HLTB's own site shows them.
   - `all` ("All PlayStyles") is **not** the average of the other three: it pools every submission regardless of category (`comp_all_count` = the sum of the three counts), so it usually lands near Main Story.
   - Being one representative number, it's the default HLTB column (`hltbAll`, "HLTB (h)"), the ranking card's "10.5 h to beat", and the panel's HLTB glance chip ("all playstyles"); its How Long To Beat section breaks it down into Main Story, Main + Extra and Completionist.
@@ -114,6 +114,7 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 `getProtonDbStatus` (`lib/steam.js`) calls `https://www.protondb.com/api/v1/reports/summaries/{appid}.json`: untrusted tier, no key, no headers at all, its own limiter and breaker.
 
 - **404**: no reports yet, cached as `null`.
+- **Not asked** (cached as a `null` miss, `MISS_CACHE_TTL_MINUTES`) for a DLC, a type nobody launches (`NEVER_LAUNCHED_TYPES`, `lib/steam.js`) or an unreleased game — `comingSoon` on the browse item _and_ on appdetails, since the browse item can be a year old. Sampled 2026-11-08: 10/10 upcoming games and 15/15 DLC answered 404, as did every cached soundtrack; demos and `advertising` apps (old games re-listed) do have reports, so they're asked.
 - **403**: seen as a blanket bot-block (the same page for every appid); the error message carries a body snippet to tell it from a per-game error, and two in a row open the breaker.
 - **`tier: "pending"`**: too few reports for a tier, but ProtonDB still publishes a `provisionalTier`; that one is shown, marked `pending: true` so the UI renders it lower-confidence. Only no provisional tier either reads as no data. The raw reply is cached, so this rule can change without busting anything.
 
