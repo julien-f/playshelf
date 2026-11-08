@@ -9,6 +9,7 @@ const {
   getCacheEntryCounts,
   createCachedFetch,
   isAnsweredFromCache,
+  isCached,
   capExpiry,
   _reset,
 } = require('../lib/cache');
@@ -192,7 +193,16 @@ test('getCached: a forced read of a library row refetches however young', () => 
   _reset([['games:k', { value: 'v', ts: Date.now() - 60_000 }]]);
   assert.equal(getCached('games:k', { force: true }), undefined);
   assert.equal(isAnsweredFromCache('games:k', { force: true }), false);
-  assert.equal(isAnsweredFromCache('games:k'), true);
+  assert.equal(isCached('games:k'), true);
+});
+
+// ── setCache ──────────────────────────────────────────────────────────────────
+
+// A store page's two rows must not be left half written (lib/steam.js's getAppDetails).
+test('setCache: rows written alongside are written all or none', () => {
+  _reset();
+  assert.throws(() => setCache('appdetails:1', 'trimmed', { alongside: [['nope:1', 'whole']] }), /no TTL group/);
+  assert.equal(getCachedAt('appdetails:1'), undefined);
 });
 
 // ── createCachedFetch ─────────────────────────────────────────────────────────
@@ -227,10 +237,10 @@ test('capExpiry: brings the expiry forward, and writes nothing when it is alread
   setCache('meta:1', 'v');
   const writes = () => db.prepare('SELECT total_changes() AS n').get().n;
   let before = writes();
-  capExpiry('meta:1', 1000);
+  assert.equal(capExpiry('meta:1', 1000), true);
   assert.equal(writes(), before + 1);
   assert.ok(getCachedAt('meta:1') !== undefined);
   before = writes();
-  capExpiry('meta:1', 2000);
+  assert.equal(capExpiry('meta:1', 2000), false);
   assert.equal(writes(), before);
 });

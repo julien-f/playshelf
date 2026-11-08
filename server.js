@@ -858,10 +858,11 @@ const isUnreleased = (basics, rating) => !!basics?.comingSoon && rating === null
 // Everything but appdetails: these upstreams keep a faster pace than Steam's store details cap, so a list's rows fill ahead
 // of it. Force-refresh gets its own lane, never handed a normal request's result (its own reads may still be cached: FORCE_MIN_AGE_MINUTES). `priority`: one
 // game looked up, its HLTB search ahead of a list's backlog (a game already queued by a list joins its place).
-function fetchFastDetails(appid, { force = false, priority = false } = {}) {
+// `storeDetails`: the store part's appdetails when it runs alongside, so a browse item without basics doesn't read them again.
+function fetchFastDetails(appid, { force = false, priority = false, storeDetails } = {}) {
   return dedupDetails(`details:fast:${force ? 'force:' : ''}${appid}`, () => {
     const browsePromise = getStoreBrowseItem(appid, { force });
-    const basicsPromise = browsePromise.then((item) => gameBasics(item, appid));
+    const basicsPromise = browsePromise.then((item) => gameBasics(item, appid, storeDetails));
     // The game's name, which HLTB searches: always from store data resolved from the appid, never from the
     // client (no ownership check here). Without a confirmed name and type from the browse item, it waits for
     // appdetails', unforced: a forced one would refetch what the store part just refreshed, and only the name
@@ -874,8 +875,10 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
       );
     const ratingPromise = getGameRating(appid, { force });
     // A failed browse item or reviews call asks ProtonDB and HLTB as usual.
-    const unreleasedPromise = Promise.all([basicsPromise, ratingPromise])
-      .then(([basics, rating]) => isUnreleased(basics, rating))
+    // Only a game the store data calls coming soon waits for its reviews.
+    const unreleasedPromise = basicsPromise
+      .then((basics) => basics?.comingSoon && ratingPromise.then((rating) => isUnreleased(basics, rating)))
+      .then(Boolean)
       .catch(() => false);
     // A meta failure fails HLTB too, so it reads as failed, not as "no data".
     const hltbPromise = Promise.all([namedPromise, unreleasedPromise]).then(([{ name, type }, unreleased]) =>
@@ -895,7 +898,7 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
       basicsPromise,
       namedPromise,
       browsePromise,
-    ]).then(([ratingRes, hltbRes, tagsRes, demoRes, protondbRes, basicsRes, namedRes, browseRes]) => {
+    ]).then(async ([ratingRes, hltbRes, tagsRes, demoRes, protondbRes, basicsRes, namedRes, browseRes]) => {
       if (ratingRes.status === 'rejected') logDetailsError(appid, 'rating', ratingRes.reason);
       if (hltbRes.status === 'rejected') logDetailsError(appid, 'hltb', hltbRes.reason);
       if (tagsRes.status === 'rejected') logDetailsError(appid, 'tags', tagsRes.reason);
@@ -903,11 +906,10 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
         logDetailsError(appid, 'demo', demoRes.reason);
       if (protondbRes.status === 'rejected') logDetailsError(appid, 'protondb', protondbRes.reason);
       const basics = value(basicsRes);
-      // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times; those misses expire like any other
-      // miss, so they fill in after release instead of a year later (a failed reviews call counts as none: the cautious
-      // side). So when the phase is unknown: an item without basics, no store page cached by now. No item is a delisted game.
+      // An unreleased game's empty sources expire like misses, to fill in after release; so do they when its phase is
+      // unknown (a browse item without basics, no store page cached), while a delisted game (no item) keeps its tier.
       const item = value(browseRes);
-      const phase = basics ?? (item && gameBasics(item, appid));
+      const phase = basics ?? (item && (await gameBasics(item, appid)));
       if ((item && !phase) || isUnreleased(phase, value(ratingRes))) {
         for (const [cacheKey, res] of [
           [ratingCacheKey, ratingRes],
@@ -950,7 +952,11 @@ function fetchStoreDetails(appid, { force = false } = {}) {
 
 // Both parts as one reply: GET /api/game-details and a stream's fully cached games.
 async function fetchGameDetails(appid, options) {
-  const [fast, store] = await Promise.all([fetchFastDetails(appid, options), fetchStoreDetails(appid, options)]);
+  // Only a store page answered from the cache: one being fetched would hold the fast part behind Steam's store cap.
+  const storeCached = isAnsweredFromCache(appDetailsCacheKey(appid), { force: !!options?.force });
+  const storePromise = fetchStoreDetails(appid, options);
+  const storeDetails = storeCached ? () => storePromise.then(({ meta }) => meta) : undefined;
+  const [fast, store] = await Promise.all([fetchFastDetails(appid, { ...options, storeDetails }), storePromise]);
   const fetchedAts = { ...fast.fetchedAts, ...store.fetchedAts };
   const failed = [...(fast.failed ?? []), ...(store.failed ?? [])];
   const limited = fast.limited ?? store.limited;
@@ -1408,9 +1414,14 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
   // queues that every other user's requests then wait behind.
   // A game cached throughout goes out as one event; any other as a fast part, ahead, and a store part, behind,
   // since appdetails runs under Steam's store details cap (lib/steam.js). Cached games lead each pool.
-  const whole = new Set(validated.filter((appid) => allDetailsCached(appid)));
-  const cachedFirst = (appids, sources) => {
-    const groups = Map.groupBy(appids, (appid) => sourcesCached(sources, appid));
+  // Each game's cachedness, read once: every row's timestamp costs a lookup.
+  const cached = {
+    fast: new Set(validated.filter((appid) => sourcesCached(FAST_SOURCES, appid))),
+    store: new Set(validated.filter((appid) => sourcesCached(STORE_SOURCES, appid))),
+  };
+  const whole = cached.fast.intersection(cached.store);
+  const cachedFirst = (appids, part) => {
+    const groups = Map.groupBy(appids, (appid) => cached[part].has(appid));
     return [...(groups.get(true) ?? []), ...(groups.get(false) ?? [])];
   };
   // Said once per stream; the workers go on, since cached games still fill in.
@@ -1452,12 +1463,12 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
   const loadStart = Date.now();
   const concurrent = ++streamsOpen;
   let listedMs;
-  const fastUncached = validated.filter((appid) => !sourcesCached(FAST_SOURCES, appid)).length;
-  const storeUncached = validated.filter((appid) => !sourcesCached(STORE_SOURCES, appid)).length;
+  const fastUncached = validated.filter((appid) => !cached.fast.has(appid)).length;
+  const storeUncached = validated.filter((appid) => !cached.store.has(appid)).length;
   try {
     await Promise.all([
       pool(
-        cachedFirst(validated, FAST_SOURCES).sort((a, b) => whole.has(b) - whole.has(a)),
+        cachedFirst(validated, 'fast').sort((a, b) => whole.has(b) - whole.has(a)),
         STREAM_CONCURRENCY,
         (appid) =>
           whole.has(appid)
@@ -1471,7 +1482,7 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
       pool(
         cachedFirst(
           validated.filter((appid) => !whole.has(appid)),
-          STORE_SOURCES,
+          'store',
         ),
         STREAM_STORE_CONCURRENCY,
         (appid) => fetchStoreDetails(appid).then((store) => ({ part: 'store', ...store })),

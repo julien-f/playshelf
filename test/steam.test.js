@@ -976,6 +976,68 @@ test('getAppDetails: returns null when success is false', async (t) => {
   assert.equal(await getAppDetails(400), null);
 });
 
+// A whole store page, every field extractAppDetails reads plus some it doesn't.
+const FULL_PAGE = {
+  name: 'Game',
+  type: 'game',
+  steam_appid: 400,
+  detailed_description: '<p>Long</p>',
+  pc_requirements: { minimum: 'A lot' },
+  short_description: 'Short',
+  genres: [{ id: '1', description: 'Action' }],
+  categories: [{ id: '2', description: 'Co-op' }],
+  developers: ['Dev'],
+  publishers: ['Pub'],
+  release_date: { coming_soon: false, date: 'Jan 1, 2020' },
+  metacritic: { score: 90, url: 'https://mc' },
+  screenshots: Array.from({ length: 12 }, (_, id) => ({ id, path_thumbnail: `t${id}`, path_full: `f${id}` })),
+  movies: Array.from({ length: 6 }, (_, id) => ({ id, name: `m${id}`, thumbnail: 't', hls_h264: 'h', webm: {} })),
+  capsule_imagev5: 'c5',
+  capsule_image: 'c',
+  header_image: 'h',
+  dlc: [401],
+  fullgame: { appid: '399', name: 'Base' },
+  website: 'https://w',
+  achievements: { total: 3, highlighted: [{ name: 'A', path: 'p' }] },
+  platforms: { windows: true, mac: false, linux: true },
+  supported_languages: 'English<strong>*</strong>, French<br><strong>*</strong>languages with full audio support',
+  is_free: false,
+  price_overview: { initial: 1999, final: 999, currency: 'USD' },
+};
+
+// The details load reads a trimmed row; the whole page stays cached beside it (C211).
+test('getAppDetails: caches the whole page and a trimmed row read back to the same details', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, FULL_PAGE));
+  const fetched = await getAppDetails(400);
+  const row = (key) => db.prepare('SELECT value, ts, expires FROM cache_meta WHERE key = ?').get(key);
+  const [whole, trimmed] = [row('meta:400'), row('appdetails:400')];
+  assert.deepEqual(JSON.parse(whole.value), FULL_PAGE);
+  assert.deepEqual([trimmed.ts, trimmed.expires], [whole.ts, whole.expires]);
+  const hot = JSON.parse(trimmed.value);
+  assert.equal('detailed_description' in hot, false);
+  assert.deepEqual([hot.screenshots.length, hot.movies[0].webm, hot.achievements], [10, undefined, { total: 3 }]);
+
+  _reset([['appdetails:400', { value: FULL_PAGE, ts: Date.now() }]]);
+  assert.deepEqual(await getAppDetails(400), fetched);
+});
+
+test('getAppDetails: a page miss writes both rows on the miss expiry', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, null));
+  await getAppDetails(400);
+  const rows = db.prepare("SELECT key, value, ts, expires FROM cache_meta WHERE key LIKE '%:400' ORDER BY key").all();
+  assert.deepEqual(
+    rows.map((r) => [r.key, r.value]),
+    [
+      ['appdetails:400', 'null'],
+      ['meta:400', 'null'],
+    ],
+  );
+  assert.equal(rows[0].expires, rows[0].ts + MISS_CACHE_TTL_MS);
+  assert.deepEqual([rows[1].ts, rows[1].expires], [rows[0].ts, rows[0].expires]);
+});
+
 test('getAppDetails: accepts an entry keyed under another appid when its steam_appid matches', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () =>
@@ -1616,9 +1678,18 @@ test('resolveSteamTags: re-fetches the tag name map once its row expires', async
   _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now }]]);
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'Old', weight: null }]);
 
-  _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now - META_CACHE_TTL_MS - 1 }]]);
+  t.mock.method(Date, 'now', () => now + META_CACHE_TTL_MS + 1);
   mockTagEndpoints(t, { nameMap: { 1: 'New' } });
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'New', weight: null }]);
+});
+
+// A row written before the month-long expiry, on the meta tier's year, follows it once read.
+test('resolveSteamTags: a tag name map row cached for a year expires within a month once read', async () => {
+  const now = Date.now();
+  _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now - 1000 }]]);
+  await resolveSteamTags(Promise.resolve({ tagids: [1] }));
+  const { expires } = db.prepare("SELECT expires FROM cache_meta WHERE key = 'tagnames:all'").get();
+  assert.ok(expires !== null && expires - Date.now() <= 30 * 24 * 60 * 60 * 1000, String(expires));
 });
 
 // Steam adds tags meanwhile: the map lives a month, not the meta tier's year.
@@ -1630,12 +1701,15 @@ test('resolveSteamTags: a fetched tag name map expires within a month', async (t
   assert.ok(expires !== null && expires - Date.now() <= 30 * 24 * 60 * 60 * 1000, String(expires));
 });
 
-test('resolveSteamTags: reads a tag name map row rewritten since the last read', async () => {
+// A stream's games each resolve tags: the row isn't read per game while the parsed map is that young (C315).
+test('resolveSteamTags: reads the tag name map row again only a month after its write', async (t) => {
   const now = Date.now();
   _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now - 1000 }]]);
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'Old', weight: null }]);
 
-  _reset([['tagnames:all', { value: { 1: 'New' }, ts: now }]]);
+  _reset([['tagnames:all', { value: { 1: 'New' }, ts: now, expires: now + 31 * 24 * 60 * 60 * 1000 }]]);
+  assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'Old', weight: null }]);
+  t.mock.method(Date, 'now', () => now + 30 * 24 * 60 * 60 * 1000);
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'New', weight: null }]);
 });
 
@@ -2449,8 +2523,8 @@ test('resolveSteamId: caches a failed lookup and re-throws it without a second u
 
 const browseItem = (fields) => ({ success: 1, name: 'Game', type: 0, basic_info: {}, assets: {}, ...fields });
 
-test('gameBasics: converts a browse item to appdetails shapes', () => {
-  const basics = gameBasics(
+test('gameBasics: converts a browse item to appdetails shapes', async () => {
+  const basics = await gameBasics(
     browseItem({
       basic_info: { short_description: 'Desc', developers: [{ name: 'Dev' }], publishers: [{ name: 'Pub' }] },
       release: { steam_release_date: 1303186800 },
@@ -2474,8 +2548,8 @@ test('gameBasics: converts a browse item to appdetails shapes', () => {
   });
 });
 
-test('gameBasics: an unconfirmed type and a coming-soon date short of a full one stay null', () => {
-  const basics = gameBasics(
+test('gameBasics: an unconfirmed type and a coming-soon date short of a full one stay null', async () => {
+  const basics = await gameBasics(
     browseItem({
       type: 7,
       release: { steam_release_date: 1830000000, is_coming_soon: true, coming_soon_display: 'date_quarter' },
@@ -2487,14 +2561,19 @@ test('gameBasics: an unconfirmed type and a coming-soon date short of a full one
   assert.equal(basics.comingSoon, true);
 });
 
-test('gameBasics: an item cached before basics were requested falls back to cached appdetails, never fetching', (t) => {
+test('gameBasics: an item cached before basics were requested falls back to cached appdetails, never fetching', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () => {
     throw new Error('should not fetch');
   });
-  assert.equal(gameBasics({ success: 1, tagids: [] }, 640), null);
-  setCache('meta:640', { name: 'Cached', type: 'game', release_date: { date: 'Jan 1, 2020' }, developers: ['D'] });
-  const basics = gameBasics({ success: 1, tagids: [] }, 640);
+  assert.equal(await gameBasics({ success: 1, tagids: [] }, 640), null);
+  setCache('appdetails:640', {
+    name: 'Cached',
+    type: 'game',
+    release_date: { date: 'Jan 1, 2020' },
+    developers: ['D'],
+  });
+  const basics = await gameBasics({ success: 1, tagids: [] }, 640);
   assert.equal(basics.name, 'Cached');
   assert.equal(basics.releaseDate, 'Jan 1, 2020');
   assert.deepEqual(basics.developers, ['D']);
@@ -2507,10 +2586,11 @@ test('a coming-soon store row expires within a day once read, however it was cac
   const soon = { name: 'Soon', type: 'game', release_date: { coming_soon: true, date: 'Q4 2027' } };
   const soonItem = { success: 1, tagids: [], release: { is_coming_soon: true } };
   _reset([
+    ['appdetails:650', { value: soon, ts: now }],
     ['meta:650', { value: soon, ts: now }],
-    ['meta:651', { value: soon, ts: now }],
+    ['appdetails:651', { value: soon, ts: now }],
     ['browse:652', { value: soonItem, ts: now }],
-    ['meta:653', { value: { ...soon, release_date: { coming_soon: false } }, ts: now }],
+    ['appdetails:653', { value: { ...soon, release_date: { coming_soon: false } }, ts: now }],
     ['browse:654', { value: { ...soonItem, release: { is_coming_soon: false } }, ts: now }],
   ]);
   t.mock.method(globalThis, 'fetch', async () => ({
@@ -2518,7 +2598,7 @@ test('a coming-soon store row expires within a day once read, however it was cac
     json: async () => ({ response: { store_items: [{ ...soonItem, appid: 655 }] } }),
   }));
   await getAppDetails(650);
-  gameBasics({ success: 1, tagids: [] }, 651);
+  await gameBasics({ success: 1, tagids: [] }, 651);
   await getStoreBrowseItem(652);
   await getAppDetails(653);
   await getStoreBrowseItem(654);
@@ -2526,9 +2606,9 @@ test('a coming-soon store row expires within a day once read, however it was cac
 
   const later = now + MISS_CACHE_TTL_MS + 1000;
   t.mock.method(Date, 'now', () => later);
-  for (const key of ['meta:650', 'meta:651', 'browse:652', 'browse:655'])
+  for (const key of ['appdetails:650', 'meta:650', 'appdetails:651', 'browse:652', 'browse:655'])
     assert.equal(getCachedAt(key), undefined, key);
-  for (const key of ['meta:653', 'browse:654']) assert.notEqual(getCachedAt(key), undefined, key);
+  for (const key of ['appdetails:653', 'browse:654']) assert.notEqual(getCachedAt(key), undefined, key);
 });
 
 // A 200 of another shape is not an answer: cached at the year-long tier it would read as "no data" all that time.

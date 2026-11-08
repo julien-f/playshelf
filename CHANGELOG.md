@@ -45,6 +45,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - GET /api/metrics opens with what's wrong now (`alerts`), groups each upstream's live state together and dates its worst event-loop block
 - Each visit now extends the Steam sign-in, instead of it expiring a fixed time after signing in
 - Large lists load HowLongToBeat times at a steadier pace so the site isn't blocked, and fewer requests go out for unreleased games, DLC, soundtracks and repeated refreshes
+- A list whose game details are all cached loads them with about a third less server CPU
+- Game details load with about a quarter less server CPU, reading only the store page fields the app uses
 
 ### Fixed
 
@@ -98,6 +100,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Fanatical pick-and-mix prices stay shown when Fanatical's feed fails after its cached copy expired
 - Refreshing an account updates its ✓/☆ marks everywhere, and moving between Home, its lists and a game no longer downloads its library again
 - A game's panel reopened after a while fetches its price, bundles, news and achievements again instead of showing stale ones
+- A released game's ProtonDB and HowLongToBeat lookups no longer wait for its Steam reviews
+- A tag name list cached before tags expired monthly now expires within a month too
 
 ### Development
 
@@ -126,6 +130,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - db-query.js reads the statement from stdin, so a multi-line query needs no shell quoting
 - Shipped migrations no longer change when a cache group is added
 - Account refreshes send ?refresh=1 like every other route, and the frontend's refresh option has one name
+- The test suite checks that the cache tier table in docs/dev/data.md matches the cache groups in the code
 
 ## [0.12.0] - 2026-10-30
 
