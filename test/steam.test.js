@@ -21,6 +21,7 @@ const {
   getGameRating,
   getAppDetails,
   getStoreBrowseItem,
+  prefetchStoreBrowseItems,
   resolveSteamTags,
   extractDemoAppid,
   resolveSteamPackageAppids,
@@ -2677,6 +2678,151 @@ test('an empty reviews `response`, a browse item without success and an empty Ge
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ response: {} }) }));
   assert.equal(await getStoreBrowseItem(667), null);
   assert.notEqual(getCachedAt('browse:667'), undefined);
+});
+
+// ── batched store browse items (C249) ────────────────────────────────────────
+
+const browseIds = (url) =>
+  JSON.parse(decodeURIComponent(new URL(url).searchParams.get('input_json'))).ids.map((i) => i.appid);
+// GetItems' answer as probed: an unknown app's item has `appid` 0 and `success` 15, keyed by `id`.
+const batchItem = (appid, { unknown = false } = {}) =>
+  unknown ? { id: appid, appid: 0, success: 15 } : { id: appid, appid, success: 1, tagids: [appid] };
+
+function mockBatchedBrowse(t, reply = (ids) => ids.map((id) => batchItem(id))) {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    const ids = browseIds(url);
+    calls.push(ids);
+    return { ok: true, json: async () => ({ response: { store_items: reply(ids) } }) };
+  });
+  return calls;
+}
+
+test('prefetchStoreBrowseItems: sends uncached ids 50 per call, in order, and caches one row each', async (t) => {
+  _reset();
+  setCache('browse:1005', { tagids: [] });
+  const calls = mockBatchedBrowse(t);
+  const appids = Array.from({ length: 120 }, (_, i) => 1000 + i);
+  await prefetchStoreBrowseItems(appids);
+  assert.deepEqual(
+    calls.map((ids) => ids.length),
+    [50, 50, 19],
+  );
+  assert.ok(!calls.flat().includes(1005), 'a cached id is not sent');
+  assert.deepEqual(
+    calls.flat(),
+    appids.filter((id) => id !== 1005),
+  );
+  assert.deepEqual(await getStoreBrowseItem(1119), batchItem(1119));
+  assert.equal(calls.length, 3, 'a prefetched row answers the game without a call');
+});
+
+test('prefetchStoreBrowseItems: an unknown app is a cached miss, an id left out of the reply stays uncached', async (t) => {
+  _reset();
+  const calls = mockBatchedBrowse(t, (ids) =>
+    ids.filter((id) => id !== 2002).map((id) => batchItem(id, { unknown: id === 2001 })),
+  );
+  await prefetchStoreBrowseItems([2000, 2001, 2002]);
+  assert.notEqual(getCachedAt('browse:2001'), undefined);
+  assert.equal(await getStoreBrowseItem(2001), null);
+  assert.equal(getCachedAt('browse:2002'), undefined);
+  await getStoreBrowseItem(2002);
+  assert.deepEqual(calls.at(-1), [2002], 'its game fetches it alone');
+});
+
+test('prefetchStoreBrowseItems: a reply without store_items caches nothing', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ response: {} }) }));
+  await prefetchStoreBrowseItems([2100, 2101]);
+  assert.equal(getCachedAt('browse:2100'), undefined);
+  assert.equal(getCachedAt('browse:2101'), undefined);
+});
+
+test('prefetchStoreBrowseItems: a failed chunk starts no further chunk and leaves its ids to their games', async (t) => {
+  _reset();
+  const warn = t.mock.method(console, 'warn', () => {});
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => (++calls, { ok: false, status: 503 }));
+  await prefetchStoreBrowseItems(Array.from({ length: 200 }, (_, i) => 2200 + i));
+  assert.equal(calls, 2, 'the two first chunks only');
+  assert.equal(getCachedAt('browse:2200'), undefined);
+  assert.match(warn.mock.calls[0].arguments[0], /^\[browse\] prefetch of 50 items failed/);
+});
+
+test('prefetchStoreBrowseItems: shouldStop() starts no further chunk', async (t) => {
+  _reset();
+  const calls = mockBatchedBrowse(t);
+  await prefetchStoreBrowseItems(
+    Array.from({ length: 200 }, (_, i) => 2400 + i),
+    { shouldStop: () => true },
+  );
+  assert.equal(calls.length, 2);
+});
+
+test('getStoreBrowseItem: an unforced read joins a started chunk; a forced one, or one after a failed chunk, calls alone', async (t) => {
+  _reset();
+  const warn = t.mock.method(console, 'warn', () => {});
+  const calls = [];
+  let release;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    const ids = browseIds(url);
+    calls.push(ids);
+    if (ids.length > 1) await new Promise((r) => (release = r));
+    return { ok: true, json: async () => ({ response: { store_items: ids.map((id) => batchItem(id)) } }) };
+  });
+  const prefetch = prefetchStoreBrowseItems([2500, 2501, 2502]);
+  const joined = getStoreBrowseItem(2500);
+  const forced = getStoreBrowseItem(2501, { force: true });
+  await forced;
+  assert.deepEqual(calls, [[2500, 2501, 2502], [2501]]);
+  release();
+  assert.deepEqual(await joined, batchItem(2500));
+  await prefetch;
+  assert.equal(calls.length, 2, 'the joined read made no call');
+
+  // A chunk refused (here a 503; a spent client share alike) never rejects its waiters: they call alone.
+  _reset();
+  calls.length = 0;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    const ids = browseIds(url);
+    calls.push(ids);
+    if (ids.length > 1) return { ok: false, status: 503 };
+    return { ok: true, json: async () => ({ response: { store_items: [batchItem(ids[0])] } }) };
+  });
+  const failing = prefetchStoreBrowseItems([2600, 2601]);
+  assert.deepEqual(await getStoreBrowseItem(2600), batchItem(2600));
+  await failing;
+  assert.deepEqual(calls, [[2600, 2601], [2600]]);
+  assert.equal(warn.mock.callCount(), 1);
+});
+
+test('searchStoreGames still drops demos from a batched GetItems reply', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async (url) => ({
+    ok: true,
+    json: async () =>
+      url.includes('storesearch')
+        ? {
+            items: [
+              { id: 2700, name: 'Game', type: 'app' },
+              { id: 2701, name: 'Game Demo', type: 'app' },
+              { id: 2702, name: 'Gone', type: 'app' },
+            ],
+          }
+        : {
+            response: {
+              store_items: [
+                { ...batchItem(2700), type: 0 },
+                { ...batchItem(2701), type: 1 },
+                batchItem(2702, { unknown: true }),
+              ],
+            },
+          },
+  }));
+  assert.deepEqual(
+    (await searchStoreGames('game')).map((r) => r.appid),
+    [2700, 2702],
+  );
 });
 
 // ── age-based expiry (C317) ──────────────────────────────────────────────────

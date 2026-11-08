@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A recently released game's reviews, play times, ProtonDB rating and store data now refresh as it ages instead of staying a year old
 - Play next, Short games and the Barely played count leave out games not out yet, like a pre-order; a hidden Availability column says which are Coming soon
 - Play next lists best rated first when the account has too few games played for Taste fit, and says so
+- Loading a large list makes about 50 times fewer calls to Steam for its tags and store details
 
 ### Fixed
 

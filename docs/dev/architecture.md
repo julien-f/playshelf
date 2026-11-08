@@ -19,7 +19,7 @@ Setup and dev commands are in [README.md](../../README.md), along with the index
 - **`lib/db.js`** — opens `db.sqlite` and applies its append-only `MIGRATIONS` ([data.md](data.md)).
 - **`lib/cache.js`** — persistent cache over `db.sqlite` (`getCached`, `setCache`, `isCached` for limiter skips, `getCacheEntryCounts` for health and metrics); `createCachedFetch` binds a module's dedup into its `cachedFetch(key, { force }, load)`, the cache-then-dedup skeleton of a single-key upstream getter.
 - **`lib/dedup.js`** — `createDedup`: concurrent calls for the same key share one promise.
-- **`lib/steam.js`** — Steam Web API and store calls (`resolveSteamId`, `getOwnedGames`, `getWishlist`, `getFriendList`, `getPlayerSummaries`, `getGameRating`, `getAppDetails`, `getStoreBrowseItem`, `resolveSteamTags`, `extractDemoAppid`, `searchStoreGames`, `getGameNews`, …), ProtonDB, and their per-host semaphores (`storeLimit`/`tagLimit`/`protonLimit`/`reviewsLimit`).
+- **`lib/steam.js`** — Steam Web API and store calls (`resolveSteamId`, `getOwnedGames`, `getWishlist`, `getFriendList`, `getPlayerSummaries`, `getGameRating`, `getAppDetails`, `getStoreBrowseItem`, `prefetchStoreBrowseItems`, `resolveSteamTags`, `extractDemoAppid`, `searchStoreGames`, `getGameNews`, …), ProtonDB, and their per-host semaphores (`storeLimit`/`tagLimit`/`protonLimit`/`reviewsLimit`).
 - **`lib/hltb.js`** — HLTB auth + search (`getHLTB`), behind its own semaphore (`hltbLimit`).
 - **`lib/itad.js`** — IsThereAnyDeal calls (`getShopId`, `getBundles`, `resolveSteamAppIds`, prices) behind bundle browsing and every price column.
 - **`lib/fanatical.js`** — Fanatical's storefront feed, for pick-and-mix tier prices ([integrations.md](integrations.md#fanatical--pick-and-mix-tier-prices)).

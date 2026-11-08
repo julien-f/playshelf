@@ -111,6 +111,7 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
 
 - `chargeBudget(group)` runs at the top of `trackedFetch` and caps calls per service per hour and per day (`OUTBOUND_HOURLY_MAX`/`OUTBOUND_DAILY_MAX`, see [configuration.md](../user/configuration.md); `0` disables).
 - The only limit that isn't per client: it protects a key's quota from all clients together, and from the app's own retry loops.
+- It counts calls, not items: one `steam-browse` call can carry 50 games (`prefetchStoreBrowseItems`).
 - Past a ceiling it throws an `isUpstream` error, so routes answer 502 with no new error path. Refused calls aren't counted as requests.
 - **Client share**: within each window, one client may spend `OUTBOUND_CLIENT_SHARE_PERCENT` of the ceiling (at least 1), so one IP can't spend it for everyone. Past it, the error also carries `isClientBudgetExhausted` and routes answer 429 with a message for the user. Each details part (`fetchFastDetails`, `fetchStoreDetails`) marks a result it left short as `limited`, and the details stream sends that message once as a `{ limited }` event; its workers go on, since cached games still fill in.
   - A client is `clientKey(req)` in `server.js`: the rate limiters' key (an IPv4 address or an IPv6 /56), so it needs `TRUST_PROXY` behind a proxy.

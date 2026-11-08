@@ -2090,6 +2090,35 @@ test(
   },
 );
 
+test('POST /api/game-details/stream: a cold list fetches its store browse items 50 per call', async (t) => {
+  _reset();
+  _resetAuth();
+  setCache('tagnames:all', TAG_NAME_MAP);
+  const details = makeDetailsFetch();
+  const browseCalls = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    if (!url.includes('IStoreBrowseService')) return details(url, init);
+    const ids = JSON.parse(new URL(url).searchParams.get('input_json')).ids.map((i) => i.appid);
+    browseCalls.push(ids.length);
+    return {
+      ok: true,
+      json: async () => ({
+        response: { store_items: ids.map((id) => ({ id, appid: id, success: 1, tagids: TAG_IDS })) },
+      }),
+    };
+  });
+  const games = Array.from({ length: 120 }, (_, i) => ({ appid: 3000 + i }));
+  const server = app.listen(0);
+  t.after(() => new Promise((r) => server.close(r)));
+  await new Promise((r) => server.once('listening', r));
+
+  const { body } = await ssePost(server.address().port, '/api/game-details/stream', { games });
+  assert.deepEqual(browseCalls, [50, 50, 20]);
+  const streamed = streamedGames(body);
+  assert.equal(streamed.size, 120);
+  assert.deepEqual(streamed.get(3119).tags, ['Action', 'Co-op']);
+});
+
 test('POST /api/game-details/stream: 400 for empty games list', async () => {
   const res = await api.post('/api/game-details/stream').send({ games: [] });
   assert.equal(res.status, 400);

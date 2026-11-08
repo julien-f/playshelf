@@ -42,6 +42,7 @@ const {
   getGameRating,
   getAppDetails,
   getStoreBrowseItem,
+  prefetchStoreBrowseItems,
   resolveSteamTags,
   extractDemoAppid,
   gameBasics,
@@ -1475,10 +1476,16 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
   let listedMs;
   const fastUncached = validated.filter((appid) => !cached.fast.has(appid)).length;
   const storeUncached = validated.filter((appid) => !cached.store.has(appid)).length;
+  const fastOrder = cachedFirst(validated, 'fast').sort((a, b) => whole.has(b) - whole.has(a));
+  // Before the pools start, so their first games join its first chunks; never rejects.
+  prefetchStoreBrowseItems(
+    fastOrder.filter((appid) => !cached.fast.has(appid)),
+    { shouldStop: () => closed },
+  );
   try {
     await Promise.all([
       pool(
-        cachedFirst(validated, 'fast').sort((a, b) => whole.has(b) - whole.has(a)),
+        fastOrder,
         STREAM_CONCURRENCY,
         (appid) =>
           whole.has(appid)
