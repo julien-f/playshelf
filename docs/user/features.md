@@ -37,7 +37,7 @@ A private profile or wishlist looks identical to an empty one from the outside; 
 - **Views** of Owned and Wishlist keep several named layouts of one list (columns, sort, grouping, filters), opened as tabs under its header: **All games**, then each view.
   - **New view** (beside Rank this list) saves the table as it is now, or offers ready-made ones, each showing only the columns that matter to it:
     - **Recently played** (Owned): last played first.
-    - **Play next** (Owned): played 2 h or less, out now (not Coming soon) and not marked Finished or Abandoned (see [Statuses](#statuses)), best Taste fit first.
+    - **Play next** (Owned): played 2 h or less, out now (not Coming soon) and not marked Finished or Abandoned (see [Statuses](#statuses)), best Taste fit first, then best rated: with too few games played for Taste fit, best rated first, as the line under the list header says.
     - **Short games** (Owned): the same, with a main story of 5 h or less on How Long To Beat, best rated first.
     - **Bargains** (Wishlist): at a 1-year or all-time low, biggest discount first.
   - Its **⋯** renames or deletes it.

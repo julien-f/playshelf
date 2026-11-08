@@ -102,7 +102,11 @@ export const VIEW_TEMPLATES: readonly ViewTemplate[] = [
     view: {
       rangeFilters: { playtime: { min: '', max: String(PLAY_NEXT_MAX_HOURS) } },
       excludeFilters: NOT_DONE,
-      sorts: [{ key: 'tasteFit', dir: 'desc' }],
+      // Rating breaks ties, and orders it all when the account has too few games played for Taste fit.
+      sorts: [
+        { key: 'tasteFit', dir: 'desc' },
+        { key: 'steamdbRating', dir: 'desc' },
+      ],
     },
     cols: ['capsule', 'name', 'tasteFit', 'steamdbRating', 'hltbAll', 'playtime', 'genres', 'status'],
   },

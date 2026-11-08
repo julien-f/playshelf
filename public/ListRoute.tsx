@@ -385,10 +385,12 @@ interface TasteSource {
   linked: boolean; // someone else's account from a `?u=` link, whose Owned the viewer has no reason to open
 }
 
-function tasteFitNote({ label, taste, linked }: TasteSource): string | null {
+// `byFitThenRating`: with no profile, Taste fit leaves the order to the rating sorted next (Play next's).
+function tasteFitNote({ label, taste, linked }: TasteSource, byFitThenRating: boolean): string | null {
   if (!label) return 'Taste fit needs an account: pick one on Home';
   if (!taste) return linked ? null : `Taste fit needs ${label}'s Owned list opened on this device`;
-  if (!taste.profile) return `Taste fit: ${label} has too few games played`;
+  if (!taste.profile)
+    return `Taste fit: ${label} has too few games played${byFitThenRating ? ', so best rated first' : ''}`;
   return `Taste fit: ${label}'s taste as of ${fmtLocalDate(new Date(taste.at))}`;
 }
 
@@ -3890,7 +3892,9 @@ export default function ListRoute() {
     const visible = filterTable()?.columns.visible();
     const notes: string[] = [];
     const source = tasteFitSource();
-    const tasteNote = source && visible?.has(TASTE_FIT_KEY) && tasteFitNote(source);
+    const [first, next] = filterTable()?.sort.entries() ?? [];
+    const byFitThenRating = first?.key === TASTE_FIT_KEY && next?.key === 'steamdbRating' && next.dir === 'desc';
+    const tasteNote = source && visible?.has(TASTE_FIT_KEY) && tasteFitNote(source, byFitThenRating);
     if (tasteNote) notes.push(tasteNote);
     // An open Players says who has no profile; folded (a phone's default), nothing would.
     if (kind === 'compare' && visible?.has(GROUP_FIT_KEY) && loadedRows() && !(playerProfiles() && playersOpen())) {

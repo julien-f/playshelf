@@ -175,3 +175,11 @@ test("a template view stored by an earlier version reads as today's, unless it w
     assert.deepEqual(view.tableView, expected, view.id);
   }
 });
+
+test('Play next sorts by Taste fit, then rating: the order with no taste profile', () => {
+  const { VIEW_TEMPLATES } = views();
+  assert.deepEqual(VIEW_TEMPLATES.find((t) => t.id === 'play-next').view.sorts, [
+    { key: 'tasteFit', dir: 'desc' },
+    { key: 'steamdbRating', dir: 'desc' },
+  ]);
+});

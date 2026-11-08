@@ -3367,6 +3367,24 @@ test('L5.1-3: a suggested view opens as its own tab, and is suggested once', asy
   await expect(rows(page)).toHaveCount(4);
 });
 
+test('L5 edge: with too few games played for Taste fit, Play next lists best rated first and says so', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE); // 3 played: no taste profile
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(6);
+  const menu = await newView(page);
+  await menu.getByRole('button', { name: 'Play next' }).click();
+  await expect(page).toHaveURL(/view=/);
+  await expect(rows(page)).toHaveCount(4);
+  const names = () =>
+    rows(page)
+      .getByRole('checkbox')
+      .evaluateAll((boxes) => boxes.map((b) => b.getAttribute('aria-label')!.replace('Select row ', '')));
+  await expect.poll(names).toEqual(['Stardew Valley', 'Hades', 'Hollow Knight', 'Valheim']);
+  await expect(page.getByText('Taste fit: Alice has too few games played, so best rated first')).toBeVisible();
+});
+
 test('L5 edge: Short games keeps barely played games with a short main story, known', async ({ page }) => {
   await asPlayer(page, CAROL);
   await page.goto('/lists/owned');
