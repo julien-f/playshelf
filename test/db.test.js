@@ -133,6 +133,35 @@ test('migrate: version 11 signs everyone out, since sessions stored before it ar
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM users').get().n, 1);
 });
 
+test("migrate: version 13 fills each store page's trimmed appdetails row from its meta row, keeping its expiry", () => {
+  const db = new DatabaseSync(':memory:');
+  migrate(
+    db,
+    MIGRATIONS.filter((m) => m.version <= 12),
+  );
+  const page = { name: 'G', detailed_description: 'long', achievements: { total: 2, highlighted: [] } };
+  const insert = db.prepare('INSERT INTO cache_meta (key, value, ts, expires) VALUES (?, ?, ?, ?)');
+  insert.run('meta:1', JSON.stringify(page), 1000, null);
+  insert.run('meta:2', 'null', 2000, 9000);
+  insert.run('metacritic:3', '{}', 3000, null); // not a store page, though it starts alike
+  insert.run('browse:4', '{}', 4000, null);
+
+  migrate(db, MIGRATIONS);
+
+  const rows = db.prepare('SELECT key, value, ts, expires FROM cache_meta ORDER BY key').all();
+  assert.deepEqual(
+    rows.map((r) => ({ ...r })),
+    [
+      { key: 'appdetails:1', value: '{"name":"G","achievements":{"total":2}}', ts: 1000, expires: null },
+      { key: 'appdetails:2', value: 'null', ts: 2000, expires: 9000 },
+      { key: 'browse:4', value: '{}', ts: 4000, expires: null },
+      { key: 'meta:1', value: JSON.stringify(page), ts: 1000, expires: null },
+      { key: 'meta:2', value: 'null', ts: 2000, expires: 9000 },
+      { key: 'metacritic:3', value: '{}', ts: 3000, expires: null },
+    ],
+  );
+});
+
 test("requiring lib/db picks up default.env's DB_FILE even without a shell-level DB_FILE set", () => {
   // Regression test: lib/db.js used to read process.env.DB_FILE before lib/config.js had loaded
   // default.env (whichever of lib/db.js's requirers happened to require lib/config first), so it

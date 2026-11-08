@@ -232,7 +232,7 @@ test('GET / and /lists/owned: the app shell carries Open Graph tags with an abso
 
 test('GET /game/:appid/ and /Game/:appid: a trailing slash or other letter case gets the same preview', async () => {
   _reset();
-  setCache('meta:620', { name: 'Portal 2', header_image: null, short_description: null });
+  setCache('appdetails:620', { name: 'Portal 2', header_image: null, short_description: null });
   for (const route of ['/game/620/', '/Game/620', '/lists/OWNED/?game=620']) {
     const res = await api.get(route);
     assert.match(res.text, /<meta property="og:title" content="Portal 2" \/>/, route);
@@ -242,7 +242,7 @@ test('GET /game/:appid/ and /Game/:appid: a trailing slash or other letter case 
 test('GET /game/:appid: the preview names and describes a cached game and shows its header image, without fetching', async (t) => {
   _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
-  setCache('meta:620', {
+  setCache('appdetails:620', {
     name: 'Portal <2> & "co"',
     header_image: 'https://cdn.example/620/header.jpg',
     short_description: 'Think with &quot;portals&quot; &amp; &#8220;cake&#x201D; &amp;lt; &#9999999;',
@@ -255,7 +255,7 @@ test('GET /game/:appid: the preview names and describes a cached game and shows 
   assert.ok(res.text.includes(`<meta property="og:description" content="${description}" />`));
   assert.ok(res.text.includes(`<meta name="description" content="${description}" />`));
 
-  setCache('meta:622', { name: null, header_image: null, short_description: null });
+  setCache('appdetails:622', { name: null, header_image: null, short_description: null });
   const nulls = await api.get('/game/622');
   assert.equal(nulls.status, 200);
   assert.match(nulls.text, /<meta property="og:title" content="Playshelf" \/>/);
@@ -329,7 +329,11 @@ test("GET /lists/bundle/:id: a pick-and-mix bundle's preview takes Fanatical's e
 test('GET /lists/*?game=: a list opened on a cached game previews that game, before the list itself', async (t) => {
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
   _reset();
-  setCache('meta:620', { name: 'Portal 2', header_image: 'https://cdn.example/620.jpg', short_description: 'Think' });
+  setCache('appdetails:620', {
+    name: 'Portal 2',
+    header_image: 'https://cdn.example/620.jpg',
+    short_description: 'Think',
+  });
   for (const route of ['/lists/owned?u=76561197960287930&game=620', '/lists/bundle/42?game=620&game=1']) {
     const res = await api.get(route);
     assert.match(res.text, /<meta property="og:title" content="Portal 2" \/>/, route);
@@ -544,7 +548,7 @@ test('GET /api/metrics: a details stream records how its list loaded', async (t)
   _resetAuth();
   setCache('rating:1001', { total_reviews: 10, total_positive: 9, review_score_desc: 'Positive' });
   setCache('hltb:1001', []);
-  setCache('meta:1001', { name: 'Cached' });
+  setCache('appdetails:1001', { name: 'Cached' });
   setCache('browse:1001', { tagids: TAG_IDS });
   setCache('protondb:1001', null);
   setCache('tagnames:all', TAG_NAME_MAP);
@@ -983,7 +987,7 @@ test('GET /api/game-details/:appid: 200 from cache without fetching', async (t) 
   _reset();
   setCache('rating:400', { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' });
   setCache('hltb:400', [{ game_id: 42, game_name: 'Portal', comp_main: 36000, comp_plus: 54000 }]);
-  setCache('meta:400', {
+  setCache('appdetails:400', {
     name: 'Portal',
     genres: [{ id: '1', description: 'Action' }],
     categories: [{ id: '9', description: 'Co-op' }],
@@ -1024,7 +1028,7 @@ test('GET /api/game-details/:appid: a warm request reads each cached meta-tier r
   _reset();
   for (const appid of [403, 404]) {
     setCache(`hltb:${appid}`, []);
-    setCache(`meta:${appid}`, { name: 'X' });
+    setCache(`appdetails:${appid}`, { name: 'X' });
     setCache(`browse:${appid}`, {
       name: 'X',
       type: 0,
@@ -1055,7 +1059,7 @@ test('GET /api/game-details/:appid: a warm request reads each cached meta-tier r
 test('GET /api/game-details/:appid: a browse row without basics reads the store page once', async (t) => {
   _reset();
   setCache('hltb:405', []);
-  setCache('meta:405', { name: 'X', type: 'game' });
+  setCache('appdetails:405', { name: 'X', type: 'game' });
   setCache('browse:405', { tagids: TAG_IDS });
   setCache('protondb:405', null);
   setCache('rating:405', { total_reviews: 1, total_positive: 1 });
@@ -1079,14 +1083,14 @@ test('GET /api/game-details/:appid: dates each source separately, and fetchedAt 
   // per-source breakdown behind it is what makes that figure interpretable.
   setCache('rating:402', { total_reviews: 10, total_positive: 9, review_score_desc: 'Positive' });
   setCache('hltb:402', [{ game_id: 1, game_name: 'X', comp_main: 3600 }]);
-  setCache('meta:402', { name: 'X' });
+  setCache('appdetails:402', { name: 'X' });
   setCache('browse:402', { tagids: TAG_IDS });
   setCache('tagnames:all', TAG_NAME_MAP);
   setCache('protondb:402', { tier: 'gold' });
   const now = Date.now();
   // Backdated in place — the only way to get entries of genuinely different ages in one test
-  // (setCache always stamps now). `meta:` lives in cache_meta, `rating:` in its own table.
-  db.prepare('UPDATE cache_meta SET ts = ? WHERE key = ?').run(now - 5 * 86400000, 'meta:402');
+  // (setCache always stamps now). `appdetails:` lives in cache_meta, `rating:` in its own table.
+  db.prepare('UPDATE cache_meta SET ts = ? WHERE key = ?').run(now - 5 * 86400000, 'appdetails:402');
   db.prepare('UPDATE cache_rating SET ts = ? WHERE key = ?').run(now - 86400000, 'rating:402');
 
   t.mock.method(globalThis, 'fetch', async () => {
@@ -1277,7 +1281,7 @@ test('GET /api/game-details/:appid: only fetches sources not already cached', as
   _reset();
   _resetAuth();
   setCache('rating:405', { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' });
-  setCache('meta:405', {
+  setCache('appdetails:405', {
     name: 'Portal',
     genres: [{ id: '1', description: 'Action' }],
     categories: [{ id: '9', description: 'Co-op' }],
@@ -1935,12 +1939,12 @@ test('POST /api/game-details/stream: streams one event per game plus a done even
   const rawProtonDb = { tier: 'gold', confidence: 'strong', total: 500 };
   setCache('rating:400', rawRating);
   setCache('hltb:400', rawHltb);
-  setCache('meta:400', rawMeta);
+  setCache('appdetails:400', rawMeta);
   setCache('browse:400', { tagids: TAG_IDS });
   setCache('protondb:400', rawProtonDb);
   setCache('rating:401', rawRating);
   setCache('hltb:401', rawHltb);
-  setCache('meta:401', rawMeta);
+  setCache('appdetails:401', rawMeta);
   setCache('browse:401', { tagids: TAG_IDS });
   setCache('protondb:401', rawProtonDb);
   setCache('tagnames:all', TAG_NAME_MAP);
@@ -2620,7 +2624,7 @@ test('GET /api/achievements/:appid: a schema cached empty before the store page 
   const day = 24 * 60 * 60 * 1000;
   _reset([
     ['gameschema:403', { value: { name: 'G', achievements: [] }, ts: Date.now() - 2 * day }],
-    ['meta:403', { value: { name: 'G', achievements: { total: 2 } }, ts: Date.now() - day }],
+    ['appdetails:403', { value: { name: 'G', achievements: { total: 2 } }, ts: Date.now() - day }],
   ]);
   const achievementsFetch = makeAchievementsFetch();
   const calls = [];
@@ -3716,7 +3720,7 @@ test('POST /api/game-details/stream: fully cached games come first, ahead of unc
   for (const appid of cached) {
     setCache(`rating:${appid}`, { total_reviews: 10, total_positive: 9, review_score_desc: 'Positive' });
     setCache(`hltb:${appid}`, []);
-    setCache(`meta:${appid}`, { name: `Game ${appid}` });
+    setCache(`appdetails:${appid}`, { name: `Game ${appid}` });
     setCache(`browse:${appid}`, { tagids: TAG_IDS });
     setCache(`protondb:${appid}`, null);
   }

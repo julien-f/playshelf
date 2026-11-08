@@ -148,7 +148,7 @@ test('achievements limiter: counts cache misses but never counts cache hits', as
   const calls = mockUpstreams(t);
   const PLAYER = '76561198000000099';
   // Not part of the skip: a cached positive count just keeps the route off the store API.
-  for (const appid of [500, 501, 502, 510]) setCache(`meta:${appid}`, { name: 'Game', achievementCount: 1 });
+  for (const appid of [500, 501, 502, 510]) setCache(`appdetails:${appid}`, { name: 'Game', achievementCount: 1 });
   setCache('gameschema:510', { name: 'A', achievements: [{ apiname: 'A', name: 'A', hidden: false }] });
   setCache('achrarity:510', { A: 50 });
   setCache(`playerach:${PLAYER}:510`, []);
@@ -158,7 +158,7 @@ test('achievements limiter: counts cache misses but never counts cache hits', as
   ageCache();
   setCache('gameschema:511', { name: 'A', achievements: [{ apiname: 'A', name: 'A', hidden: false }] });
   setCache('achrarity:511', { A: 50 });
-  setCache('meta:511', { name: 'Game', achievementCount: 1 });
+  setCache('appdetails:511', { name: 'Game', achievementCount: 1 });
 
   const achievements =
     (appid, steamids = '') =>
@@ -267,7 +267,7 @@ test('game pass limiter: counts cache misses but never counts cache hits', async
 test('meta limiter: counts cache misses but never counts cache hits', async (t) => {
   _reset();
   const calls = mockUpstreams(t);
-  setCache('meta:810', { name: 'Cached' });
+  setCache('appdetails:810', { name: 'Cached' });
 
   const meta = (appid) => api.get(`/api/game-meta/${appid}`);
   assert.equal((await meta(800)).status, 200);
