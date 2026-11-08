@@ -264,10 +264,30 @@ test('capExpiry: brings the expiry forward, and writes nothing when it is alread
   setCache('meta:1', 'v');
   const writes = () => db.prepare('SELECT total_changes() AS n').get().n;
   let before = writes();
-  assert.equal(capExpiry('meta:1', 1000), true);
+  assert.equal(
+    capExpiry('meta:1', () => Date.now() + 1000),
+    true,
+  );
   assert.equal(writes(), before + 1);
   assert.ok(getCachedAt('meta:1') !== undefined);
   before = writes();
-  assert.equal(capExpiry('meta:1', 2000), false);
+  assert.equal(
+    capExpiry('meta:1', () => Date.now() + 2000),
+    false,
+  );
   assert.equal(writes(), before);
+});
+
+test('capExpiry: the cap is a function of the write time', () => {
+  const ts = Date.now() - 5000;
+  _reset([['meta:1', { value: 'v', ts }]]);
+  let seen;
+  capExpiry('meta:1', (at) => (seen = at) + 4000);
+  assert.equal(seen, ts);
+  assert.equal(getCachedAt('meta:1'), undefined, 'expired 1 s ago');
+  assert.equal(
+    capExpiry('meta:2', () => 0),
+    false,
+    'no row, no write',
+  );
 });

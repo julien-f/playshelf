@@ -30,7 +30,7 @@ const { _resetAuth, getHLTB } = require('../lib/hltb');
 const { _resetTagNameMap } = require('../lib/steam');
 const { _resetPickAndMix } = require('../lib/fanatical');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
-const { SESSION_TTL_MS, MISS_CACHE_TTL_MS, RATING_CACHE_TTL_MS } = require('../lib/config');
+const { SESSION_TTL_MS, MISS_CACHE_TTL_MS, RATING_CACHE_TTL_MS, EMPTY_CACHE_TTL_MS } = require('../lib/config');
 const { getMetrics } = require('../lib/metrics');
 const { getUpstreamStats } = require('../lib/upstream');
 
@@ -1470,8 +1470,9 @@ test('GET /api/game-details/:appid: ?refresh=1 re-fetches every source despite t
 
 // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times: those misses, and its
 // store page, are only true until release, so they expire like other misses instead of in a year.
+// A released game's fill in rarely: they expire in EMPTY_CACHE_TTL_MS, its store page keeps the tier.
 for (const comingSoon of [true, false]) {
-  test(`GET /api/game-details/:appid: ${comingSoon ? "an unreleased game's" : "a released game's"} empty sources ${comingSoon ? 'expire within a day' : 'keep the long tier'}`, async (t) => {
+  test(`GET /api/game-details/:appid: ${comingSoon ? "an unreleased game's" : "a released game's"} empty sources ${comingSoon ? 'expire within a day' : 'expire in 90 days'}`, async (t) => {
     _reset();
     _resetAuth();
     t.mock.method(globalThis, 'fetch', async (url) => {
@@ -1499,18 +1500,23 @@ for (const comingSoon of [true, false]) {
     });
     await api.get('/api/game-details/777').expect(200);
 
-    const later = Date.now() + MISS_CACHE_TTL_MS + 1000;
-    t.mock.method(Date, 'now', () => later);
+    const start = Date.now();
+    let now = start + MISS_CACHE_TTL_MS + 1000;
+    t.mock.method(Date, 'now', () => now);
     for (const source of ['rating', 'protondb', 'hltb', 'meta']) {
       const cachedAt = getCachedAt(`${source}:777`);
       assert.equal(cachedAt === undefined, comingSoon, source);
     }
     assert.notEqual(getCachedAt('browse:777'), undefined, 'tags are not a miss');
+    if (comingSoon) return;
+    now = start + EMPTY_CACHE_TTL_MS + 1000;
+    for (const source of ['rating', 'protondb', 'hltb']) assert.equal(getCachedAt(`${source}:777`), undefined, source);
+    assert.notEqual(getCachedAt('meta:777'), undefined, 'the store page is not empty');
   });
 }
 
 // An unreleased game's empty results, or one whose release phase is unknown (a browse item cached before basics were
-// requested, no store page), can't take the long tier; a delisted game's (no browse item, no store page) do.
+// requested, no store page), can't take the long tier; a delisted game's (no browse item, no store page) last 90 days.
 for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
   'a game whose release phase is unknown': { items: [{ success: 1, tagids: [] }], capped: true },
   'an unreleased game whose reviews call failed': {
