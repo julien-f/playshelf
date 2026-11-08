@@ -877,8 +877,10 @@ function fetchFastDetails(appid, { force = false, priority = false, storeDetails
       );
     const ratingPromise = getGameRating(appid, { force });
     // A failed browse item or reviews call asks ProtonDB and HLTB as usual.
-    const unreleasedPromise = Promise.all([basicsPromise, ratingPromise])
-      .then(([basics, rating]) => isUnreleased(basics, rating))
+    // Only a game the store data calls coming soon waits for its reviews.
+    const unreleasedPromise = basicsPromise
+      .then((basics) => basics?.comingSoon && ratingPromise.then((rating) => isUnreleased(basics, rating)))
+      .then(Boolean)
       .catch(() => false);
     // A meta failure fails HLTB too, so it reads as failed, not as "no data".
     const hltbPromise = Promise.all([namedPromise, unreleasedPromise]).then(([{ name, type }, unreleased]) =>

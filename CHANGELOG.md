@@ -98,6 +98,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Achievements a game adds after its first look show once its store page lists them, instead of up to a year later
 - On the Bundles page, ↻ also refreshes the bundles shown past their ITAD end date, and "Updated" gives the oldest page's age
 - Fanatical pick-and-mix prices stay shown when Fanatical's feed fails after its cached copy expired
+- A released game's ProtonDB and HowLongToBeat lookups no longer wait for its Steam reviews
 
 ### Development
 

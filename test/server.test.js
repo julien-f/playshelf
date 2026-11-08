@@ -1555,6 +1555,43 @@ for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
   });
 }
 
+// Only a game the browse item calls coming soon waits on its reviews to tell whether it's out.
+test("GET /api/game-details/:appid: a released game's ProtonDB lookup doesn't wait for its reviews", async (t) => {
+  _reset();
+  _resetAuth();
+  let releaseReviews;
+  const reviewsHeld = new Promise((r) => (releaseReviews = r));
+  let protondbAsked = false;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('GetAppReviews')) {
+      await reviewsHeld;
+      return { ok: true, json: async () => ({ response: { query_summary: { total_reviews: 0 } } }) };
+    }
+    if (url.includes('protondb.com')) {
+      protondbAsked = true;
+      return { ok: true, status: 200, json: async () => ({ tier: 'gold', confidence: 'good', total: 3 }) };
+    }
+    if (url.includes('IStoreBrowseService')) {
+      const item = { success: 1, tagids: [], type: 0, name: 'G', basic_info: {}, assets: {}, release: {} };
+      return { ok: true, json: async () => ({ response: { store_items: [item] } }) };
+    }
+    if (url.includes('appdetails')) return { ok: true, json: async () => ({ 779: { success: false } }) };
+    if (url.includes('ajaxgetstoretags'))
+      return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+    if (url.includes('search/site/init'))
+      return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+    if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const response = api.get('/api/game-details/779').then((res) => res);
+  try {
+    await until(() => protondbAsked, 'ProtonDB asked while the reviews call is pending');
+  } finally {
+    releaseReviews();
+    assert.equal((await response).status, 200);
+  }
+});
+
 // ProtonDB has no reports, nor HLTB times, for a game not out yet: one the browse item calls coming soon and
 // Steam reviews (asked anyway) call unreviewed, since the browse item can be a year old (data.md). Nor ProtonDB for
 // a DLC or a soundtrack.
