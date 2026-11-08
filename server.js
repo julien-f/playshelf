@@ -908,9 +908,8 @@ function fetchFastDetails(appid, { force = false, priority = false, storeDetails
         logDetailsError(appid, 'demo', demoRes.reason);
       if (protondbRes.status === 'rejected') logDetailsError(appid, 'protondb', protondbRes.reason);
       const basics = value(basicsRes);
-      // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times; those misses expire like any other
-      // miss, so they fill in after release instead of a year later (a failed reviews call counts as none: the cautious
-      // side). So when the phase is unknown: an item without basics, no store page cached by now. No item is a delisted game.
+      // An unreleased game's empty sources expire like misses, to fill in after release; so do they when its phase is
+      // unknown (a browse item without basics, no store page cached), while a delisted game (no item) keeps its tier.
       const item = value(browseRes);
       const phase = basics ?? (item && (await gameBasics(item, appid)));
       if ((item && !phase) || isUnreleased(phase, value(ratingRes))) {
