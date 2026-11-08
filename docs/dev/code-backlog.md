@@ -31,7 +31,6 @@ Last audited: simplify 2026-10-11 · correctness 2026-10-11 · security 2026-10-
 
 ## Correctness
 
-- **C316 · minor · S** — a schema cached empty at the 365-day tier (a 200 without `availableGameStats`) hides achievements a game adds later for a year. `/api/achievements` (`server.js`) has the store page's `achievementCount`: when it's above 0 and the cached schema is empty, refetch the schema once.
 - **C317 · minor · M** — a released game's rating, HLTB, ProtonDB, rarity, store page and browse item stay 365 days from day one: "Beyond These Stars" cached at day 10 as Mixed from 230 reviews and ProtonDB silver from 4 reports, both until 2027; 10% of matched HLTB entries rest on under 10 submissions (`comp_all_count`). A reviewed plan.
   - Policy: cap rows to half the game's age at fetch (1 day minimum, tier maximum; empty results ~90 days, the cheapest part, first), applied when read so old rows follow (a reusable cap-on-read). Simulated at ~0.44 calls a day per upstream for 1310 games.
   - Open: Early Access as young (until when?); rarity and schema are read by `/api/achievements`, not the details load; jitter (±10% on 30-day+ expiries, for the 4414 rows written 2026-10-19) needs C311 or a rewrite migration.

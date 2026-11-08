@@ -2570,6 +2570,25 @@ test("GET /api/achievements/:appid: unlocked counts only the schema's achievemen
   assert.equal(res.body.unlocked, 1);
 });
 
+// The schema cached empty for a year, while the store page since lists achievements: Steam added them.
+test('GET /api/achievements/:appid: a schema cached empty before the store page listed achievements is fetched again, once', async (t) => {
+  const day = 24 * 60 * 60 * 1000;
+  _reset([
+    ['gameschema:403', { value: { name: 'G', achievements: [] }, ts: Date.now() - 2 * day }],
+    ['meta:403', { value: { name: 'G', achievements: { total: 2 } }, ts: Date.now() - day }],
+  ]);
+  const achievementsFetch = makeAchievementsFetch();
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls.push(url);
+    return achievementsFetch(url);
+  });
+
+  assert.equal((await api.get('/api/achievements/403').expect(200)).body.total, 2);
+  await api.get('/api/achievements/403').expect(200);
+  assert.equal(calls.filter((u) => u.includes('GetSchemaForGame')).length, 1);
+});
+
 test('GET /api/achievements/:appid: a member with a real unlock time wins over one whose time is unknown (0), in either order', async (t) => {
   for (const ids of [`${ID1},${ID2}`, `${ID2},${ID1}`]) {
     _reset();

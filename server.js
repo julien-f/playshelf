@@ -1235,7 +1235,14 @@ app.get('/api/achievements/:appid', achievementsLimit, async (req, res) => {
     // Sequenced rather than batched with the calls below: even when appdetails didn't confirm
     // zero (meta missing/failed, or achievementCount unknown), don't fire rarity/per-player
     // calls until schema itself confirms there's something to annotate.
-    const schema = (await getGameSchema(appid, { force })).achievements;
+    let schema = (await getGameSchema(appid, { force })).achievements;
+    // Cached empty before the store page listed achievements: Steam added them since. Asked once, being newer after.
+    if (
+      schema.length === 0 &&
+      meta?.achievementCount > 0 &&
+      getCachedAt(schemaCacheKey(appid)) < getCachedAt(appDetailsCacheKey(appid))
+    )
+      schema = (await getGameSchema(appid, { force: true })).achievements;
     if (schema.length === 0) {
       return res.json(none);
     }
