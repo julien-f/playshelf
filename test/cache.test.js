@@ -196,6 +196,11 @@ test('getCached: a forced read of a library row refetches however young', () => 
   assert.equal(isCached('games:k'), true);
 });
 
+test('isAnsweredFromCache: without options, a live row answers', () => {
+  _reset([['games:k', { value: 'v', ts: Date.now() - 60_000 }]]);
+  assert.equal(isAnsweredFromCache('games:k'), true);
+});
+
 // ── setCache ──────────────────────────────────────────────────────────────────
 
 // A store page's two rows must not be left half written (lib/steam.js's getAppDetails).
