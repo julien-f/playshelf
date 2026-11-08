@@ -33,6 +33,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 ## Lists and selection
 
+- **U245 · minor · P1, F3** — the **Runs on Linux (ProtonDB)** suggested view is on Owned only, though "will it run here" is above all a pre-purchase check (P1). Offer it on Wishlist too.
 - **U161 · minor · C1, F3** — excluding a Steam tag drops every game carrying it, even as its 18th tag on a few votes (a "Horror" exclusion loses games with a passing horror level). The table filters raw column values, so: a **Main tags** column (tags ≥ ~30% of the top tag, threshold to measure first), filterable and groupable — excluding there is the soft exclusion, grouping there groups by dominant genre. Alternative: a per-column `filterValues(row)` in `@vates/data-table-core`.
 - **U168 · minor · F3, F4** — no way to explore the store by Steam tag ("the best roguelikes I don't own"). `IStoreQueryService/Query` lists appids by `tagids_must_match`, key-less ([integrations.md](integrations.md#a-developers-or-publishers-games--store-search-results)); needs its own volume review like F4's.
 - **U198 · minor · F3, D3** — no sign that a game got better or worse since release (Steam's "Recent Reviews"). A **Recent rating** from `GetAppReviews`' date range (last 30 days) — one more review call per uncached game, and a shorter TTL than the rating's ([integrations.md](integrations.md)).
@@ -75,6 +76,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 ## Consistency and polish
 
+- **U246 · polish · S1, L1** — on someone else's library (`?u=`), a Status filter pill reads just "Status:": statuses show only on the viewer's own account (`showingMyAccount()`), so the Play next view's exclusion has no value to name there. Hide the pill, or name the excluded values, where the column has none.
 - **U169 · minor · I2, I3** — revealing a hidden achievement with Enter or Space drops focus to `<body>` (the spoiler button becomes a div), against ui-guidelines.md's "focus is never dropped". Move focus to the revealed row, or to the next hidden one.
 - **U39 · polish** — the search box shifts sideways as the account chip's label changes length ("Alice" vs. "Alice + Bob + Carol"); missing thumbnails have no placeholder; wishlisted/owned name colours have no legend (still true in Recently Looked Up).
 - **U179 · polish · I2, I3** — the first Tab stop reads "Skip to table" on pages with no table (Home, Compare's form, About, the rank screen), where it skips to `main`. "Skip to content" there.
