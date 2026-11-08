@@ -870,20 +870,23 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
       .then(async (store) =>
         store ? store : { name: (await getGameSchema(appid, { force })).name ?? null, type: null },
       );
+    const ratingPromise = getGameRating(appid, { force });
+    // Not out yet: the browse item says so and Steam reviews (sanctioned, asked anyway) agree with none, since the
+    // browse item can be a year old. A failed browse item or reviews call asks ProtonDB and HLTB as usual.
+    const unreleasedPromise = basicsPromise
+      .then(async (basics) => !!basics?.comingSoon && (await ratingPromise) === null)
+      .catch(() => false);
     // A meta failure fails HLTB too, so it reads as failed, not as "no data".
-    const hltbPromise = namedPromise.then(({ name, type }) => getHLTB(appid, name, { type, force, priority }));
-    // "Unreleased" only once appdetails agrees (fetched by this load anyway, and expiring daily for such a game):
-    // the browse item can be a year old. A failed browse item still asks ProtonDB.
-    const protondbPromise = basicsPromise
-      .catch(() => null)
-      .then(async (basics) => {
-        const unreleased = !!basics?.comingSoon && !!(await getAppDetails(appid).catch(() => null))?.comingSoon;
-        return getProtonDbStatus(appid, { force, type: basics?.type, unreleased });
-      });
+    const hltbPromise = Promise.all([namedPromise, unreleasedPromise]).then(([{ name, type }, unreleased]) =>
+      getHLTB(appid, name, { type, force, priority, unreleased }),
+    );
+    const protondbPromise = Promise.all([basicsPromise.catch(() => null), unreleasedPromise]).then(
+      ([basics, unreleased]) => getProtonDbStatus(appid, { force, type: basics?.type, unreleased }),
+    );
     const tagsPromise = resolveSteamTags(browsePromise);
     const demoPromise = browsePromise.then(extractDemoAppid);
     return Promise.allSettled([
-      getGameRating(appid, { force }),
+      ratingPromise,
       hltbPromise,
       tagsPromise,
       demoPromise,

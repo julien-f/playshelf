@@ -1480,17 +1480,27 @@ for (const comingSoon of [true, false]) {
   });
 }
 
-// ProtonDB has no reports for a game not out yet, a DLC or a soundtrack (integrations.md), so it isn't asked.
-// "Unreleased" needs appdetails to agree: the browse item can be a year old (data.md).
-for (const [label, { browse, appdetailsComingSoon = false, asked }] of Object.entries({
-  'an unreleased game': { browse: { release: { is_coming_soon: true } }, appdetailsComingSoon: true, asked: false },
-  'a game released since its browse item was cached': { browse: { release: { is_coming_soon: true } }, asked: true },
-  'a released game': { browse: { release: { is_coming_soon: false } }, asked: true },
-  'a DLC': { browse: { type: 4 }, asked: false },
+// ProtonDB has no reports, nor HLTB times, for a game not out yet: one the browse item calls coming soon and
+// Steam reviews (asked anyway) call unreviewed, since the browse item can be a year old (data.md). Nor ProtonDB for
+// a DLC or a soundtrack.
+for (const [label, { browse, reviews = 0, reviewsFail = false, asked, searched = asked }] of Object.entries({
+  'an unreleased game': { browse: { release: { is_coming_soon: true } }, asked: false },
+  'a game released since its browse item was cached': {
+    browse: { release: { is_coming_soon: true } },
+    reviews: 12,
+    asked: true,
+  },
+  'an unreleased game whose reviews call failed': {
+    browse: { release: { is_coming_soon: true } },
+    reviewsFail: true,
+    asked: true,
+  },
+  'a released game with no reviews yet': { browse: { release: { is_coming_soon: false } }, asked: true },
+  'a DLC': { browse: { type: 4 }, asked: false, searched: true },
   'a soundtrack': { browse: { type: 11 }, asked: false },
   'a game whose browse item failed': { browse: null, asked: true },
 })) {
-  test(`GET /api/game-details/:appid: ProtonDB is ${asked ? '' : 'not '}asked for ${label}`, async (t) => {
+  test(`GET /api/game-details/:appid: ProtonDB is ${asked ? '' : 'not '}asked, HLTB ${searched ? '' : 'not '}searched, for ${label}`, async (t) => {
     _reset();
     _resetAuth();
     const urls = [];
@@ -1500,18 +1510,15 @@ for (const [label, { browse, appdetailsComingSoon = false, asked }] of Object.en
       if (url.includes('appdetails'))
         return {
           ok: true,
-          json: async () => ({
-            778: {
-              success: true,
-              data: { name: 'G', type: 'game', release_date: { coming_soon: appdetailsComingSoon } },
-            },
-          }),
+          json: async () => ({ 778: { success: true, data: { name: 'G', type: 'game', release_date: {} } } }),
         };
-      if (url.includes('GetAppReviews'))
+      if (url.includes('GetAppReviews')) {
+        if (reviewsFail) return { ok: false, status: 503 };
         return {
           ok: true,
-          json: async () => ({ response: { query_summary: { total_reviews: 0, total_positive: 0 } } }),
+          json: async () => ({ response: { query_summary: { total_reviews: reviews, total_positive: reviews } } }),
         };
+      }
       if (url.includes('protondb.com'))
         return { ok: true, status: 200, json: async () => ({ tier: 'gold', confidence: 'good', total: 3 }) };
       if (url.includes('search/site/init'))
@@ -1530,12 +1537,35 @@ for (const [label, { browse, appdetailsComingSoon = false, asked }] of Object.en
     assert.equal(
       urls.some((u) => u.includes('protondb.com')),
       asked,
+      'ProtonDB',
+    );
+    assert.equal(
+      urls.some((u) => u.includes('search/site') && !u.includes('init')),
+      searched,
+      'HLTB',
     );
     assert.deepEqual(body.protondb, asked ? { tier: 'gold', confidence: 'good', total: 3 } : null);
     assert.ok(!body.failed?.includes('protondb'));
     assert.notEqual(getCachedAt('protondb:778'), undefined, 'the source has an age');
   });
 }
+
+// A skip never hides what a source already answered: a DLC's ProtonDB summary cached before the rule stays shown.
+test('GET /api/game-details/:appid: a skipped source still serves a summary it has cached', async (t) => {
+  _reset();
+  _resetAuth();
+  setCache('protondb:779', { tier: 'silver', confidence: 'low', total: 2 });
+  setCache('browse:779', { success: 1, type: 4, name: 'A DLC', basic_info: {}, assets: {}, tagids: [] });
+  const urls = [];
+  const detailsFetch = makeDetailsFetch();
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(url);
+    return detailsFetch(url);
+  });
+  const { body } = await api.get('/api/game-details/779').expect(200);
+  assert.deepEqual(body.protondb, { tier: 'silver', confidence: 'low', total: 2 });
+  assert.ok(!urls.some((u) => u.includes('protondb.com')));
+});
 
 // ── GET /api/game-meta/:appid ─────────────────────────────────────────────────
 
