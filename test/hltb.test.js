@@ -2,6 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { ageCache } = require('./ageCache');
 const { levenshtein, stringSimilarity, getHLTB, buildSearchTerms, _resetAuth } = require('../lib/hltb');
 const { _reset, getCached, setCache } = require('../lib/cache');
 const { db } = require('../lib/db');
@@ -743,4 +744,21 @@ test("getHLTB: the search warning keeps a network failure's cause", async (t) =>
   await assert.rejects(() => getHLTB(1, 'Portal'));
   const warned = warnMock.mock.calls.map((c) => c.arguments.map(String).join(' ')).find((l) => l.startsWith('[HLTB]'));
   assert.match(warned, /ECONNRESET/);
+});
+
+// "Unreleased" is inferred (a coming-soon browse item and no reviews), so it never hides or wipes times already cached.
+test('getHLTB: an unreleased game serves cached times, and a forced one searches instead of wiping them', async (t) => {
+  _reset();
+  _resetAuth();
+  const real = [{ game_id: 42, game_name: 'Portal', comp_main: 3600 }];
+  setCache('hltb:1', real);
+  const fetchMock = t.mock.method(globalThis, 'fetch', async (url) =>
+    url.includes('search/site/init') ? makeInitResponse() : makeSearchResponse(real),
+  );
+  assert.equal((await getHLTB(1, 'Portal', { unreleased: true }))?.id, 42);
+  assert.equal(fetchMock.mock.callCount(), 0);
+  ageCache();
+  assert.equal((await getHLTB(1, 'Portal', { unreleased: true, force: true }))?.id, 42);
+  assert.ok(fetchMock.mock.callCount() > 0, 'searched');
+  assert.deepEqual(getCached('hltb:1'), real);
 });

@@ -2,9 +2,18 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { getCached, getCachedAt, setCache, getCacheEntryCounts, createCachedFetch, _reset } = require('../lib/cache');
+const {
+  getCached,
+  getCachedAt,
+  setCache,
+  getCacheEntryCounts,
+  createCachedFetch,
+  isAnsweredFromCache,
+  _reset,
+} = require('../lib/cache');
+const { getMetrics } = require('../lib/metrics');
 const { createDedup } = require('../lib/dedup');
-const { LIBRARY_CACHE_TTL_MS, BUNDLES_CACHE_TTL_MS } = require('../lib/config');
+const { LIBRARY_CACHE_TTL_MS, BUNDLES_CACHE_TTL_MS, FORCE_MIN_AGE_MS } = require('../lib/config');
 
 // ── getCached ─────────────────────────────────────────────────────────────────
 
@@ -152,6 +161,36 @@ test('every key prefix has an explicit TTL group, and an unknown one throws', ()
   assert.equal(getCached('itad-gamebundles:US:gid'), undefined, 'bundles tier, not the 30-day library tier');
   assert.deepEqual(getCached('playerach:1:440'), [], 'library tier');
   assert.throws(() => setCache('nope:1', 1), /no TTL group for key nope:1/);
+});
+
+// ── Forced reads ──────────────────────────────────────────────────────────────
+
+const cacheEvents = (group) => getMetrics().sinceRestart.cache[group] ?? { hits: 0, forced: 0 };
+
+// A refresh seconds after a fetch would re-spend every upstream call for the same answer (C297).
+test('getCached: a forced read of a per-game row younger than FORCE_MIN_AGE_MS is answered, as a hit', () => {
+  for (const key of ['meta:1', 'hltb:1', 'rating:1', 'news:1']) {
+    _reset([[key, { value: 'v', ts: Date.now() - FORCE_MIN_AGE_MS + 60_000 }]]);
+    const group = key === 'rating:1' ? 'rating' : key === 'news:1' ? 'news' : 'meta';
+    const before = cacheEvents(group);
+    assert.equal(getCached(key, { force: true }), 'v', key);
+    assert.equal(isAnsweredFromCache(key, { force: true }), true, key);
+    assert.deepEqual([cacheEvents(group).hits - before.hits, cacheEvents(group).forced - before.forced], [1, 0], key);
+  }
+});
+
+test('getCached: a forced read of a per-game row past FORCE_MIN_AGE_MS refetches', () => {
+  _reset([['meta:1', { value: 'v', ts: Date.now() - FORCE_MIN_AGE_MS - 60_000 }]]);
+  assert.equal(getCached('meta:1', { force: true }), undefined);
+  assert.equal(isAnsweredFromCache('meta:1', { force: true }), false);
+});
+
+// A user who just bought a game or unlocked an achievement must see it.
+test('getCached: a forced read of a library row refetches however young', () => {
+  _reset([['games:k', { value: 'v', ts: Date.now() - 60_000 }]]);
+  assert.equal(getCached('games:k', { force: true }), undefined);
+  assert.equal(isAnsweredFromCache('games:k', { force: true }), false);
+  assert.equal(isAnsweredFromCache('games:k'), true);
 });
 
 // ── createCachedFetch ─────────────────────────────────────────────────────────

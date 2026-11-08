@@ -26,7 +26,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
               limiterTrips: { [name]: count },
               dedupHits:    { [name]: count },
               cache:        { [group]: { hits, misses, forced } },
-              windowWaits:  { 'store-details': { waits, avgWaitMs, maxWaitMs } },
+              windowWaits:  { 'store-details' | 'hltb-search': { waits, avgWaitMs, maxWaitMs } },
               heldAnswers:  { hltb: count },
               streams:      { count, games, fastUncached, storeUncached, closedEarly, closedEarlyCold, limited,
                               concurrentMax, cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs },
@@ -71,7 +71,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 ### `dedupHits`, `cache`, `cacheEntries`
 
 - `dedupHits`: concurrent calls `createDedup(name)` (`lib/dedup.js`) coalesced into one in flight — `steam`, `hltb`, `itad`, `fanatical`, `gamepass`, `details` (`server.js`'s game details). A burst points at a retry loop or a polling client.
-- `cache`: `getCached()` outcomes per `lib/cache.js` `GROUPS` label (`library`, `resolve`, `rating`, `meta`, `search`, `news`, `bundles`, `itad-ids`). `forced` (a user's ↻) is kept apart from `misses`. A rate limiter's cache check doesn't record, so each request counts once; nor does a game's tags reusing the parsed tag-name map (`meta`), which reads no row. Tells "traffic grew" apart from "the cache stopped working" when outbound counts jump.
+- `cache`: `getCached()` outcomes per `lib/cache.js` `GROUPS` label (`library`, `resolve`, `rating`, `meta`, `search`, `news`, `bundles`, `itad-ids`). `forced` (a user's ↻ that refetches) is kept apart from `misses`; a ↻ answered from a row under `FORCE_MIN_AGE_MINUTES` old counts as a hit. A rate limiter's cache check doesn't record, so each request counts once; nor does a game's tags reusing the parsed tag-name map (`meta`), which reads no row. Tells "traffic grew" apart from "the cache stopped working" when outbound counts jump.
 - `cacheEntries`: row count per group, read from `db.sqlite` (survives restarts, lists every group). With `cache`: few entries plus many misses means a TTL too short; many entries plus many misses, a key space the cache can't help.
 
 ### List loading — `streams`, `windowWaits`, `heldAnswers`
@@ -83,7 +83,7 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
   - `closedEarly`: the client left before the end; `closedEarlyCold` of those, ones with something to fetch — the slowest loads, missing from the timings.
   - `concurrentMax`: streams open (every client's) when one started, the largest; `server.openStreams` is the live count.
   - Timings only from `cold` streams (something to fetch, ran to the end): `listed` when every game's fast part was sent (all rows listed), `done` at the end (store parts too). `null` with no cold stream. Absent from `lastHour` with no stream in it.
-- `windowWaits`: reservations that queued for a rolling cap's place (`createWindow`, `lib/upstream.js`), and how long. Counted per attempt: a 429's retry reserves again. Waits with no 429s on `getAppDetails` mean the cap, not Steam, is the limit; 429s with no waits, a cap too high.
+- `windowWaits`: reservations that queued for a rolling cap's place (`createWindow`, `lib/upstream.js`), and how long. Counted per attempt: a 429's retry reserves again. Waits with no 429s on `getAppDetails` (or HLTB's `search`) mean the cap, not the upstream, is the limit; 429s with no waits, a cap too high.
 - `heldAnswers.hltb`: lookups HLTB's failed-lookup hold answered without a request; `upstreams.hltb.held`, games held now.
 - Already answered elsewhere: appdetails 429s (`outbound['steam-store'].getAppDetails.statuses`), whether `UPSTREAM_MIN_INTERVAL_MS` is the limit (`upstreams[group].semaphores`' queues and the labels' latency).
 

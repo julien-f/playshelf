@@ -14,6 +14,7 @@ process.env.DB_FILE = '';
 const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
 const { until } = require('./until');
+const { ageCache } = require('./ageCache');
 const { freshNonce } = require('./openidNonce');
 const http = require('node:http');
 const zlib = require('node:zlib');
@@ -1133,6 +1134,9 @@ test('GET /api/game-news/:appid: ?refresh=1 re-fetches despite the cache', async
   await api.get('/api/game-news/409').expect(200);
   await api.get('/api/game-news/409').expect(200);
   assert.equal(fetchMock.mock.callCount(), 1);
+  await api.get('/api/game-news/409?refresh=1').expect(200);
+  assert.equal(fetchMock.mock.callCount(), 1, 'news fetched under FORCE_MIN_AGE_MINUTES ago is answered from cache');
+  ageCache();
   const res = await api.get('/api/game-news/409?refresh=1').expect(200);
   assert.equal(fetchMock.mock.callCount(), 2);
   assert.equal(res.body.news.length, 1);
@@ -1405,10 +1409,12 @@ test('GET /api/game-details/:appid: ?refresh=1 alongside a normal request shares
 
   const hits = dedupHits('steam');
   const both = Promise.all([api.get('/api/game-details/503'), api.get('/api/game-details/503?refresh=1')]);
-  // A lone request makes no 'steam' dedup hit; the forced one joins all five of its upstream calls.
-  await until(() => dedupHits('steam') === hits + 5, 'the forced calls joining the normal ones');
+  // A lone request makes no 'steam' dedup hit; the forced one joins its four started calls, then ProtonDB's,
+  // which waits for the browse item.
+  await until(() => dedupHits('steam') === hits + 4, 'the forced calls joining the normal ones');
   release();
   const [normal, forced] = await both;
+  assert.equal(dedupHits('steam'), hits + 5);
   assert.equal(normal.status, 200);
   assert.equal(forced.status, 200);
   assert.equal(forced.body.rating.score, normal.body.rating.score);
@@ -1423,6 +1429,9 @@ test('GET /api/game-details/:appid: ?refresh=1 re-fetches every source despite t
   t.mock.method(globalThis, 'fetch', makeCountingDetailsFetch(counts));
 
   await api.get('/api/game-details/502').expect(200);
+  await api.get('/api/game-details/502?refresh=1').expect(200);
+  assert.deepEqual([counts.rating, counts.hltb, counts.meta], [1, 1, 1], 'sources under FORCE_MIN_AGE_MINUTES old');
+  ageCache();
   await api.get('/api/game-details/502?refresh=1').expect(200);
   assert.equal(counts.rating, 2);
   assert.equal(counts.hltb, 2);
@@ -1470,6 +1479,93 @@ for (const comingSoon of [true, false]) {
     assert.notEqual(getCachedAt('browse:777'), undefined, 'tags are not a miss');
   });
 }
+
+// ProtonDB has no reports, nor HLTB times, for a game not out yet: one the browse item calls coming soon and
+// Steam reviews (asked anyway) call unreviewed, since the browse item can be a year old (data.md). Nor ProtonDB for
+// a DLC or a soundtrack.
+for (const [label, { browse, reviews = 0, reviewsFail = false, asked, searched = asked }] of Object.entries({
+  'an unreleased game': { browse: { release: { is_coming_soon: true } }, asked: false },
+  'a game released since its browse item was cached': {
+    browse: { release: { is_coming_soon: true } },
+    reviews: 12,
+    asked: true,
+  },
+  'an unreleased game whose reviews call failed': {
+    browse: { release: { is_coming_soon: true } },
+    reviewsFail: true,
+    asked: true,
+  },
+  'a released game with no reviews yet': { browse: { release: { is_coming_soon: false } }, asked: true },
+  'a DLC': { browse: { type: 4 }, asked: false, searched: true },
+  'a soundtrack': { browse: { type: 11 }, asked: false },
+  'a game whose browse item failed': { browse: null, asked: true },
+})) {
+  test(`GET /api/game-details/:appid: ProtonDB is ${asked ? '' : 'not '}asked, HLTB ${searched ? '' : 'not '}searched, for ${label}`, async (t) => {
+    _reset();
+    _resetAuth();
+    const urls = [];
+    t.mock.method(console, 'warn', () => {});
+    t.mock.method(globalThis, 'fetch', async (url) => {
+      urls.push(url);
+      if (url.includes('appdetails'))
+        return {
+          ok: true,
+          json: async () => ({ 778: { success: true, data: { name: 'G', type: 'game', release_date: {} } } }),
+        };
+      if (url.includes('GetAppReviews')) {
+        if (reviewsFail) return { ok: false, status: 503 };
+        return {
+          ok: true,
+          json: async () => ({ response: { query_summary: { total_reviews: reviews, total_positive: reviews } } }),
+        };
+      }
+      if (url.includes('protondb.com'))
+        return { ok: true, status: 200, json: async () => ({ tier: 'gold', confidence: 'good', total: 3 }) };
+      if (url.includes('search/site/init'))
+        return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+      if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+      if (url.includes('IStoreBrowseService')) {
+        if (!browse) throw new TypeError('fetch failed');
+        const item = { success: 1, tagids: [], type: 0, name: 'G', basic_info: {}, assets: {}, ...browse };
+        return { ok: true, json: async () => ({ response: { store_items: [item] } }) };
+      }
+      if (url.includes('ajaxgetstoretags'))
+        return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const { body } = await api.get('/api/game-details/778').expect(200);
+    assert.equal(
+      urls.some((u) => u.includes('protondb.com')),
+      asked,
+      'ProtonDB',
+    );
+    assert.equal(
+      urls.some((u) => u.includes('search/site') && !u.includes('init')),
+      searched,
+      'HLTB',
+    );
+    assert.deepEqual(body.protondb, asked ? { tier: 'gold', confidence: 'good', total: 3 } : null);
+    assert.ok(!body.failed?.includes('protondb'));
+    assert.notEqual(getCachedAt('protondb:778'), undefined, 'the source has an age');
+  });
+}
+
+// A skip never hides what a source already answered: a DLC's ProtonDB summary cached before the rule stays shown.
+test('GET /api/game-details/:appid: a skipped source still serves a summary it has cached', async (t) => {
+  _reset();
+  _resetAuth();
+  setCache('protondb:779', { tier: 'silver', confidence: 'low', total: 2 });
+  setCache('browse:779', { success: 1, type: 4, name: 'A DLC', basic_info: {}, assets: {}, tagids: [] });
+  const urls = [];
+  const detailsFetch = makeDetailsFetch();
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(url);
+    return detailsFetch(url);
+  });
+  const { body } = await api.get('/api/game-details/779').expect(200);
+  assert.deepEqual(body.protondb, { tier: 'silver', confidence: 'low', total: 2 });
+  assert.ok(!urls.some((u) => u.includes('protondb.com')));
+});
 
 // ── GET /api/game-meta/:appid ─────────────────────────────────────────────────
 
@@ -2476,6 +2572,7 @@ test('GET /api/achievements/:appid: ?refresh=1 re-fetches the schema, rarity and
 
   await api.get(`/api/achievements/401?steamids=${ID1}`).expect(200);
   await api.get(`/api/achievements/401?steamids=${ID1}`).expect(200);
+  ageCache();
   await api.get(`/api/achievements/401?steamids=${ID1}&refresh=1`).expect(200);
   for (const part of ['GetSchemaForGame', 'GetGlobalAchievementPercentagesForApp', 'GetPlayerAchievements']) {
     assert.equal(count(part), 2, part);

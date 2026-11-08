@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Large lists load faster when several people use the app at once: names, ratings, tags, ProtonDB and HLTB fill in before genres, Metacritic and achievements
 - GET /api/metrics opens with what's wrong now (`alerts`), groups each upstream's live state together and dates its worst event-loop block
 - Each visit now extends the Steam sign-in, instead of it expiring a fixed time after signing in
+- Large lists load HowLongToBeat times at a steadier pace so the site isn't blocked, and fewer requests go out for unreleased games, DLC, soundtracks and repeated refreshes
 
 ### Fixed
 
