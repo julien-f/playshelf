@@ -2541,7 +2541,7 @@ for (const [label, call, body] of [
     () => getGlobalAchievementPercentages(663),
     {},
   ],
-  ['getStoreBrowseItem, a reply without `response.store_items`', () => getStoreBrowseItem(664), { response: {} }],
+  ['getStoreBrowseItem, a reply without `response`', () => getStoreBrowseItem(664), {}],
 ]) {
   test(`${label} fails and caches nothing`, async (t) => {
     _reset();
@@ -2553,7 +2553,7 @@ for (const [label, call, body] of [
 }
 
 // Steam's answers for an unknown or delisted app, which stay cached misses.
-test('an empty reviews `response` and a browse item without success stay cached misses', async (t) => {
+test('an empty reviews `response`, a browse item without success and an empty GetItems `response` stay cached misses', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async (url) => ({
     ok: true,
@@ -2564,4 +2564,7 @@ test('an empty reviews `response` and a browse item without success stay cached 
   assert.equal(await getStoreBrowseItem(666), null);
   assert.notEqual(getCachedAt('rating:665'), undefined);
   assert.notEqual(getCachedAt('browse:666'), undefined);
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ response: {} }) }));
+  assert.equal(await getStoreBrowseItem(667), null);
+  assert.notEqual(getCachedAt('browse:667'), undefined);
 });

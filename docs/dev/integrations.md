@@ -86,7 +86,7 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
   - Not in it: genres, Metacritic, achievements, DLC, languages, price; categories only as ids. Those stay appdetails'.
   - The date is formatted in Pacific time, as appdetails' string (Portal 2: Apr 18, Apr 19 in UTC); a coming-soon date short of a full one (`coming_soon_display` other than `date_full`) waits for appdetails' wording.
   - An item cached before these fields were requested has none: its basics come from cached appdetails, never fetched for it, until the row's next refresh.
-  - A reply without a `response.store_items` array fails, uncached. An item with `success` ≠ 1 is cached as no item (`null`). **Assumption**: that's Steam's answer for an unknown or delisted app.
+  - A reply without a `response` object fails, uncached. An item with `success` ≠ 1, or a `response` without `store_items` (protobuf-JSON drops an empty list), is cached as no item (`null`). **Assumption**: those are Steam's answers for an unknown or delisted app.
 - `https://store.steampowered.com/actions/ajaxgetstoretags?l=english` — tagid → name, one near-static list of ~430, cached for 30 days (`tagnames:all`, about 12 calls a year); the parsed map stays in memory until that row is rewritten or expires. A reply without a non-empty `tags` array fails and isn't cached; after a failure the map isn't refetched for 30 s (`tagNameHoldOff`, `lib/steam.js`).
 - A cache key whose value shape changes gets a new prefix rather than reusing the old one: a shape check can't tell an old value from a new one of the same JS type (an empty array, say). Retired keys age out with the TTL sweep.
 
