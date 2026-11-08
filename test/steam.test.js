@@ -39,7 +39,8 @@ const {
 const { getUpstreamStats, createSemaphore } = require('../lib/upstream');
 const { _reset, getCachedAt, setCache } = require('../lib/cache');
 const { getCircuitBreakers, _resetCircuitBreakers } = require('../lib/circuitBreaker');
-const { db } = require('../lib/db');
+const { DatabaseSync } = require('node:sqlite');
+const { db, migrate, MIGRATIONS } = require('../lib/db');
 const { MISS_CACHE_TTL_MS, META_CACHE_TTL_MS } = require('../lib/config');
 
 // The tag-name map's failure hold-off outlives _reset(), which only empties the cache.
@@ -1027,6 +1028,26 @@ test('getAppDetails: caches the whole page and a trimmed row read back to the sa
 
   _reset([['appdetails:400', { value: FULL_PAGE, ts: Date.now() }]]);
   assert.deepEqual(await getAppDetails(400), fetched);
+});
+
+// Migration 13 froze a copy of trimAppDetails to fill the rows cached before it.
+test("getAppDetails: the trimmed row matches migration 13's frozen trim", async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, FULL_PAGE));
+  await getAppDetails(400);
+  const trimmedValue = (from) =>
+    JSON.parse(from.prepare("SELECT value FROM cache_meta WHERE key = 'appdetails:400'").get().value);
+
+  const migrated = new DatabaseSync(':memory:');
+  migrate(
+    migrated,
+    MIGRATIONS.filter((m) => m.version <= 12),
+  );
+  migrated
+    .prepare('INSERT INTO cache_meta (key, value, ts, expires) VALUES (?, ?, ?, ?)')
+    .run('meta:400', JSON.stringify(FULL_PAGE), 1000, null);
+  migrate(migrated, MIGRATIONS);
+  assert.deepEqual(trimmedValue(migrated), trimmedValue(db));
 });
 
 test('getAppDetails: a page miss writes both rows on the miss expiry', async (t) => {

@@ -162,6 +162,32 @@ test("migrate: version 13 fills each store page's trimmed appdetails row from it
   );
 });
 
+// A truthy non-object page used to throw in the trim, rolling the migration back on every start.
+test('migrate: version 13 skips a meta row that is not an object', () => {
+  const db = new DatabaseSync(':memory:');
+  migrate(
+    db,
+    MIGRATIONS.filter((m) => m.version <= 12),
+  );
+  db.prepare('INSERT INTO cache_meta (key, value, ts, expires) VALUES (?, ?, ?, ?)').run(
+    'meta:1',
+    '"oops"',
+    1000,
+    null,
+  );
+
+  migrate(db, MIGRATIONS);
+
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, MIGRATIONS.at(-1).version);
+  assert.deepEqual(
+    db
+      .prepare('SELECT key FROM cache_meta')
+      .all()
+      .map((r) => r.key),
+    ['meta:1'],
+  );
+});
+
 test("requiring lib/db picks up default.env's DB_FILE even without a shell-level DB_FILE set", () => {
   // Regression test: lib/db.js used to read process.env.DB_FILE before lib/config.js had loaded
   // default.env (whichever of lib/db.js's requirers happened to require lib/config first), so it
