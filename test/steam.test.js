@@ -2521,3 +2521,38 @@ test('a coming-soon store row expires within a day once read, however it was cac
     assert.equal(getCachedAt(key), undefined, key);
   for (const key of ['meta:653', 'browse:654']) assert.notEqual(getCachedAt(key), undefined, key);
 });
+
+// A 200 of another shape is not an answer: cached at the year-long tier it would read as "no data" all that time.
+for (const [label, call, body] of [
+  ['getGameRating, a reply without `response`', () => getGameRating(660), {}],
+  ['getProtonDbStatus, a reply without a tier', () => getProtonDbStatus(661), {}],
+  ['getGameSchema, a reply without `game`', () => getGameSchema(662), {}],
+  [
+    'getGlobalAchievementPercentages, a reply without `achievementpercentages`',
+    () => getGlobalAchievementPercentages(663),
+    {},
+  ],
+  ['getStoreBrowseItem, a reply without `response.store_items`', () => getStoreBrowseItem(664), { response: {} }],
+]) {
+  test(`${label} fails and caches nothing`, async (t) => {
+    _reset();
+    t.mock.method(globalThis, 'fetch', async () => ({ ok: true, status: 200, json: async () => body }));
+    await assert.rejects(call(), (err) => err.isUpstream);
+    for (const table of ['cache_meta', 'cache_rating'])
+      assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0, table);
+  });
+}
+
+// Steam's answers for an unknown or delisted app, which stay cached misses.
+test('an empty reviews `response` and a browse item without success stay cached misses', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async (url) => ({
+    ok: true,
+    json: async () =>
+      url.includes('GetAppReviews') ? { response: {} } : { response: { store_items: [{ appid: 666, success: 2 }] } },
+  }));
+  assert.equal(await getGameRating(665), null);
+  assert.equal(await getStoreBrowseItem(666), null);
+  assert.notEqual(getCachedAt('rating:665'), undefined);
+  assert.notEqual(getCachedAt('browse:666'), undefined);
+});

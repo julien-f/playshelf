@@ -91,6 +91,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - The site no longer stops answering for several seconds about once an hour.
 - Achievement icons show again for recently released games.
 - An unreleased game's store data, reviews, ProtonDB and HowLongToBeat results are refreshed within a day again, instead of staying up to a year
+- An unexpected reply from Steam or ProtonDB shows as a failed source to retry, instead of as no data for up to a year
 
 ### Development
 

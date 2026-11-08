@@ -86,6 +86,7 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
   - Not in it: genres, Metacritic, achievements, DLC, languages, price; categories only as ids. Those stay appdetails'.
   - The date is formatted in Pacific time, as appdetails' string (Portal 2: Apr 18, Apr 19 in UTC); a coming-soon date short of a full one (`coming_soon_display` other than `date_full`) waits for appdetails' wording.
   - An item cached before these fields were requested has none: its basics come from cached appdetails, never fetched for it, until the row's next refresh.
+  - A reply without a `response.store_items` array fails, uncached. An item with `success` ≠ 1 is cached as no item (`null`). **Assumption**: that's Steam's answer for an unknown or delisted app.
 - `https://store.steampowered.com/actions/ajaxgetstoretags?l=english` — tagid → name, one near-static list of ~430, cached once (`tagnames:all`); the parsed map stays in memory until that row is rewritten or expires. A reply without a non-empty `tags` array fails and isn't cached; after a failure the map isn't refetched for 30 s (`tagNameHoldOff`, `lib/steam.js`).
 - A cache key whose value shape changes gets a new prefix rather than reusing the old one: a shape check can't tell an old value from a new one of the same JS type (an empty array, say). Retired keys age out with the TTL sweep.
 
@@ -107,13 +108,13 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 - **Assumption**: `purchase_type: 1` counts every purchase (Steam and keys), like the old `purchase_type=all`. The enum's values aren't in the docs; Portal 2's totals for 1 equal 0 (Steam) plus 2 (non-Steam), and match the old endpoint's cached counts.
 - `num_per_page: 0` is ignored (20 reviews, ~16 KB); 1 keeps a response under 1 KB.
 - Key-less calls share Steam's lower rate limit and answer 429 past it; only a key tied to the app raises it, so none is sent. Own limiter, no circuit breaker (it doesn't answer 403).
-- No reviews (`total_reviews` 0 or absent — an unknown appid answers `{"response":{}}`) is cached as `null`: no data, not a failure.
+- No reviews (`total_reviews` 0 or absent — an unknown appid answers `{"response":{}}`) is cached as `null`: no data, not a failure. A reply without a `response` object fails, uncached.
 
 ## ProtonDB — undocumented summary endpoint
 
 `getProtonDbStatus` (`lib/steam.js`) calls `https://www.protondb.com/api/v1/reports/summaries/{appid}.json`: untrusted tier, no key, no headers at all, its own limiter and breaker.
 
-- **404**: no reports yet, cached as `null`.
+- **404**: no reports yet, cached as `null`. A 200 without a string `tier` fails, uncached.
 - **Not asked** (cached as a `null` miss, `MISS_CACHE_TTL_MINUTES`) for a DLC, a type nobody launches (`NEVER_LAUNCHED_TYPES`, `lib/steam.js`) or an unreleased game — `comingSoon` on the browse item _and_ no Steam reviews yet (the rating call each game makes anyway), since the browse item can be a year old; a failed reviews call asks as usual. Being inferred, it only spares a lookup with nothing cached: a summary already cached is served, and a forced refresh asks. Sampled 2026-11-08: 10/10 upcoming games and 15/15 DLC answered 404, as did every cached soundtrack; demos and `advertising` apps (old games re-listed) do have reports, so they're asked.
 - **403**: seen as a blanket bot-block (the same page for every appid); the error message carries a body snippet to tell it from a per-game error, and two in a row open the breaker.
 - **`tier: "pending"`**: too few reports for a tier, but ProtonDB still publishes a `provisionalTier`; that one is shown, marked `pending: true` so the UI renders it lower-confidence. Only no provisional tier either reads as no data. The raw reply is cached, so this rule can change without busting anything.
@@ -122,10 +123,10 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 
 Documented endpoints whose "no data" answers are error statuses, treated as answers rather than failures:
 
-- **`GetSchemaForGame/v2`** (key): a 403 with a **JSON** body means no achievements (cached as none, on the short miss TTL since a game gets them at release); a 403 with an **HTML** body is a rejected key, a real failure. `game.gameName` survives a delisting, so it names a game appdetails has no page for (observed: 28050 → `Deus Ex Human Revolution`, the store title without its colon).
+- **`GetSchemaForGame/v2`** (key): a 403 with a **JSON** body means no achievements (cached as none, on the short miss TTL since a game gets them at release); a 403 with an **HTML** body is a rejected key, a real failure. A 200 without a `game` object fails, uncached. `game.gameName` survives a delisting, so it names a game appdetails has no page for (observed: 28050 → `Deus Ex Human Revolution`, the store title without its colon).
   - Its `icon`/`icongray` URLs point at `steamcdn-a.akamaihd.net/steamcommunity/public/images/`, which 404s on recent games' icons (observed: 1215940, 0/58). `getGameSchema` rewrites them on read to `shared.fastly.steamstatic.com/community_assets/images/`, the host Steam's own stats pages use. **Assumption**: that host serves every icon; it served 1192/1192 across 13 games from 2004 to 2026. Drop the rewrite once the API returns that host.
 - **`GetPlayerAchievements/v1`** (key): **400** means no stats, **403** a private profile; both cached as `null`, like a reply without `playerstats.success`.
-- **`GetGlobalAchievementPercentagesForApp/v2`**: **no key** needed. A 403 with an empty body answers both "no achievements" and "unknown appid", cached as `null` on the short miss TTL. `percent` is a numeric string.
+- **`GetGlobalAchievementPercentagesForApp/v2`**: **no key** needed. A 403 with an empty body answers both "no achievements" and "unknown appid", cached as `null` on the short miss TTL; a 200 without an `achievementpercentages` object fails, uncached. `percent` is a numeric string.
 
 ## News — `GetNewsForApp`
 
