@@ -2511,6 +2511,8 @@ function refreshTitle(game: ReadonlyGame): string {
   return [
     ...lines,
     `${lines.length ? '\n' : ''}Click to re-fetch these, plus news, achievements${pricedHere ? ' and price' : ''}.`,
+    // The server keeps a source fetched under FORCE_MIN_AGE_MINUTES ago (default.env).
+    'A source fetched minutes ago is kept as it is.',
     ...(pricedHere ? [] : ["The price came from this list — refresh it on the list's own Prices tile."]),
   ].join('\n');
 }

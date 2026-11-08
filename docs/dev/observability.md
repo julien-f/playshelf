@@ -71,7 +71,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 ### `dedupHits`, `cache`, `cacheEntries`
 
 - `dedupHits`: concurrent calls `createDedup(name)` (`lib/dedup.js`) coalesced into one in flight — `steam`, `hltb`, `itad`, `fanatical`, `gamepass`, `details` (`server.js`'s game details). A burst points at a retry loop or a polling client.
-- `cache`: `getCached()` outcomes per `lib/cache.js` `GROUPS` label (`library`, `resolve`, `rating`, `meta`, `search`, `news`, `bundles`, `itad-ids`). `forced` (a user's ↻) is kept apart from `misses`. A rate limiter's cache check doesn't record, so each request counts once; nor does a game's tags reusing the parsed tag-name map (`meta`), which reads no row. Tells "traffic grew" apart from "the cache stopped working" when outbound counts jump.
+- `cache`: `getCached()` outcomes per `lib/cache.js` `GROUPS` label (`library`, `resolve`, `rating`, `meta`, `search`, `news`, `bundles`, `itad-ids`). `forced` (a user's ↻ that refetches) is kept apart from `misses`; a ↻ answered from a row under `FORCE_MIN_AGE_MINUTES` old counts as a hit. A rate limiter's cache check doesn't record, so each request counts once; nor does a game's tags reusing the parsed tag-name map (`meta`), which reads no row. Tells "traffic grew" apart from "the cache stopped working" when outbound counts jump.
 - `cacheEntries`: row count per group, read from `db.sqlite` (survives restarts, lists every group). With `cache`: few entries plus many misses means a TTL too short; many entries plus many misses, a key space the cache can't help.
 
 ### List loading — `streams`, `windowWaits`, `heldAnswers`

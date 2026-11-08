@@ -13,7 +13,14 @@ const { execFileSync } = require('node:child_process');
 const zlib = require('node:zlib');
 const rateLimit = require('express-rate-limit');
 
-const { getCached, getCachedAt, isCached, capExpiry, getCacheEntryCounts } = require('./lib/cache');
+const {
+  getCached,
+  getCachedAt,
+  isCached,
+  isAnsweredFromCache,
+  capExpiry,
+  getCacheEntryCounts,
+} = require('./lib/cache');
 const { createDedup } = require('./lib/dedup');
 const {
   getMetrics,
@@ -440,21 +447,22 @@ const FAST_SOURCES = {
 };
 const STORE_SOURCES = { meta: appDetailsCacheKey };
 const DETAILS_SOURCES = { ...FAST_SOURCES, ...STORE_SOURCES };
-const sourcesCached = (sources, appid) => Object.values(sources).every((cacheKey) => isCached(cacheKey(appid)));
+const sourcesCached = (sources, appid, force = false) =>
+  Object.values(sources).every((cacheKey) => isAnsweredFromCache(cacheKey(appid), { force }));
 
 // The details limit exists to throttle upstream Steam/HLTB calls. Cache hits make
 // no upstream calls, so they must not count — otherwise a refresh of an already
-// loaded comparison (all cache hits) burns the budget and 429s itself.
+// loaded comparison (all cache hits) burns the budget and 429s itself. A forced one
+// counts unless every source was fetched too recently to refetch (FORCE_MIN_AGE_MINUTES).
 
-const allDetailsCached = (appid) => sourcesCached(DETAILS_SOURCES, appid);
+const allDetailsCached = (appid, force = false) => sourcesCached(DETAILS_SOURCES, appid, force);
 
 const detailsLimit = namedRateLimit('details', {
   max: DETAILS_RATE_LIMIT_MAX,
   skip: (req) => {
-    if (isForceRefresh(req)) return false; // force-refresh always re-fetches, so it must always count
     const { appid } = req;
     if (appid === undefined) return false; // POST /api/game-details/stream has no :appid
-    return allDetailsCached(appid);
+    return allDetailsCached(appid, isForceRefresh(req));
   },
 });
 
@@ -477,8 +485,7 @@ const metaLimit = namedRateLimit('meta', {
 const newsLimit = namedRateLimit('news', {
   max: DETAILS_RATE_LIMIT_MAX,
   skip: (req) => {
-    if (isForceRefresh(req)) return false;
-    return isCached(newsCacheKey(req.appid));
+    return isAnsweredFromCache(newsCacheKey(req.appid), { force: isForceRefresh(req) });
   },
 });
 
@@ -532,17 +539,18 @@ const parseSteamIdsQuery = (req) =>
 const achievementsLimit = namedRateLimit('achievements', {
   max: ACHIEVEMENTS_RATE_LIMIT_MAX,
   skip: (req) => {
-    if (isForceRefresh(req)) return false;
     const { appid } = req;
-    if (!isCached(schemaCacheKey(appid))) return false;
-    if (!isCached(achievementRarityCacheKey(appid))) return false;
+    // A forced player's progress always refetches (the library tier), so it counts.
+    const cached = (key) => isAnsweredFromCache(key, { force: isForceRefresh(req) });
+    if (!cached(schemaCacheKey(appid))) return false;
+    if (!cached(achievementRarityCacheKey(appid))) return false;
     const ids = parseSteamIdsQuery(req);
     // No steamids at all (a standalone lookup with no player loaded) only ever needed
     // schema+rarity above, both already confirmed cached — nothing left to check.
     if (!ids.length) return true;
     return ids.every((raw) => {
       const id = peekSteamId(raw);
-      return id && isCached(playerAchievementsCacheKey(id, appid));
+      return id && cached(playerAchievementsCacheKey(id, appid));
     });
   },
 });
@@ -846,7 +854,7 @@ function settleSources(appid, sources, results) {
 const value = (res) => (res.status === 'fulfilled' ? res.value : null);
 
 // Everything but appdetails: these upstreams keep a faster pace than Steam's store details cap, so a list's rows fill ahead
-// of it. Force-refresh gets its own lane, never handed a normal request's possibly cached result. `priority`: one
+// of it. Force-refresh gets its own lane, never handed a normal request's result (its own reads may still be cached: FORCE_MIN_AGE_MINUTES). `priority`: one
 // game looked up, its HLTB search ahead of a list's backlog (a game already queued by a list joins its place).
 function fetchFastDetails(appid, { force = false, priority = false } = {}) {
   return dedupDetails(`details:fast:${force ? 'force:' : ''}${appid}`, () => {
@@ -1374,7 +1382,7 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
   // queues that every other user's requests then wait behind.
   // A game cached throughout goes out as one event; any other as a fast part, ahead, and a store part, behind,
   // since appdetails runs under Steam's store details cap (lib/steam.js). Cached games lead each pool.
-  const whole = new Set(validated.filter(allDetailsCached));
+  const whole = new Set(validated.filter((appid) => allDetailsCached(appid)));
   const cachedFirst = (appids, sources) => {
     const groups = Map.groupBy(appids, (appid) => sourcesCached(sources, appid));
     return [...(groups.get(true) ?? []), ...(groups.get(false) ?? [])];

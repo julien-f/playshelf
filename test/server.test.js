@@ -14,6 +14,7 @@ process.env.DB_FILE = '';
 const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
 const { until } = require('./until');
+const { ageCache } = require('./ageCache');
 const { freshNonce } = require('./openidNonce');
 const http = require('node:http');
 const zlib = require('node:zlib');
@@ -1133,6 +1134,9 @@ test('GET /api/game-news/:appid: ?refresh=1 re-fetches despite the cache', async
   await api.get('/api/game-news/409').expect(200);
   await api.get('/api/game-news/409').expect(200);
   assert.equal(fetchMock.mock.callCount(), 1);
+  await api.get('/api/game-news/409?refresh=1').expect(200);
+  assert.equal(fetchMock.mock.callCount(), 1, 'news fetched under FORCE_MIN_AGE_MINUTES ago is answered from cache');
+  ageCache();
   const res = await api.get('/api/game-news/409?refresh=1').expect(200);
   assert.equal(fetchMock.mock.callCount(), 2);
   assert.equal(res.body.news.length, 1);
@@ -1425,6 +1429,9 @@ test('GET /api/game-details/:appid: ?refresh=1 re-fetches every source despite t
   t.mock.method(globalThis, 'fetch', makeCountingDetailsFetch(counts));
 
   await api.get('/api/game-details/502').expect(200);
+  await api.get('/api/game-details/502?refresh=1').expect(200);
+  assert.deepEqual([counts.rating, counts.hltb, counts.meta], [1, 1, 1], 'sources under FORCE_MIN_AGE_MINUTES old');
+  ageCache();
   await api.get('/api/game-details/502?refresh=1').expect(200);
   assert.equal(counts.rating, 2);
   assert.equal(counts.hltb, 2);
@@ -2535,6 +2542,7 @@ test('GET /api/achievements/:appid: ?refresh=1 re-fetches the schema, rarity and
 
   await api.get(`/api/achievements/401?steamids=${ID1}`).expect(200);
   await api.get(`/api/achievements/401?steamids=${ID1}`).expect(200);
+  ageCache();
   await api.get(`/api/achievements/401?steamids=${ID1}&refresh=1`).expect(200);
   for (const part of ['GetSchemaForGame', 'GetGlobalAchievementPercentagesForApp', 'GetPlayerAchievements']) {
     assert.equal(count(part), 2, part);
