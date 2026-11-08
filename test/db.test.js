@@ -28,6 +28,10 @@ test('migrate: a fresh database ends up at the latest version with every table',
   }
 });
 
+test('CACHE_TABLES is frozen with the shipped migrations 7 and 12 that loop over it', () => {
+  assert.ok(Object.isFrozen(CACHE_TABLES), 'a new cache table gets its own migration, not an entry here');
+});
+
 test("migrate: a database already at a migration's version treats it as applied, preserving existing rows", () => {
   const db = new DatabaseSync(':memory:');
   for (const table of CACHE_TABLES)

@@ -2,10 +2,14 @@
 
 process.env.DB_FILE = '';
 
-const { test } = require('node:test');
+const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
 const { findEarlyExpired } = require('../lib/earlyExpired');
 const { _reset, setCache } = require('../lib/cache');
+const { _resetPickAndMix } = require('../lib/fanatical');
+
+// Fanatical's last map and failure hold-off outlive _reset(), which only empties the cache.
+beforeEach(_resetPickAndMix);
 
 const NOW = Date.parse('2026-10-20T00:00:00Z'); // October 2026's Choice on sale
 

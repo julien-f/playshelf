@@ -9,8 +9,10 @@ const {
   getCacheEntryCounts,
   createCachedFetch,
   isAnsweredFromCache,
+  capExpiry,
   _reset,
 } = require('../lib/cache');
+const { db } = require('../lib/db');
 const { getMetrics } = require('../lib/metrics');
 const { createDedup } = require('../lib/dedup');
 const { LIBRARY_CACHE_TTL_MS, BUNDLES_CACHE_TTL_MS, FORCE_MIN_AGE_MS } = require('../lib/config');
@@ -217,4 +219,18 @@ test("createCachedFetch: the load's ttlMs sets the entry's expiry; a throw cache
     }),
   );
   assert.equal(getCached('games:bad'), undefined);
+});
+
+// Capped on every read of a coming-soon row (lib/steam.js): one already within the cap costs no write.
+test('capExpiry: brings the expiry forward, and writes nothing when it is already within the cap', () => {
+  _reset();
+  setCache('meta:1', 'v');
+  const writes = () => db.prepare('SELECT total_changes() AS n').get().n;
+  let before = writes();
+  capExpiry('meta:1', 1000);
+  assert.equal(writes(), before + 1);
+  assert.ok(getCachedAt('meta:1') !== undefined);
+  before = writes();
+  capExpiry('meta:1', 2000);
+  assert.equal(writes(), before);
 });

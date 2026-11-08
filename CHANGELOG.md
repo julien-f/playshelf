@@ -90,6 +90,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A Steam sign-in that expires while the app is open now shows as signed out at the next change, instead of changes silently no longer syncing
 - The site no longer stops answering for several seconds about once an hour.
 - Achievement icons show again for recently released games.
+- An unreleased game's store data, reviews, ProtonDB and HowLongToBeat results are refreshed within a day again, instead of staying up to a year
+- An unexpected reply from Steam or ProtonDB shows as a failed source to retry, instead of as no data for up to a year
+- Tags Steam adds show on games within a month, instead of up to a year later
+- Achievements a game adds after its first look show once its store page lists them, instead of up to a year later
+- On the Bundles page, ↻ also refreshes the bundles shown past their ITAD end date, and "Updated" gives the oldest page's age
+- Fanatical pick-and-mix prices stay shown when Fanatical's feed fails after its cached copy expired
 
 ### Development
 
@@ -116,6 +122,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `node scripts/prod-check.js --all` lists production's warnings over the whole daily window, for a metrics review.
 - Pushing after a UI commit runs only the phone e2e half: each width's pass is remembered
 - db-query.js reads the statement from stdin, so a multi-line query needs no shell quoting
+- Shipped migrations no longer change when a cache group is added
 
 ## [0.12.0] - 2026-10-30
 

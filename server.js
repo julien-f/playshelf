@@ -853,6 +853,10 @@ function settleSources(appid, sources, results) {
 
 const value = (res) => (res.status === 'fulfilled' ? res.value : null);
 
+// Not out yet: the store data says so and Steam reviews (sanctioned, asked anyway) agree with none, since the browse
+// item can be a year old.
+const isUnreleased = (basics, rating) => !!basics?.comingSoon && rating === null;
+
 // Everything but appdetails: these upstreams keep a faster pace than Steam's store details cap, so a list's rows fill ahead
 // of it. Force-refresh gets its own lane, never handed a normal request's result (its own reads may still be cached: FORCE_MIN_AGE_MINUTES). `priority`: one
 // game looked up, its HLTB search ahead of a list's backlog (a game already queued by a list joins its place).
@@ -871,10 +875,9 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
         store ? store : { name: (await getGameSchema(appid, { force })).name ?? null, type: null },
       );
     const ratingPromise = getGameRating(appid, { force });
-    // Not out yet: the browse item says so and Steam reviews (sanctioned, asked anyway) agree with none, since the
-    // browse item can be a year old. A failed browse item or reviews call asks ProtonDB and HLTB as usual.
-    const unreleasedPromise = basicsPromise
-      .then(async (basics) => !!basics?.comingSoon && (await ratingPromise) === null)
+    // A failed browse item or reviews call asks ProtonDB and HLTB as usual.
+    const unreleasedPromise = Promise.all([basicsPromise, ratingPromise])
+      .then(([basics, rating]) => isUnreleased(basics, rating))
       .catch(() => false);
     // A meta failure fails HLTB too, so it reads as failed, not as "no data".
     const hltbPromise = Promise.all([namedPromise, unreleasedPromise]).then(([{ name, type }, unreleased]) =>
@@ -893,7 +896,8 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
       protondbPromise,
       basicsPromise,
       namedPromise,
-    ]).then(([ratingRes, hltbRes, tagsRes, demoRes, protondbRes, basicsRes, namedRes]) => {
+      browsePromise,
+    ]).then(([ratingRes, hltbRes, tagsRes, demoRes, protondbRes, basicsRes, namedRes, browseRes]) => {
       if (ratingRes.status === 'rejected') logDetailsError(appid, 'rating', ratingRes.reason);
       if (hltbRes.status === 'rejected') logDetailsError(appid, 'hltb', hltbRes.reason);
       if (tagsRes.status === 'rejected') logDetailsError(appid, 'tags', tagsRes.reason);
@@ -901,9 +905,12 @@ function fetchFastDetails(appid, { force = false, priority = false } = {}) {
         logDetailsError(appid, 'demo', demoRes.reason);
       if (protondbRes.status === 'rejected') logDetailsError(appid, 'protondb', protondbRes.reason);
       const basics = value(basicsRes);
-      // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times; those misses
-      // expire like any other miss, so they fill in after release instead of a year later.
-      if (basics?.comingSoon) {
+      // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times; those misses expire like any other
+      // miss, so they fill in after release instead of a year later (a failed reviews call counts as none: the cautious
+      // side). So when the phase is unknown: an item without basics, no store page cached by now. No item is a delisted game.
+      const item = value(browseRes);
+      const phase = basics ?? (item && gameBasics(item, appid));
+      if ((item && !phase) || isUnreleased(phase, value(ratingRes))) {
         for (const [cacheKey, res] of [
           [ratingCacheKey, ratingRes],
           [protonDbCacheKey, protondbRes],
@@ -994,22 +1001,29 @@ app.get('/api/bundles', bundlesListLimit, requireItad, async (req, res) => {
   try {
     // ?refresh=1 backs the browse page's own "↻ Refresh" — a bundle can go live or expire at any
     // time, so "the list I'm looking at is out of date" needs an answer that isn't "wait out the
-    // TTL". Only this page of the list is forced; GET /api/bundles/:id deliberately has no
+    // TTL". Only the pages this list comes from are forced; GET /api/bundles/:id deliberately has no
     // equivalent (findBundleById walks up to BUNDLE_SEARCH_MAX_PAGES pages, so forcing it would
     // cost several upstream calls to answer one deep link).
-    let bundles = await getBundles({ country, offset, limit, sort, expired, force: isForceRefresh(req) });
+    const force = isForceRefresh(req);
+    const pageKeys = [bundlesCacheKey({ country, offset, limit, sort, expired })];
+    let bundles = await getBundles({ country, offset, limit, sort, expired, force });
     // Only on a first page that holds the whole active list: the client stops paging there, so no
-    // later page repeats them. Its revival pages aren't forced by ?refresh=1: one call stays one call.
-    if (!expired && offset === 0 && bundles.length < limit)
-      bundles = [...bundles, ...(await findEarlyExpired(bundles, (params) => getBundles({ country, ...params })))];
-    // Age of this page of the list, for the "Updated <when>" beside the browse page's own ↻ —
+    // later page repeats them. Its revival pages (usually 1–2) are forced along with it.
+    if (!expired && offset === 0 && bundles.length < limit) {
+      const revived = await findEarlyExpired(bundles, (params) => {
+        pageKeys.push(bundlesCacheKey({ country, ...params }));
+        return getBundles({ country, ...params, force });
+      });
+      bundles = [...bundles, ...revived];
+    }
+    // Age of the pages this list came from, for the "Updated <when>" beside the browse page's own ↻ —
     // a bundle going live or expiring is exactly what that button is for, and that question is
-    // unanswerable without knowing how old the list on screen is.
+    // unanswerable without knowing how old the list on screen is. Fanatical's map has its own refetch rule.
     res.json({
       bundles: await withPickAndMix(withChoiceEnd(bundles)),
       offset,
       limit,
-      fetchedAt: getCachedAt(bundlesCacheKey({ country, offset, limit, sort, expired })) ?? null,
+      fetchedAt: oldestCachedAt(pageKeys),
     });
   } catch (err) {
     sendRouteError(res, 'bundles', err);
@@ -1230,7 +1244,14 @@ app.get('/api/achievements/:appid', achievementsLimit, async (req, res) => {
     // Sequenced rather than batched with the calls below: even when appdetails didn't confirm
     // zero (meta missing/failed, or achievementCount unknown), don't fire rarity/per-player
     // calls until schema itself confirms there's something to annotate.
-    const schema = (await getGameSchema(appid, { force })).achievements;
+    let schema = (await getGameSchema(appid, { force })).achievements;
+    // Cached empty before the store page listed achievements: Steam added them since. Asked once, being newer after.
+    if (
+      schema.length === 0 &&
+      meta?.achievementCount > 0 &&
+      getCachedAt(schemaCacheKey(appid)) < getCachedAt(appDetailsCacheKey(appid))
+    )
+      schema = (await getGameSchema(appid, { force: true })).achievements;
     if (schema.length === 0) {
       return res.json(none);
     }

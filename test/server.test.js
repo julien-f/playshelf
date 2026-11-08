@@ -28,13 +28,17 @@ const { db } = require('../lib/db');
 const { PREFS_MAX_BYTES, SYNCED_PREF_KEYS, getUserPrefs, setUserPref } = require('../lib/auth');
 const { _resetAuth, getHLTB } = require('../lib/hltb');
 const { _resetTagNameMap } = require('../lib/steam');
+const { _resetPickAndMix } = require('../lib/fanatical');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
 const { SESSION_TTL_MS, MISS_CACHE_TTL_MS } = require('../lib/config');
 const { getMetrics } = require('../lib/metrics');
 const { getUpstreamStats } = require('../lib/upstream');
 
-// The tag-name map's failure hold-off outlives _reset(), which only empties the cache.
-beforeEach(_resetTagNameMap);
+// The tag-name map's and Fanatical's in-memory state outlive _reset(), which only empties the cache.
+beforeEach(() => {
+  _resetTagNameMap();
+  _resetPickAndMix();
+});
 
 const api = supertest(app);
 
@@ -1480,6 +1484,52 @@ for (const comingSoon of [true, false]) {
   });
 }
 
+// An unreleased game's empty results, or one whose release phase is unknown (a browse item cached before basics were
+// requested, no store page), can't take the long tier; a delisted game's (no browse item, no store page) do.
+for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
+  'a game whose release phase is unknown': { items: [{ success: 1, tagids: [] }], capped: true },
+  'an unreleased game whose reviews call failed': {
+    items: [
+      { success: 1, tagids: [], type: 0, name: 'G', basic_info: {}, assets: {}, release: { is_coming_soon: true } },
+    ],
+    reviewsFail: true,
+    capped: true,
+  },
+  'a delisted game': { items: [], capped: false },
+})) {
+  test(`GET /api/game-details/:appid: ${label} has its empty ProtonDB result ${capped ? 'expire within a day' : 'keep the long tier'}`, async (t) => {
+    _reset();
+    _resetAuth();
+    t.mock.method(console, 'warn', () => {});
+    t.mock.method(globalThis, 'fetch', async (url) => {
+      if (url.includes('appdetails')) return { ok: true, json: async () => ({ 780: { success: false } }) };
+      if (url.includes('GetSchemaForGame')) return { ok: true, json: async () => ({ game: {} }) };
+      if (url.includes('GetAppReviews')) {
+        if (reviewsFail) return { ok: false, status: 503 };
+        return {
+          ok: true,
+          json: async () => ({ response: { query_summary: { total_reviews: 0, total_positive: 0 } } }),
+        };
+      }
+      if (url.includes('protondb.com')) return { ok: false, status: 404 };
+      if (url.includes('search/site/init'))
+        return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+      if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+      if (url.includes('IStoreBrowseService'))
+        return { ok: true, json: async () => ({ response: { store_items: items } }) };
+      if (url.includes('ajaxgetstoretags'))
+        return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    await api.get('/api/game-details/780').expect(200);
+    assert.notEqual(getCachedAt('protondb:780'), undefined, 'asked and cached');
+
+    const later = Date.now() + MISS_CACHE_TTL_MS + 1000;
+    t.mock.method(Date, 'now', () => later);
+    assert.equal(getCachedAt('protondb:780') === undefined, capped);
+  });
+}
+
 // ProtonDB has no reports, nor HLTB times, for a game not out yet: one the browse item calls coming soon and
 // Steam reviews (asked anyway) call unreviewed, since the browse item can be a year old (data.md). Nor ProtonDB for
 // a DLC or a soundtrack.
@@ -2544,6 +2594,25 @@ test("GET /api/achievements/:appid: unlocked counts only the schema's achievemen
   assert.equal(res.body.unlocked, 1);
 });
 
+// The schema cached empty for a year, while the store page since lists achievements: Steam added them.
+test('GET /api/achievements/:appid: a schema cached empty before the store page listed achievements is fetched again, once', async (t) => {
+  const day = 24 * 60 * 60 * 1000;
+  _reset([
+    ['gameschema:403', { value: { name: 'G', achievements: [] }, ts: Date.now() - 2 * day }],
+    ['meta:403', { value: { name: 'G', achievements: { total: 2 } }, ts: Date.now() - day }],
+  ]);
+  const achievementsFetch = makeAchievementsFetch();
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls.push(url);
+    return achievementsFetch(url);
+  });
+
+  assert.equal((await api.get('/api/achievements/403').expect(200)).body.total, 2);
+  await api.get('/api/achievements/403').expect(200);
+  assert.equal(calls.filter((u) => u.includes('GetSchemaForGame')).length, 1);
+});
+
 test('GET /api/achievements/:appid: a member with a real unlock time wins over one whose time is unknown (0), in either order', async (t) => {
   for (const ids of [`${ID1},${ID2}`, `${ID2},${ID1}`]) {
     _reset();
@@ -2973,6 +3042,54 @@ test("GET /api/bundles: a Fanatical pick-and-mix ITAD expired early is appended 
   const calls = fetchMock.mock.callCount();
   await api.get('/api/bundles?limit=50');
   assert.equal(fetchMock.mock.callCount(), calls, 'every page cached');
+});
+
+// The list's age is its oldest contributor's, and ↻ refreshes every page the list came from (data.md).
+test('GET /api/bundles: the expired pages a first page walks date it, and ?refresh=1 forces them too', async (t) => {
+  process.env.ITAD_API_KEY = 'test-itad-key';
+  const now = Date.now();
+  const killer = {
+    id: 16542,
+    title: 'Build Your Own Killer Bundle',
+    page: { name: 'Fanatical' },
+    url: 'https://www.fanatical.com/en/pick-and-mix/byo-killer',
+    publish: '2026-09-07T13:00:00Z',
+    tiers: [],
+  };
+  const oldTs = now - 6 * 60 * 60 * 1000;
+  _reset([
+    ['itad-bundles:US:-publish:false:0:50', { value: [{ id: 1, title: 'Humble One' }], ts: now }],
+    ['itad-bundles:US:-publish:true:0:50', { value: [killer], ts: oldTs }],
+    [
+      'fanatical-pnm:v3',
+      {
+        value: {
+          'byo-killer': {
+            tiers: [],
+            products: [],
+            type: 'bundle',
+            validFrom: '2026-09-07T13:00:00.000Z',
+            validUntil: '2099-11-13T23:59:00.000Z',
+          },
+        },
+        ts: now,
+      },
+    ],
+  ]);
+  const urls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(String(url));
+    const expired = new URL(url).searchParams.get('expired') === 'true';
+    return { ok: true, json: async () => (expired ? [killer] : [{ id: 1, title: 'Humble One' }]) };
+  });
+
+  assert.equal((await api.get('/api/bundles?limit=50').expect(200)).body.fetchedAt, oldTs);
+  const res = await api.get('/api/bundles?limit=50&refresh=1').expect(200);
+  assert.ok(
+    urls.some((u) => u.includes('expired=true')),
+    'the expired page is forced',
+  );
+  assert.ok(res.body.fetchedAt >= now, String(res.body.fetchedAt));
 });
 
 test('GET /api/game-bundles/:appid: a bundle ITAD expired early is added from the cached list pages', async (t) => {

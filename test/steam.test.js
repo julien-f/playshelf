@@ -1621,6 +1621,15 @@ test('resolveSteamTags: re-fetches the tag name map once its row expires', async
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'New', weight: null }]);
 });
 
+// Steam adds tags meanwhile: the map lives a month, not the meta tier's year.
+test('resolveSteamTags: a fetched tag name map expires within a month', async (t) => {
+  _reset();
+  mockTagEndpoints(t);
+  await resolveSteamTags(Promise.resolve({ tagids: [1] }));
+  const { expires } = db.prepare("SELECT expires FROM cache_meta WHERE key = 'tagnames:all'").get();
+  assert.ok(expires !== null && expires - Date.now() <= 30 * 24 * 60 * 60 * 1000, String(expires));
+});
+
 test('resolveSteamTags: reads a tag name map row rewritten since the last read', async () => {
   const now = Date.now();
   _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now - 1000 }]]);
@@ -2490,4 +2499,69 @@ test('gameBasics: an item cached before basics were requested falls back to cach
   assert.equal(basics.releaseDate, 'Jan 1, 2020');
   assert.deepEqual(basics.developers, ['D']);
   assert.equal('genres' in basics, false);
+});
+
+// An unreleased game's store data changes on release: rows written before that rule, on the year-long tier, too.
+test('a coming-soon store row expires within a day once read, however it was cached; a released one keeps its tier', async (t) => {
+  const now = Date.now();
+  const soon = { name: 'Soon', type: 'game', release_date: { coming_soon: true, date: 'Q4 2027' } };
+  const soonItem = { success: 1, tagids: [], release: { is_coming_soon: true } };
+  _reset([
+    ['meta:650', { value: soon, ts: now }],
+    ['meta:651', { value: soon, ts: now }],
+    ['browse:652', { value: soonItem, ts: now }],
+    ['meta:653', { value: { ...soon, release_date: { coming_soon: false } }, ts: now }],
+    ['browse:654', { value: { ...soonItem, release: { is_coming_soon: false } }, ts: now }],
+  ]);
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({ response: { store_items: [{ ...soonItem, appid: 655 }] } }),
+  }));
+  await getAppDetails(650);
+  gameBasics({ success: 1, tagids: [] }, 651);
+  await getStoreBrowseItem(652);
+  await getAppDetails(653);
+  await getStoreBrowseItem(654);
+  await getStoreBrowseItem(655);
+
+  const later = now + MISS_CACHE_TTL_MS + 1000;
+  t.mock.method(Date, 'now', () => later);
+  for (const key of ['meta:650', 'meta:651', 'browse:652', 'browse:655'])
+    assert.equal(getCachedAt(key), undefined, key);
+  for (const key of ['meta:653', 'browse:654']) assert.notEqual(getCachedAt(key), undefined, key);
+});
+
+// A 200 of another shape is not an answer: cached at the year-long tier it would read as "no data" all that time.
+for (const [label, call, body] of [
+  ['getGameRating, a reply without `response`', () => getGameRating(660), {}],
+  ['getProtonDbStatus, a reply without a tier', () => getProtonDbStatus(661), {}],
+  ['getGameSchema, a reply without `game`', () => getGameSchema(662), {}],
+  [
+    'getGlobalAchievementPercentages, a reply without `achievementpercentages`',
+    () => getGlobalAchievementPercentages(663),
+    {},
+  ],
+  ['getStoreBrowseItem, a reply without `response.store_items`', () => getStoreBrowseItem(664), { response: {} }],
+]) {
+  test(`${label} fails and caches nothing`, async (t) => {
+    _reset();
+    t.mock.method(globalThis, 'fetch', async () => ({ ok: true, status: 200, json: async () => body }));
+    await assert.rejects(call(), (err) => err.isUpstream);
+    for (const table of ['cache_meta', 'cache_rating'])
+      assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0, table);
+  });
+}
+
+// Steam's answers for an unknown or delisted app, which stay cached misses.
+test('an empty reviews `response` and a browse item without success stay cached misses', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async (url) => ({
+    ok: true,
+    json: async () =>
+      url.includes('GetAppReviews') ? { response: {} } : { response: { store_items: [{ appid: 666, success: 2 }] } },
+  }));
+  assert.equal(await getGameRating(665), null);
+  assert.equal(await getStoreBrowseItem(666), null);
+  assert.notEqual(getCachedAt('rating:665'), undefined);
+  assert.notEqual(getCachedAt('browse:666'), undefined);
 });
