@@ -179,6 +179,41 @@ test('removeRecentAccount: hard-removes an account nothing references', () => {
   assert.equal(getRecentAccounts().length, 0);
 });
 
+test('keepAccountForLists: stores an unpicked account hidden, without its unresolved members', () => {
+  const { keepAccountForLists, getRecentAccounts } = store();
+  assert.equal(keepAccountForLists(makeAccount('bob', { label: 'Bob', unresolved: [] })), true);
+  assert.equal(getRecentAccounts().length, 0); // not picked: stays out of recents
+  const [kept] = getRecentAccounts({ includeRemoved: true });
+  assert.equal(kept.label, 'Bob');
+  assert.ok(kept.removedAt);
+  assert.ok(!('unresolved' in kept));
+});
+
+test('keepAccountForLists: leaves a stored account alone, and stores none without a name', () => {
+  const { keepAccountForLists, setCurrentAccount, getRecentAccounts } = store();
+  setCurrentAccount(makeAccount('bob', { label: 'Bob' }));
+  assert.equal(keepAccountForLists(makeAccount('bob', { label: 'Robert' })), false);
+  assert.equal(keepAccountForLists(makeAccount('carol')), false);
+  assert.deepEqual(
+    getRecentAccounts({ includeRemoved: true }).map((a) => [a.label, a.removedAt]),
+    [['Bob', undefined]],
+  );
+});
+
+test('keepAccountForLists: the kept account is purged once the list naming it is deleted', () => {
+  const { keepAccountForLists, getRecentAccounts } = store();
+  const { createList, deleteList } = require('../public/listsStore.ts');
+  const list = createList({
+    name: 'Alice vs. Bob',
+    kind: 'dynamic',
+    op: 'group-by-membership',
+    sources: [{ kind: 'account-owned', accountId: 'bob' }],
+  });
+  keepAccountForLists(makeAccount('bob', { label: 'Bob' }));
+  deleteList(list.id);
+  assert.equal(getRecentAccounts({ includeRemoved: true }).length, 0);
+});
+
 test('removeRecentAccount: soft-removes an account still referenced by a dynamic list', () => {
   const { setCurrentAccount, removeRecentAccount, getRecentAccounts } = store();
   const { createList } = require('../public/listsStore.ts');

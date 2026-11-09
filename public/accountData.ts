@@ -326,9 +326,14 @@ export function fetchAccountWishlist(
 export async function fetchAccountOwnedData(
   accountId: string,
   opts: { refresh?: boolean } = {},
-): Promise<{ games: Map<number, AccountLibraryGame>; owners: Map<number, GameOwner[]>; fetchedAt: number | null }> {
-  const { games, owners, fetchedAt } = await fetchAccountOverview(membersFromAccountId(accountId), opts);
-  return { games: new Map(games.map((g) => [g.appid, g])), owners, fetchedAt };
+): Promise<{
+  games: Map<number, AccountLibraryGame>;
+  owners: Map<number, GameOwner[]>;
+  players: AccountPlayer[];
+  fetchedAt: number | null;
+}> {
+  const { games, owners, players, fetchedAt } = await fetchAccountOverview(membersFromAccountId(accountId), opts);
+  return { games: new Map(games.map((g) => [g.appid, g])), owners, players, fetchedAt };
 }
 
 export interface AccountFriend {

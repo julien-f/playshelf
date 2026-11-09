@@ -194,6 +194,15 @@ export function refreshAccountInfo(
   return changed;
 }
 
+// Stores an account a saved list names but nobody picked (a compared player, a `?u=` link's), hidden
+// like a soft-removed one, so the list reads its name. False when it's already stored or has no name.
+export function keepAccountForLists({ unresolved: _unresolved, ...account }: AccountSlot): boolean {
+  const recents = readRecents();
+  if (!account.label || recents.some((a) => a.id === account.id)) return false;
+  writeRecents([...recents, { ...account, removedAt: Date.now() }]);
+  return true;
+}
+
 // Soft-removes when a dynamic list still references this account, hard-removes otherwise —
 // same shape as listsStore.ts's deleteList. Never touches myAccount/currentAccount even if
 // they happen to hold the same id, since those are stored independently.

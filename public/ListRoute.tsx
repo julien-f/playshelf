@@ -195,9 +195,20 @@ import {
   getAccountOverride,
   showingMyAccount,
   getCurrentAccount,
+  keepAccountForLists,
+  refreshAccountInfo,
 } from './accountsStore.ts';
 import { getAccountOverrideState, accountOverrideStatusText } from './accountOverride.ts';
-import { fetchAccountOverview, fetchAccountWishlist, resolveAccountSlot, type GameOwner } from './accountData.ts';
+import {
+  accountInfoFrom,
+  accountSlotFrom,
+  fetchAccountOverview,
+  fetchAccountWishlist,
+  membersFromAccountId,
+  resolveAccountSlot,
+  type AccountPlayer,
+  type GameOwner,
+} from './accountData.ts';
 import { fmtDatePart, fmtDateTime, renderDateTime } from './dateTime.ts';
 import { loadRecentGames, addRecentGame, renameRecentGame, MAX_RECENT_GAMES, lookedUpValue } from './recentGames.ts';
 import {
@@ -1346,15 +1357,20 @@ export default function ListRoute() {
   function compareKey(op = compareOp(), slots = compareSlots()): string {
     return `${op}|${slots.map((slot) => slot.join(',')).join('|')}`;
   }
-  // Names this comparison's own accounts in the formula/group headings. They're resolved from the
-  // URL, so they're typically in no store at all — createDefaultNaming would fall back to naming
-  // them by raw steam64 id.
   // Named as its page was ("Alice vs. Bob"): the formula's own label reads differently.
   function handleSaveComparison(): void {
     const list = compareList();
     if (!list) return;
     const saved = createList({ kind: 'dynamic', name: heroTitle() || undefined, op: list.op, sources: list.sources });
+    // Players are rarely stored accounts; without this the saved list names them by steam64 id.
+    compareAccounts().forEach(keepAccountForLists);
     openSavedList(saved.id);
+  }
+  // A saved list's account may be stored nowhere (saved before its players were kept, from a shared
+  // link, a `?u=` one, or dropped by another device's sync): store it, else refresh its name.
+  function nameListAccount(accountId: string, players: AccountPlayer[]): void {
+    if (!keepAccountForLists(accountSlotFrom(players, membersFromAccountId(accountId))))
+      refreshAccountInfo(accountId, accountInfoFrom(players));
   }
   // The Save button is gone on the saved list's page: focus would otherwise drop to <body>.
   function openSavedList(id: string): void {
@@ -1362,6 +1378,8 @@ export default function ListRoute() {
     document.querySelector<HTMLElement>('main')?.focus();
   }
 
+  // Names this comparison's own accounts in the formula/group headings: resolved from the URL, they're
+  // typically in no store until the comparison is saved.
   function compareNaming(): ListNaming {
     const base = createDefaultNaming();
     return {
@@ -2564,10 +2582,13 @@ export default function ListRoute() {
           onBundleGames: (_bundleId, _bundle, games) => {
             if (!loadGuard.isStale(gen)) collectTiers(games);
           },
+          onPlayers: nameListAccount,
         }),
         describeWithLeftOut(list, createDefaultNaming()),
       );
       if (!resolved) return;
+      // An unnamed list is titled by its formula, which onPlayers may just have named.
+      setListTitle(listDisplayName(list, createDefaultNaming()));
       const { appids, rows } = resolved;
       tiered = list.kind !== 'ranked' && rows.some((row) => tiers.has(row.appid));
       initialRows = rows.map((row) => ({ ...row, ...tiers.get(row.appid) }));

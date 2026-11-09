@@ -2719,6 +2719,39 @@ test('C3 edge: a saved comparison keeps the name its page had', async ({ page })
   await expect(page.getByRole('heading', { name: 'Alice vs. Bob' })).toBeVisible();
 });
 
+test('C3 edge: a saved comparison names its players, not their Steam IDs, without adding them to recents', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=bob');
+  await expect(groupRows(page)).toHaveCount(3);
+  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Save behind More actions
+  if (await more.isVisible()) await more.click();
+  await page.getByRole('button', { name: 'Save as a list' }).click();
+  await expect(page).toHaveURL(/\/lists\/[0-9a-f-]{36}$/);
+  await page.reload();
+  await expect(page.locator('.list-formula')).toContainText('Bob — Owned');
+  await expect(groupRows(page).filter({ hasText: 'Bob' }).first()).toBeVisible();
+  await expect(page.getByText(new RegExp(BOB.steamid))).toHaveCount(0);
+  await page.goto('/');
+  await expect(page.locator('.account-tiles')).toBeVisible();
+  await expect(page.locator('.account-tiles li').filter({ hasText: 'Bob' })).toHaveCount(0);
+});
+
+test('L2 edge: a saved list over an account stored nowhere names it once opened', async ({ page }) => {
+  const sources = [ALICE, BOB].map((p) => ({ kind: 'account-owned', accountId: p.steamid }));
+  const lists = [
+    { id: 'both', parentId: null, order: 0, createdAt: 0, updatedAt: 0, kind: 'dynamic', op: 'union', sources },
+  ];
+  await asPlayer(page, ALICE, { lists });
+  await page.goto('/lists/both');
+  const formula = 'Alice — Owned ∪ Bob — Owned';
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(formula);
+  await expect(page).toHaveTitle(new RegExp(formula));
+  await page.goto('/');
+  await expect(page.locator('.list-tree').getByRole('link', { name: formula })).toBeVisible();
+});
+
 test('C3 edge: a saved comparison offers Share list only, not a Share view that only opens here', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/compare?u=alice&u=bob');
