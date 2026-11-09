@@ -474,6 +474,9 @@ function cost() {
     `Check runs${since ? ` since ${since.slice(0, 10)}` : ''} (scripts/check.js): ${checkStats(history('checks').filter((r) => r.at > since))}`,
   );
   console.log(backlogRuns.summary(history('backlog-run'), history('backlog-escape'), history('checks')));
+  console.log(
+    `Hook e2e runs since ${since.slice(0, 10) || 'ever'} (scripts/e2e.js): ${e2eRunStats(history('e2e-runs').filter((r) => r.at > since))}`,
+  );
   const flakes = history('flakes').at(-1);
   if (flakes) console.log(`Last e2e flake measure (scripts/e2e-flakes.js): ${describeRun(flakes)}`);
 }
@@ -492,6 +495,18 @@ function checkStats(rows) {
     return `${mine.length} ${label} (${failed.length} ${run === 'commit' ? 'blocked' : 'failed'}${why ? `: ${why}` : ''})${mine.length ? `, median ${median(mine.map(total))} s, slowest step ${slowest[0]} ${slowest[1]} s` : ''}`;
   };
   return `${part('commit', 'commits')} · ${part('full', 'full runs')}`;
+}
+
+// Hook e2e runs, by projects asked → which ran: `desktop+phone ×3: phone 2, skipped 1 · desktop ×5: desktop 5`.
+function e2eRunStats(rows) {
+  const groups = Map.groupBy(rows, (r) => r.asked.join('+'));
+  if (!groups.size) return 'none';
+  return [...groups]
+    .map(([asked, runs]) => {
+      const counts = Map.groupBy(runs, (r) => r.ran.join('+') || 'skipped');
+      return `${asked} ×${runs.length}: ${[...counts].map(([ran, rs]) => `${ran} ${rs.length}`).join(', ')}`;
+    })
+    .join(' · ');
 }
 
 // A failed run (e.g. e2e's port taken by another checkout) is no baseline: it isn't recorded or compared.
@@ -656,6 +671,7 @@ module.exports = {
   costDelta,
   costLine,
   checkStats,
+  e2eRunStats,
   parseSession,
   commitCalls,
   linesSince,
