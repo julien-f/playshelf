@@ -31,7 +31,7 @@ Chooses what to do; doing it is [code-fix](../code-fix/SKILL.md) and [ux-fix](..
 
 ## 4. Merge
 
-`git merge --no-ff` with the CHANGELOG entry, then `git branch -d`. Never push.
+As CLAUDE.md's Git workflow (`node scripts/merge.js`), with the CHANGELOG entry. Never push.
 
 ## 5. Log
 
