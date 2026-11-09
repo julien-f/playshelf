@@ -24,3 +24,14 @@ test('portOf: the base in the main checkout, a stable port of its own in each wo
   assert.equal(portOf('e2e', wt, { E2E_PORT: '29500' }), 29500);
   assert.equal(portOf('mock', wt, { MOCK_PORT: '59500' }), 59500);
 });
+
+test("portOf: the dev servers' worktree ports leave the base range alone", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ports-'));
+  t.after(() => fs.rmSync(dir, { recursive: true }));
+  fs.writeFileSync(path.join(dir, '.git'), 'gitdir: elsewhere\n');
+  fs.mkdirSync(path.join(dir, 'main/.git'), { recursive: true });
+  assert.equal(portOf('dev', path.join(dir, 'main'), {}), 58991);
+  assert.equal(portOf('backend', path.join(dir, 'main'), {}), 3000);
+  assert.ok(portOf('dev', dir, {}) > 24000 && portOf('dev', dir, {}) <= 26000);
+  assert.ok(portOf('backend', dir, {}) > 22000 && portOf('backend', dir, {}) <= 24000);
+});

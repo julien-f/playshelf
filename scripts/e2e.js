@@ -6,6 +6,7 @@
 // skipped, since they would test exactly what passed: a push after the pre-commit desktop run runs only phone. With --since=<ref> (a fix-batch lane), a
 // branch whose commits since <ref> touch nothing the suite covers (check.js's UI files) skips it.
 // A port another run holds or something listens on is skipped for the next free one, unless E2E_PORT sets it.
+// Each --if-changed run logs the projects asked for and those run (dev-metrics `e2e-runs`).
 //   node scripts/e2e.js [--if-changed] [--since=<ref>] [playwright args…]
 
 const crypto = require('node:crypto');
@@ -15,6 +16,7 @@ const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 const { touchesUi } = require('./check');
 const { portOf } = require('./ports');
+const { record } = require('./dev-metrics');
 const PROJECTS = Object.keys(require('./e2e-projects'));
 
 const ROOT = path.join(__dirname, '..');
@@ -159,18 +161,23 @@ async function main() {
   const hash = inputsHash(OUT_DIR);
   const passed = passedOn(hash);
   const { running, runArgs } = planRun(pwArgs, passed, ifChanged);
+  const log = (ok, seconds) =>
+    ifChanged && running && record('e2e-runs', { asked: splitProjects(pwArgs).projects, ran: running, ok, seconds });
   if (!runArgs) {
+    log(true, 0);
     console.log('e2e: same build and tests as the last passing run, skipped');
     process.exit(0);
   }
   if (runArgs !== pwArgs)
     console.log(`e2e: ${[...passed].join(', ')} passed on this build, running ${running.join(', ')}`);
 
+  const started = Date.now();
   const { status } = spawnSync('npx', ['playwright', 'test', ...runArgs], {
     cwd: ROOT,
     stdio: 'inherit',
     env: { ...process.env, E2E_BUILT: OUT_DIR },
   });
+  log(status === 0, Math.round((Date.now() - started) / 1000));
   if (status === 0 && running)
     fs.writeFileSync(PASS_FILE, `${[hash, ...new Set([...passed, ...running])].join('\n')}\n`);
   process.exit(status ?? 1);

@@ -15,7 +15,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 const DEMO_STEAMID = '76561198070571772';
-const BASE_URL = process.env.DEMO_BASE_URL || 'http://localhost:58991';
+const BASE_URL = process.env.DEMO_BASE_URL || `http://localhost:${require('./ports').portOf('dev')}`;
 const DEMO_LABEL = 'julien-f';
 const DEMO_AVATAR = 'https://avatars.steamstatic.com/8cd7f9a9091ff23b8961f1c46ab22f986c271062_medium.jpg';
 

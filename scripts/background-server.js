@@ -61,7 +61,8 @@ function needsRestart({ running, startedHead, head }) {
   return running && startedHead != null && startedHead !== head;
 }
 
-function cli({ name, npmScript, port }) {
+// `env`: added to the server's environment.
+function cli({ name, npmScript, port, env = {} }) {
   const BASE = `http://localhost:${port}`;
   const PID_FILE = path.join(DIR, `${name}.pid`);
   const HEAD_FILE = path.join(DIR, `${name}.head`);
@@ -83,6 +84,7 @@ function cli({ name, npmScript, port }) {
       const log = fs.openSync(path.join(DIR, `${name}.log`), 'w');
       const child = spawn('npm', ['run', npmScript], {
         cwd: path.join(__dirname, '..'),
+        env: { ...process.env, ...env },
         detached: true,
         stdio: ['ignore', log, log],
       });

@@ -1,6 +1,6 @@
 ---
 name: backlog-run
-description: Pick the next work across both backlogs (docs/dev/code-backlog.md and docs/dev/improvements.md) — conflicts, duplications, synergies — recommend one item or cluster, then plan, review, implement, merge and log the run's review yield. Use when asked which backlog item to do next, to triage both backlogs, or to pick one and ship it end to end.
+description: Pick the next work across both backlogs (docs/dev/code-backlog.md and docs/dev/improvements.md) — conflicts, duplications, synergies — recommend one item or cluster, then plan, review, implement, merge and log the run's review yield. Use when asked which backlog item to do next, to triage both backlogs, to pick one and ship it end to end, or to plan and ship named items end to end (`/backlog-run C313`).
 ---
 
 # Backlog run
@@ -10,13 +10,14 @@ Chooses what to do; doing it is [code-fix](../code-fix/SKILL.md) and [ux-fix](..
 ## 0. Triage
 
 - Note the start time (ISO) for the log.
+- Items given as arguments: they are the pick; read them and the code behind them, report only their conflicts with other open items, and go to step 1.
 - Read both backlogs in full, then the code behind the candidates.
 - Report, in short bullets: **conflicts** (items that rewrite the same code or undo each other, and the order that resolves them), **duplications** (one item subsumes another, items blocked on the same upstream), **synergies** (same file or state, one unblocks or cheapens others).
 - Recommend one item or cluster: value for effort, what it unblocks, why now. When only asked for a pick, stop here.
 
 ## 1. Plan
 
-- As `~/.claude/CLAUDE.md`'s non-trivial-change rule (specialist review until they agree, branch named). The plan lives in the scratchpad and ends with an out-of-scope list.
+- As `~/.claude/CLAUDE.md`'s non-trivial-change rule (specialist review until they agree, branch named). The plan ends with an out-of-scope list; once approved, the branch is opened with `node scripts/worktree.js <branch>`.
 - Per review round, keep for the log: each agent's `subagent_tokens` (the last task notification's, which includes earlier rounds), its numbered required changes (**blocking**), its optional suggestions (**other**), and how many of both you applied.
 
 ## 2. Implement
@@ -31,7 +32,7 @@ Chooses what to do; doing it is [code-fix](../code-fix/SKILL.md) and [ux-fix](..
 
 ## 4. Merge
 
-`git merge --no-ff` with the CHANGELOG entry, then `git branch -d`. Never push.
+As CLAUDE.md's Git workflow (`node scripts/merge.js`), with the CHANGELOG entry; step 3 was its review. Never push.
 
 ## 5. Log
 
@@ -44,4 +45,4 @@ node scripts/backlog-run-log.js '{"items":["U166"],"started":"<ISO>","merge":"<s
 
 ## Report
 
-What shipped and where to see it, gaps, and `node scripts/backlog-run-log.js --summary`.
+What shipped and where to see it, gaps, and `node scripts/backlog-run-log.js --summary`. End with the next item or cluster worth doing (step 0's recommendation criteria) as a ready-to-paste prompt for a new session: `/backlog-run <items>`, plus the repo state it needs (unpushed commits, open branches).

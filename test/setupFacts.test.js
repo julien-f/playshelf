@@ -9,6 +9,7 @@ const {
   costDelta,
   costLine,
   checkStats,
+  e2eRunStats,
   parseSession,
   commitCalls,
   linesSince,
@@ -455,4 +456,16 @@ test('checkStats: commits blocked and by which step, median run, slowest step; f
     '3 commits (1 blocked: lint ×1), median 4 s, slowest step e2e 18 s · 1 full runs (0 failed), median 6 s, slowest step test 6 s',
   );
   assert.equal(checkStats([]), '0 commits (0 blocked) · 0 full runs (0 failed)');
+});
+
+test('e2eRunStats: hook e2e runs grouped by the projects asked, then by those run', () => {
+  const row = (asked, ran) => ({ asked, ran, ok: true });
+  const rows = [
+    row(['desktop', 'phone'], ['phone']),
+    row(['desktop', 'phone'], []),
+    row(['desktop', 'phone'], ['phone']),
+    row(['desktop'], ['desktop']),
+  ];
+  assert.equal(e2eRunStats(rows), 'desktop+phone ×3: phone 2, skipped 1 · desktop ×1: desktop 1');
+  assert.equal(e2eRunStats([]), 'none');
 });
