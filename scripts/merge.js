@@ -39,9 +39,15 @@ function start(branch, cwd) {
   if (git(wt.path, 'status', '--porcelain', '--untracked-files=no')) fail(`${wt.path} has uncommitted changes`);
   git(wt.path, 'switch', '--no-track', '-c', `${branch}-merge`, 'main');
   if (!succeeds(wt.path, 'merge', '--no-ff', '--no-commit', branch)) {
-    console.log(`conflicts in ${wt.path}: resolve them, then add the CHANGELOG entry and commit there`);
+    if (!succeeds(wt.path, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')) {
+      git(wt.path, 'switch', branch);
+      git(wt.path, 'branch', '-d', `${branch}-merge`);
+      fail(`git merge didn't start in ${wt.path}; run it there to see why`);
+    }
+    console.log(`conflicts in ${wt.path}: resolve them, add the CHANGELOG entry, commit there, then \`finish\``);
     return;
   }
+  if (!succeeds(wt.path, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')) fail(`${branch} is already in main`);
   console.log(
     `merging in ${wt.path}: add the CHANGELOG entry, commit there, then \`node scripts/merge.js finish ${branch}\``,
   );
@@ -53,8 +59,12 @@ function finish(branch, cwd) {
   if (!wt) fail(`no worktree has ${branch}-merge checked out: run \`start\` first`);
   if (succeeds(wt.path, 'rev-parse', '-q', '--verify', 'MERGE_HEAD'))
     fail(`the merge is still pending in ${wt.path}: commit it`);
-  if (!succeeds(wt.path, 'merge-base', '--is-ancestor', branch, 'HEAD'))
-    fail(`${branch}-merge doesn't contain ${branch}`);
+  if (
+    !succeeds(wt.path, 'merge-base', '--is-ancestor', branch, 'HEAD') ||
+    !succeeds(wt.path, 'rev-parse', '-q', '--verify', 'HEAD^2')
+  )
+    fail(`${branch}-merge's last commit isn't the merge of ${branch}`);
+  if (git(wt.path, 'status', '--porcelain')) fail(`${wt.path} has changes left: commit or remove them`);
   if (main.branch !== 'main') fail(`the main checkout is on ${main.branch}, not main`);
   git(main.path, 'merge', '--ff-only', `${branch}-merge`);
   git(main.path, 'worktree', 'remove', wt.path);

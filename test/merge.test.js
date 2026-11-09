@@ -65,3 +65,28 @@ test('merge: usage on bad arguments', () => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /^Usage:/);
 });
+
+test('merge: finish refuses a fast-forward in place of the merge commit', (t) => {
+  const { main, wt, git, run } = setup(t);
+  run(main, 'start', 'feat');
+  git(wt, 'merge', '--abort');
+  git(wt, 'merge', '-q', '--ff-only', 'feat');
+
+  const finished = run(main, 'finish', 'feat');
+
+  assert.equal(finished.status, 1);
+  assert.match(finished.stderr, /isn't the merge/);
+  assert.equal(git(main, 'log', '-1', '--format=%s'), 'base');
+});
+
+test('merge: finish leaves main alone while the worktree has changes left', (t) => {
+  const { main, wt, git, run } = setup(t);
+  run(main, 'start', 'feat');
+  git(wt, 'commit', '-qm', 'Merge feat');
+  fs.writeFileSync(path.join(wt, 'stray'), 'x\n');
+
+  const finished = run(main, 'finish', 'feat');
+
+  assert.equal(finished.status, 1);
+  assert.equal(git(main, 'log', '-1', '--format=%s'), 'base');
+});

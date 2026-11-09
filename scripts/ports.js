@@ -18,7 +18,7 @@ const PORTS = {
   mock: { base: 58993, env: 'MOCK_PORT' },
   perf: { base: 26991, env: 'PERF_PORT' },
   dev: { base: 58991, env: 'DEV_PORT', wt: 24001 },
-  backend: { base: 3000, env: 'BACKEND_PORT', wt: 22001 },
+  backend: { base: 3000, env: 'PORT', wt: 22001 },
 };
 
 function portOf(name, root = ROOT, env = process.env) {

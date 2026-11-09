@@ -16,13 +16,14 @@ test("worktreeEnv: nothing in the main checkout; in a worktree, its ports and th
   fs.mkdirSync(main);
   fs.mkdirSync(wt);
   fs.writeFileSync(path.join(wt, '.git'), 'gitdir: elsewhere\n');
-  fs.writeFileSync(path.join(main, '.env'), 'PORT=3000\nDB_FILE=cache/db.sqlite\n');
+  fs.writeFileSync(path.join(main, '.env'), 'PORT=3000\nDB_FILE=cache/db.sqlite\nITAD_API_KEY=k\n');
 
   assert.deepEqual(worktreeEnv(main, main), {});
   assert.deepEqual(worktreeEnv(wt, main), {
+    ITAD_API_KEY: 'k',
+    DB_FILE: path.join(main, 'cache/db.sqlite'),
     DEV_PORT: String(portOf('dev', wt)),
     PORT: String(portOf('backend', wt)),
-    DB_FILE: path.join(main, 'cache/db.sqlite'),
   });
-  assert.equal(fs.readlinkSync(path.join(wt, '.env')), path.join(main, '.env'));
+  assert.ok(!fs.existsSync(path.join(wt, '.env')));
 });

@@ -17,7 +17,7 @@ Chooses what to do; doing it is [code-fix](../code-fix/SKILL.md) and [ux-fix](..
 
 ## 1. Plan
 
-- As `~/.claude/CLAUDE.md`'s non-trivial-change rule (specialist review until they agree, branch named). The plan lives in the scratchpad and ends with an out-of-scope list.
+- As `~/.claude/CLAUDE.md`'s non-trivial-change rule (specialist review until they agree, branch named). The plan ends with an out-of-scope list; once approved, the branch is opened with `node scripts/worktree.js <branch>`.
 - Per review round, keep for the log: each agent's `subagent_tokens` (the last task notification's, which includes earlier rounds), its numbered required changes (**blocking**), its optional suggestions (**other**), and how many of both you applied.
 
 ## 2. Implement
@@ -32,7 +32,7 @@ Chooses what to do; doing it is [code-fix](../code-fix/SKILL.md) and [ux-fix](..
 
 ## 4. Merge
 
-As CLAUDE.md's Git workflow (`node scripts/merge.js`), with the CHANGELOG entry. Never push.
+As CLAUDE.md's Git workflow (`node scripts/merge.js`), with the CHANGELOG entry; step 3 was its review. Never push.
 
 ## 5. Log
 
