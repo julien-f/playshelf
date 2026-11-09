@@ -1,6 +1,6 @@
 ---
 name: backlog-run
-description: Pick the next work across both backlogs (docs/dev/code-backlog.md and docs/dev/improvements.md) — conflicts, duplications, synergies — recommend one item or cluster, then plan, review, implement, merge and log the run's review yield. Use when asked which backlog item to do next, to triage both backlogs, or to pick one and ship it end to end.
+description: Pick the next work across both backlogs (docs/dev/code-backlog.md and docs/dev/improvements.md) — conflicts, duplications, synergies — recommend one item or cluster, then plan, review, implement, merge and log the run's review yield. Use when asked which backlog item to do next, to triage both backlogs, to pick one and ship it end to end, or to plan and ship named items end to end (`/backlog-run C313`).
 ---
 
 # Backlog run
@@ -10,6 +10,7 @@ Chooses what to do; doing it is [code-fix](../code-fix/SKILL.md) and [ux-fix](..
 ## 0. Triage
 
 - Note the start time (ISO) for the log.
+- Items given as arguments: they are the pick; read them and the code behind them, report only their conflicts with other open items, and go to step 1.
 - Read both backlogs in full, then the code behind the candidates.
 - Report, in short bullets: **conflicts** (items that rewrite the same code or undo each other, and the order that resolves them), **duplications** (one item subsumes another, items blocked on the same upstream), **synergies** (same file or state, one unblocks or cheapens others).
 - Recommend one item or cluster: value for effort, what it unblocks, why now. When only asked for a pick, stop here.
@@ -44,4 +45,4 @@ node scripts/backlog-run-log.js '{"items":["U166"],"started":"<ISO>","merge":"<s
 
 ## Report
 
-What shipped and where to see it, gaps, and `node scripts/backlog-run-log.js --summary`.
+What shipped and where to see it, gaps, and `node scripts/backlog-run-log.js --summary`. End with the next item or cluster worth doing (step 0's recommendation criteria) as a ready-to-paste prompt for a new session: `/backlog-run <items>`, plus the repo state it needs (unpushed commits, open branches).
