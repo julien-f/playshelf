@@ -111,6 +111,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - An account whose load and refresh both failed is asked again on the next visit instead of failing for 10 minutes
 - After two quick refreshes of an account where the second failed, the owned and wishlist marks now show the first one's data
 - A saved comparison names its players instead of showing their Steam IDs, and so does a list saved from a shared link or a ranking made from someone else's link.
+- Reopening a game from the table morphs its picture into the panel again, not only on its first open
 
 ### Development
 

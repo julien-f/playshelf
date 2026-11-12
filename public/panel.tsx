@@ -2004,7 +2004,8 @@ function HeroMain(props: { items: MediaItem[]; idx: number }): JSX.Element {
   return (
     <div
       class={`panel-hero-main${current().type === 'video' ? ' is-video' : ''}${loading() ? ' panel-hero-main--loading' : ''}`}
-      style={loading() && standIn() !== src() ? { 'background-image': `url("${standIn()}")` } : undefined}
+      // Always an object: an `undefined` style drops the whole attribute, the morph's view-transition-name with it.
+      style={{ 'background-image': loading() && standIn() !== src() ? `url("${standIn()}")` : undefined }}
     >
       <button
         class="panel-hero-open"

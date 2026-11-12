@@ -7952,16 +7952,22 @@ test.describe('with motion on', () => {
       await page.goto('/lists/owned');
       await expect(rows(page)).toHaveCount(6);
       await expect(row(page, 'Hades').locator('.game-thumb')).toHaveJSProperty('complete', true);
+      // The hero's name as the new view is captured: its image loading within the wait (as a cached
+      // one does) once cleared the hero's whole style attribute, name included, so nothing morphed.
       const started = page.evaluate(
         () =>
-          new Promise<boolean>((resolve) => {
+          new Promise<string | false>((resolve) => {
             const start = document.startViewTransition?.bind(document);
             if (!start) return resolve(false);
-            document.startViewTransition = (cb) => (resolve(true), start(cb));
+            document.startViewTransition = (cb) =>
+              start(async () => {
+                await (cb as () => Promise<void>)();
+                resolve(document.querySelector<HTMLElement>('#panel-hero .panel-hero-main')!.style.viewTransitionName);
+              });
           }),
       );
       await row(page, 'Hades').getByText('Hades').click();
-      expect(await started).toBe(viewTransitions);
+      expect(await started).toBe(viewTransitions && 'game-art');
       await expect(page.locator('#panel-title')).toHaveText('Hades');
       await expect(page.locator('.panel-hero-open')).toBeFocused();
       await expect(page.locator('.panel-hero-img')).toHaveCSS('opacity', '1');
