@@ -171,7 +171,7 @@ Four kinds of state, four mechanisms:
   - `getPref` tracks its key: one signal per key, so a table-view write doesn't rerun a region reader. The account getters build on it; `getAuthUser()`, `getAccountOverride()` and `getAccountOverrideState()` read their own signals.
   - `myOwnership.ts`'s peeks track a signal bumped once the owned/wishlist sets land, and `accountData.ts`'s per-account version, which a ↻ anywhere moves: the sets are re-derived, the old ones shown until then. An imperative consumer (the nav search dropdown, `ListRoute`'s row stamps) subscribes with `trackMyOwnership()`, which starts no fetch.
   - Keyed reloads go through a primitive memo (`createMemo(currentRegion)`, an account's `?.id`), since `getPref` returns a fresh object on every read.
-  - An effect that writes prefs reads its pref inside `on(...)` or `untrack`, or it reruns on its own write. `adoptPrefEntry` is the one silent write (the merge reloads the page right after).
+  - An effect that writes prefs reads its pref inside `on(...)` or `untrack`, or it reruns on its own write. `adoptPrefEntry` and another tab's write (a `storage` event) notify the same way.
 
 Every resource **source** resolves to a _primitive_ (an appid, or an `appid:account` string), never an object literal: `createResource` memoizes its source with `===`, so an object would refetch every time the source recomputed — e.g. the DLC source re-runs whenever any collapsible is toggled.
 
