@@ -98,7 +98,7 @@ A bundle joins a combine from its own page: **What does this add?** shows that b
 
 Or start from the friends list on the home page's account card: tick up to 5 friends, then **Compare with** that account. Back returns to the home page.
 
-Each player is a box you drop accounts into: it offers the accounts you've already looked at as you type, and takes a Steam name, profile URL or 64-bit ID for anyone it doesn't know yet. Put two accounts in the _same_ player to compare a Steam Family — or any pair of libraries — as one. Picking an account doesn't add it to your recents or change your current account. If a player can't be found, the page says which one, marks it in **Edit players**, and offers to compare the others.
+Each player is a box you drop accounts into: it offers the accounts you've already looked at as you type, then the current account's friends once the home page has listed them, and takes a Steam name, profile URL or 64-bit ID for anyone it doesn't know yet. Put two accounts in the _same_ player to compare a Steam Family — or any pair of libraries — as one. Picking an account doesn't add it to your recents or change your current account. If a player can't be found, the page says which one, marks it in **Edit players**, and offers to compare the others.
 
 The result is a link. Copy the address and whoever opens it sees the same comparison — it names the players, so it doesn't depend on anything saved in your browser, and it doesn't change the recipient's own account.
 

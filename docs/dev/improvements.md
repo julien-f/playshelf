@@ -51,7 +51,6 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 ## Comparing
 
-- **U257 · minor · C1, A4** — Compare's player boxes suggest only stored accounts (Bob, once explored), not the current account's friends Home already lists (Carol, Dave), so the game-night host, who knows names and not ids, goes back to Home for **Compare with** or types each one. Suggest the current account's friends below the stored accounts (the friends list is already fetched and cached).
 - **U259 · minor · A4** — Back from **Compare with Alice (2)** lands on Home with the friends list collapsed and the ticks cleared, so adding a third friend means reopening it and ticking everyone again. Keep the list open with the selection while the tab lives (or pre-tick from the comparison just left).
 - **U261 · minor · C1** — filtering a comparison by tag adds **Tag Match** as the last column, past Genres, off-screen at 1440 px (the table scrolls sideways), so the host doesn't see why the rows reordered. Insert it next to Name, as the lead sort it becomes.
 - **U213 · polish · C7, C1** — **Players** is open by default on desktop and costs ~210 px every visit (the table starts at 638 of 900 px). Remember the viewer's open/closed choice (a per-viewer convenience).

@@ -397,6 +397,12 @@ export function fetchAccountFriends(
   });
 }
 
+// The friends list this page load already fetched for these members, if any — never a request.
+export function cachedAccountFriends(members: string[]): Promise<AccountFriends> | undefined {
+  const entry = accountCache.get(cacheKey('friends', members));
+  return isFresh(entry) ? (entry.promise as Promise<AccountFriends>) : undefined;
+}
+
 // Home's "pick an account" resolve step — there's no standalone "just resolve an identifier"
 // endpoint (see docs/dev/architecture.md's Request flow section), so this is the one place a raw typed
 // identifier (vanity name/URL/steamid) actually becomes a resolved AccountSlot, via the same
