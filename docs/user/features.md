@@ -89,7 +89,7 @@ A bundle joins a combine from its own page: **What does this add?** shows that b
 - To rank only some games — say, your RPGs, or those you played more than 5 hours (your lists have Played and Last Played columns for the current account, hidden by default) — filter the table, then **Rank N shown** (or select rows, then **Rank N selected**): only those games are asked about, each still placed against the whole ranking. The rest wait until you compare them.
 - It follows its source: games added later are queued for comparison; a removed game drops out, and gets its rank back if it returns. **Change source** keeps every answer already given.
 - A list can have several rankings, each by its own criterion. Once it has one, **Rank this list** opens a menu: continue a ranking (with its progress), or start a new one named by what you're ranking by, e.g. "best JRPG".
-- A ranked list can't be shared via a link yet.
+- A ranked list can't be shared via a link.
 - A ranked or combined list built from a Wishlist, a bundle, a developer's or publisher's games or PC Game Pass keeps its price columns and Prices tile.
 
 ### Comparing libraries
@@ -206,8 +206,8 @@ A lightbox on another screen, for showing trailers and screenshots to the people
 - A developer's or publisher's list link opens the same list for anyone.
 - Links pasted in a chat (WhatsApp, Slack, Discord, iMessage…) show a preview card; a `/game/…` link's card names the game and shows its header image once the app has looked that game up, a bundle link's names the bundle, its game count, shop and end date, with its first game's banner, once the app has listed it; a list opened on a game shows that game's card. A shared library, wishlist or comparison names its players (with the avatar for one player) once the app has looked them up; developer, publisher, PC Game Pass and bundle browse links are titled. Other links get the site's card.
 - Add `?u=` to any list link to share the account you're exploring. It never changes the recipient's own default account, and a game link deliberately doesn't carry it.
-- A comparison's link names its players the same way, one `?u=` each — including links made by older versions of this app, which still work.
-- **Share layout** copies a link with your current table layout — columns, sort, grouping, filters — baked in. On Owned and Wishlist it also carries the account (`?u=`), so the recipient sees your games, not their own. The recipient sees it for that visit only, with **Keep as my layout** to make it theirs or **Use my own** to go back; once they change that layout, the banner warns it's lost on reload unless kept. Nothing of their own setup changes otherwise. Shared from a view, the link carries its layout, not the view. Your own saved lists' link only opens in your browser, so a combined list has **Share list** instead of Share layout, and on manual and ranked lists Share layout is dimmed: they can't be shared yet.
+- A comparison's link names its players the same way, one `?u=` each; a Home link with several `?u=` opens that comparison too.
+- **Share layout** copies a link with your current table layout — columns, sort, grouping, filters — baked in. On Owned and Wishlist it also carries the account (`?u=`), so the recipient sees your games, not their own. The recipient sees it for that visit only, with **Keep as my layout** to make it theirs or **Use my own** to go back; once they change that layout, the banner warns it's lost on reload unless kept. Nothing of their own setup changes otherwise. Shared from a view, the link carries its layout, not the view. Your own saved lists' link only opens in your browser, so a combined list has **Share list** instead of Share layout, and on manual and ranked lists Share layout is dimmed: they can't be shared.
 
 ## Sync
 
@@ -215,7 +215,7 @@ A lightbox on another screen, for showing trailers and screenshots to the people
 
 A sign-in lasts as long as you keep visiting ([Session lifetime](configuration.md)). If it expires anyway, an amber dot on the account chip says so, and its menu offers **Sign in again**, which syncs the changes made in the meantime, or **Stay signed out**.
 
-Table layouts sync too, once saved (see [Table layouts](#table-layouts)). The first sync after the update that brought Save keeps the account's saved layouts over a device's unsaved ones.
+Table layouts sync too, once saved (see [Table layouts](#table-layouts)). Unsaved layout changes stay on their device.
 
 ## Keyboard shortcuts
 

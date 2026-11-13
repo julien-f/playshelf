@@ -41,7 +41,7 @@ Both are full `AccountSlot` objects (see the schema below), not id references, s
 - **Forwarded across in-app navigation** (`withAccountParam`, `urlState.ts`): nav links, Home's fixed list links, `ListRoute`'s own `navigate()` calls and the panel's ownership badges carry it, or clicking "Owned" would quietly switch back to your own library. The panel's 🔗 game link deliberately doesn't: it's the game's canonical address, for anyone.
 - **Authoritative on `/lists/owned`/`/lists/wishlist`**: while it resolves, and if it fails, the stored account is not loaded in its place; the route shows the override's status instead.
 - **Adopted only explicitly**: "Set as my current account" in Home's "Exploring … from this link" note, or any account pick, stores it and strips `u=` via the router's `navigate(..., { replace: true })` — a bare `history.replaceState` is invisible to `@solidjs/router`'s location signal, leaving `withAccountParam` hrefs pointing at the old account.
-- **Several slots is a comparison, not an account** (`?u=alice&u=bob`): `parseAccountParam` returns nothing for it, so it's never an override and never forwarded. Its address is `/lists/compare` ([Combine](#combine)); Home forwards a legacy `/?u=alice&u=bob` link there.
+- **Several slots is a comparison, not an account** (`?u=alice&u=bob`): `parseAccountParam` returns nothing for it, so it's never an override and never forwarded. Its address is `/lists/compare` ([Combine](#combine)); Home forwards `/?u=alice&u=bob` there, so links to Home's comparison keep working.
 
 ## Lists
 
@@ -126,7 +126,7 @@ Signing in (the account chip's popover, `AccountChip.tsx`) is optional; without 
   - Adopting anything from the server reloads the page, since every store seeds its state from `localStorage` once at load. An adoption storage refuses (full, disabled) is skipped with an `[auth]` warning instead, or every load would re-adopt and reload.
 - **Signing in fills `myAccount`/`currentAccount` when unset** (`autoPopulateAccountFromLogin`), via the same `resolveAccountSlot` as Home's picker; an existing pick is never overwritten, and a failed resolve retries on the next load.
 - **Table-view keys sync like any key** (`TABLE_VIEW_PREF_KEYS`, `public/tableViewKeys.ts`). They're written only on **Save** (a table change is a draft until then, [game-table.md](game-table.md#layouts-and-saved-views)), so each push is one.
-  - Prefs schema v3: a v2 blob's table-view keys were written on every edit and never pushed, so they read as `updatedAt: 0` — the account's Saved layout wins at the next sync.
+  - A schema v2 blob's table-view keys read as `updatedAt: 0`, so the account's saved layout wins at the next sync: v2 wrote them on every edit and never pushed them.
 - **A push answered 401** (the session ended while the page was open; `prefs.ts`'s `sessionLost`) signs out on the spot and drops pending pushes: each edit's local `updatedAt` stays newer than the server's, so the next sign-in's merge pushes it. Two limits:
   - signing back in as another Steam account is that account's first sync on this device, so its values win over those edits;
   - another open tab keeps its own state until it reloads.
@@ -142,7 +142,7 @@ One flat blob under the localStorage key `steam.isonoe.net:prefs` (`prefs.ts`): 
 ```
 AccountSlot  id (sorted-joined member steam64 ids) · members[] · rawInputs[] · label? · avatarUrl?
              vanities? (steam64 → Steam custom-URL name, for the members that set one)
-             memberAvatars? (a Family's steam64 → avatar; stored on pick, and on opening it on Home for older ones)
+             memberAvatars? (a Family's steam64 → avatar; stored on pick, and on opening it on Home when missing)
              removedAt?
 Folder       id · name · parentId (null = root) · order
 GameList     id · name? (absent = unnamed, labeled by its formula) · parentId · order · createdAt · updatedAt

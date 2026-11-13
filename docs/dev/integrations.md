@@ -25,7 +25,7 @@ Every upstream this app talks to, and what is undocumented about each; bundles, 
 
 ## Request volume and pacing
 
-- **A young game is refetched as it ages** ([data.md](data.md#cache-tiers)'s half-age rule): ~16 refetches of its reviews, HLTB, ProtonDB, store page and browse item over its first two years, simulated at ~0.44 calls a day per upstream for a 1310-game library ([why it's worth it](decisions.md#young-games--refetched-as-they-age)). The first deploy left 179 games past their new cap, spread over a week.
+- **A young game is refetched as it ages** ([data.md](data.md#cache-tiers)'s half-age rule): ~16 refetches of its reviews, HLTB, ProtonDB, store page and browse item over its first two years, simulated at ~0.44 calls a day per upstream for a 1310-game library ([why it's worth it](decisions.md#young-games--refetched-as-they-age)).
 - **Link previews** cost no upstream request: they read the cache only ([architecture.md](architecture.md#build-and-serving)).
 - **Circuit breakers** (`lib/circuitBreaker.js`) on the ones that answer a block with a 403 — Steam's store, HLTB's search, ProtonDB: 2 consecutive 403s leave that upstream alone for 5 minutes, including requests already queued when it trips.
 - **Pacing**:
@@ -38,7 +38,7 @@ Every upstream this app talks to, and what is undocumented about each; bundles, 
 
 ## HLTB — no npm package
 
-The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`); HLTB is called directly, untrusted tier, with spoofed browser `User-Agent`/`Referer` headers:
+HLTB is called directly, untrusted tier, with spoofed browser `User-Agent`/`Referer` headers — not through the `howlongtobeat` npm package, which pulls in a vulnerable `axios`:
 
 1. `GET https://howlongtobeat.com/api/search/site/init?t={ms}` → `{ token, hpKey, hpVal }`
 2. `POST https://howlongtobeat.com/api/search/site` with `X-Auth-Token`, `X-Hp-Key`, `X-Hp-Val` headers and `{ [hpKey]: hpVal, ...payload }` in the body
@@ -104,8 +104,8 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 ## Reviews — `GetAppReviews`
 
 - `getGameRating` (`lib/steam.js`) calls the documented, key-less [`IUserReviewsService/GetAppReviews`](https://partner.steamgames.com/doc/webapi/IUserReviewsService) with `input_json` `{appid, languages: ['all'], purchase_type: 1, num_per_page: 1}` and reads only `response.query_summary` (`total_reviews`, `total_positive`, `review_score_desc`).
-- It replaced `store.steampowered.com/appreviews/{appid}?json=1`, which Steam switched off on 2026-10-22: it now redirects every app to the store's home page.
-- **Assumption**: `purchase_type: 1` counts every purchase (Steam and keys), like the old `purchase_type=all`. The enum's values aren't in the docs; Portal 2's totals for 1 equal 0 (Steam) plus 2 (non-Steam), and match the old endpoint's cached counts.
+- Not `store.steampowered.com/appreviews/{appid}?json=1`: it redirects every app to the store's home page (since 2026-10-22).
+- **Assumption**: `purchase_type: 1` counts every purchase (Steam and keys), like appreviews' `purchase_type=all`. The enum's values aren't in the docs; Portal 2's totals for 1 equal 0 (Steam) plus 2 (non-Steam), and matched appreviews' counts.
 - `num_per_page: 0` is ignored (20 reviews, ~16 KB); 1 keeps a response under 1 KB.
 - Key-less calls share Steam's lower rate limit and answer 429 past it; only a key tied to the app raises it, so none is sent. Own limiter, no circuit breaker (it doesn't answer 403).
 - No reviews (`total_reviews` 0 or absent — an unknown appid answers `{"response":{}}`) is cached as `null`: no data, not a failure. A reply without a `response` object fails, uncached.
