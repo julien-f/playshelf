@@ -20,19 +20,7 @@
 // It owns the draft slots being typed and nothing else — no resolving, no navigation, no URL; the
 // route decides what a submitted set of slots means. It reads accountsStore.ts, and the current
 // account's friends only if this page load already fetched them (accountData.ts's cache).
-import {
-  createSignal,
-  createEffect,
-  createMemo,
-  createResource,
-  on,
-  createUniqueId,
-  untrack,
-  For,
-  Index,
-  Show,
-  type JSX,
-} from 'solid-js';
+import { createSignal, createMemo, createUniqueId, untrack, For, Index, Show, type JSX } from 'solid-js';
 import Plus from 'lucide-solid/icons/plus';
 import Star from 'lucide-solid/icons/star';
 import X from 'lucide-solid/icons/x';
@@ -54,7 +42,8 @@ import {
   type Slot,
   type SlotEntry,
 } from './compareSlots.ts';
-import { cachedAccountFriends, membersFromAccountId, type AccountFriend } from './accountData.ts';
+import { cachedAccountFriends } from './accountData.ts';
+import { steamVanity } from './utils.ts';
 import type { AccountSlot } from './types.ts';
 
 interface ComparePlayersFormProps {
@@ -86,10 +75,13 @@ function knownAccounts(): KnownAccount[] {
   }));
 }
 
-// The current account's friends, as Home sorts them, minus anyone already known (its own members too).
-function friendAccounts(friends: AccountFriend[], known: KnownAccount[], ownMembers: string[]): KnownAccount[] {
-  const taken = new Set([...ownMembers, ...known.filter((a) => a.members.length === 1).map((a) => a.members[0])]);
-  return friends
+// The current account's friends by name, if this page load fetched them, minus anyone already known
+// (its own members too). Never a request: suggesting friends costs nothing.
+function friendAccounts(known: KnownAccount[]): KnownAccount[] {
+  const current = getEffectiveCurrentAccount();
+  if (!current) return [];
+  const taken = new Set([...current.members, ...known.filter((a) => a.members.length === 1).map((a) => a.members[0])]);
+  return (cachedAccountFriends(current.members)?.friends ?? [])
     .filter((f) => !taken.has(f.steamid))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
     .map((f) => ({
@@ -99,7 +91,7 @@ function friendAccounts(friends: AccountFriend[], known: KnownAccount[], ownMemb
       starred: false,
       friend: true,
       members: [f.steamid],
-      identifiers: [f.steamid],
+      identifiers: [steamVanity(f.profileUrl) || f.steamid], // as accountIdentifiers
     }));
 }
 
@@ -115,33 +107,12 @@ function seedSlots(initial: string[][], known: KnownAccount[]): Slot[] {
 }
 
 export function ComparePlayersForm(props: ComparePlayersFormProps): JSX.Element {
-  // Only a friends list this page load already fetched (Home's): suggesting friends never costs a request.
-  const [friends] = createResource(
-    () => getEffectiveCurrentAccount()?.id,
-    async (id) => (await cachedAccountFriends(membersFromAccountId(id))?.catch(() => undefined))?.friends ?? [],
-  );
   // A memo: a `?u=` account resolving after mount still shows up as a suggestion.
   const known = createMemo(() => {
     const stored = knownAccounts();
-    const id = getEffectiveCurrentAccount()?.id;
-    return [...stored, ...friendAccounts(friends() ?? [], stored, id ? membersFromAccountId(id) : [])];
+    return [...stored, ...friendAccounts(stored)];
   });
   const [slots, setSlots] = createSignal<Slot[]>(seedSlots(props.initialSlots, untrack(known)));
-  // Friends land after the seed: name the ones it left as typed Steam IDs.
-  createEffect(
-    on(
-      friends,
-      () =>
-        setSlots((prev) =>
-          prev.map((slot) =>
-            slot.flatMap((entry) =>
-              entry.kind === 'typed' ? slotsFromIdentifiers([[entry.value]], known())[0] : [entry],
-            ),
-          ),
-        ),
-      { defer: true },
-    ),
-  );
   // Which slot's dropdown is open, what's typed in it, and which row the arrow keys are on. One
   // set of signals rather than per-slot state: only one input can be focused at a time, so only
   // one dropdown can be open, and keeping it flat means closing one is never a matter of
