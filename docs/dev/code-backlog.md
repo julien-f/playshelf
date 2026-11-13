@@ -37,7 +37,6 @@ Last audited: simplify 2026-10-11 · correctness 2026-10-11 · security 2026-10-
 - **C290 · minor · M** — every unknown page path answers 200 with the shell: `/nope`, `/game/abc` (a NaN appid shows Recently Looked Up), `/lists/bundle/abc`, `/lists/owned/rank`, so crawlers and chat apps treat them as real pages (adds to C271). A router match filter (`/^\d+$/`) on `/game/:appid?` and `/lists/bundle/:bundleId` so they reach Page not found; a server-side 404 status for paths matching no route needs a route list mirroring `AppRoot.tsx`.
 - **C291 · minor · S** — pre-SPA links get a 404 in production: the fallback skips paths with an extension, and old CHANGELOG entries show the app handing out `/library.html?u=…` links. 301 `/library.html` → `/lists/owned` (keeping `u`, dropping the old table-state `view`), `/bundles.html` → `/bundles`, `/about.html` → `/about`. Inferred from code, not run on a production build.
 - **C292 · cleanup · S** — `PARAM_ORDER` (`public/urlState.ts`) lacks `f`, `name` and `view`, so the param naming the list sorts after `game`/`tv`; and any rewrite through `urlWithParams` (opening a game) re-encodes `?f=`'s `:;(),`, so a shared formula stops reading as text (frontend.md admits it only for `?u=`). Add them ahead of `game`; keep those characters literal.
-- **C325 · minor · S** — About's "What's stored" (`public/AboutRoute.tsx`) is wrong: caches "from an hour … up to a few weeks" (30 days to a year, [data.md](data.md)), "no accounts" (Steam sign-in stores users, sessions and synced prefs), IsThereAnyDeal credited for Bundles only (also prices, Game Pass) and Fanatical unlisted.
 
 ## Security
 
@@ -83,7 +82,7 @@ Last audited: simplify 2026-10-11 · correctness 2026-10-11 · security 2026-10-
 
 ## Compliance
 
-- **C270 · minor · S** — the site has no privacy page, though Valve's API terms ask for a privacy policy on non-public end-user data and for telling users what Steam data is stored ([steamcommunity.com/dev/apiterms](https://steamcommunity.com/dev/apiterms)); `AboutRoute.tsx`'s "What's stored" is a stub (and wrong: C325). Add one: what is cached and for how long ([data.md](data.md)), the synced prefs, and that chat apps keep their own copy of a link preview. Also that signing out leaves the per-account tastes and local prefs (recently looked-up games) on the device.
+- **C270 · minor · S** — the site has no privacy page, though Valve's API terms ask for a privacy policy on non-public end-user data and for telling users what Steam data is stored ([steamcommunity.com/dev/apiterms](https://steamcommunity.com/dev/apiterms)); `AboutRoute.tsx`'s "What's stored" is the start of one: nothing deletes a user's synced copy server-side (`/auth/logout` only ends the session), and the only removal channel is a public GitHub issue. Add one: what is cached and for how long ([data.md](data.md)), the synced prefs, and that chat apps keep their own copy of a link preview. Also that signing out leaves the per-account tastes and local prefs (recently looked-up games) on the device.
 - **C271 · minor · S** — no `robots.txt`, so a crawler that runs JavaScript and follows links can open `?u=` pages and drive Steam requests through the app. `Disallow: /lists/`, after checking that WhatsApp's and Slack's preview fetchers ignore it.
 
 ## Tests

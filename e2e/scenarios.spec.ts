@@ -450,8 +450,20 @@ test('S3 edge: the page carries its own icon, so the browser asks for no favicon
 test('S3 edge: About names every data source, ProtonDB included', async ({ page }) => {
   await page.goto('/about');
   const sources = page.locator('section', { hasText: 'Data sources' });
-  for (const name of ['Steam Web API', 'Steam Store', 'HowLongToBeat', 'ProtonDB', 'IsThereAnyDeal'])
+  for (const name of [
+    'Steam Web API',
+    'Steam Store',
+    'Steam sign-in',
+    'HowLongToBeat',
+    'ProtonDB',
+    'IsThereAnyDeal',
+    'Fanatical',
+    'Microsoft',
+  ])
     await expect(sources.getByText(name, { exact: true })).toBeVisible();
+  const stored = page.locator('section', { hasText: "What's stored" });
+  await expect(stored).toContainText('If you Sign in with Steam');
+  await expect(stored).not.toContainText('no accounts');
 });
 
 test('S3 edge: a first game link in a fresh browser lists that game under Recently Looked Up', async ({ page }) => {
