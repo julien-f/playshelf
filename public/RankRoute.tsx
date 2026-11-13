@@ -127,7 +127,8 @@ export default function RankRoute() {
 
   function setDetails(appid: number, data: GameDetailsReply): void {
     setGames(appid, { ...detailsFields(data), name: data.name || `App ${appid}` });
-    if (data.limited) setStatus(data.limited);
+    // Background card fetches land too: never over a shown error like a failed Refresh.
+    if (data.limited && !status()) setStatus(data.limited);
   }
 
   // Cached per appid for this mount; the server's own cache makes a repeat cheap anyway.

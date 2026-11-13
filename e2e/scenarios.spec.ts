@@ -5285,6 +5285,37 @@ test('D2 edge: past its share, Refresh details, a lookup and the ranking say so 
   await expect(page.locator('.rank-route .list-status')).toHaveText(LIMITED);
 });
 
+test("D2 edge: on the ranking, a later card's past-its-share reply doesn't hide a failed Refresh details", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.route('**/api/game-details/*', async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (url.searchParams.has('refresh')) return route.fulfill({ status: 502, json: { error: 'Steam is down' } });
+    const reply = respond(req.method(), url, null, new Set(['client-limited']));
+    await route.fulfill({ status: reply.status, contentType: reply.contentType, body: reply.body });
+  });
+  await page.goto('/lists/owned');
+  const names = ['Portal 2', 'Terraria', 'Hades'];
+  for (const name of names) await row(page, name).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Rank 3 games' }).click();
+  const cards = page.locator('.rank-card-name');
+  for (const i of [0, 1]) await expect(cards.nth(i)).not.toHaveText(/^App /);
+  const shown = await cards.allTextContents();
+  const third = names.find((name) => !shown.includes(name))!;
+
+  await page.getByRole('button', { name: 'Details', exact: true }).first().click();
+  await page.locator('.panel-refresh-btn').click();
+  const status = page.locator('.rank-route .list-status');
+  await expect(status).toContainText('Refresh failed');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.game-panel')).toBeHidden();
+  await page.keyboard.press('ArrowLeft');
+  await expect(cards.filter({ hasText: third })).toBeVisible();
+  await expect(status).toContainText('Refresh failed');
+});
+
 test("D2 edge: a Refresh details answered past its share after stepping to another bundle doesn't mark the new one", async ({
   page,
 }) => {
