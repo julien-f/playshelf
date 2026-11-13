@@ -216,6 +216,7 @@ The "look up any game" box is one nav-bar search in the shell, not one per route
 `AccountChip.tsx` says who the app is showing, following a `?u=` link that resolves after mount, with a link icon (named "from a link") when a link's account is showing.
 
 - The popover menus (this chip, Preferences, the rank menu, Home's tree rows, the view tabs' menus) are native popovers (`button[popovertarget]` + `[popover]`: the browser opens, closes and dismisses them on an outside click) sharing `navPopover.ts`: it closes them on Esc ahead of the page's own Esc handlers, and positions the panel in JS because `.site-nav`'s flex-wrap moves its triggers with viewport width (seen off-screen on a real Galaxy S10, ruling out CSS-only anchoring).
+  - A panel's `display` is set only while open (`:popover-open { display: flex }`, as `.account-chip-panel` in `styles/components.css`): any `display` in the app's CSS overrides the user-agent `display: none` that hides a closed popover, leaving it in flow under its button (`toBeHidden()` on it fails).
 - It carries **copyable Steam identifiers** (`accountsStore.ts`'s `accountIdentifiers`: the stored custom-URL name, else the steam64 id), read from the slot since the chip fetches nothing: one for the current account, one per member beside each recents row (outside its switch button, which can't nest one).
 
 ## URL & sharing

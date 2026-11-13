@@ -30,7 +30,7 @@ Each doc, and when to read it — the section you need, not the whole file:
 - [docs/dev/glossary.md](docs/dev/glossary.md) — before naming anything a user reads: a label, a message, a list
 - [docs/dev/improvements.md](docs/dev/improvements.md) · [docs/dev/code-backlog.md](docs/dev/code-backlog.md) · [docs/dev/setup-backlog.md](docs/dev/setup-backlog.md) — open UX, code and setup work: check before proposing something (it may be filed, or declined)
 - [docs/dev/decisions.md](docs/dev/decisions.md) — before changing a computed value or a tooling choice that looks wrong
-- [docs/dev/testing.md](docs/dev/testing.md) — before writing or fixing a test, looking at the UI, or touching the hooks
+- [docs/dev/testing.md](docs/dev/testing.md) — before writing or fixing a test, looking at the UI, measuring performance, running skill evals, or touching the hooks and checks
 - [docs/dev/pitfalls.md](docs/dev/pitfalls.md) — on an unexpected error: `grep -ri '<fragment>' docs/ .claude/skills/` first
 - [docs/images/](docs/images) — the screenshots the docs embed; shooting them is the `screenshots` skill
 

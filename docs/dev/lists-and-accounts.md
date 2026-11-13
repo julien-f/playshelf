@@ -12,6 +12,7 @@ Accounts, lists, folders and preferences live in `localStorage` (`prefs.ts`). Si
   - [Combine](#combine)
   - [Folders](#folders)
   - [Soft-delete](#soft-delete)
+- [Sign-in](#sign-in)
 - [Sync](#sync)
 - [Storage schema](#storage-schema)
 
@@ -112,6 +113,24 @@ GameList { ...above..., parentId: string | null, order }
 - **Sweep**: `deleteList`, `updateDynamicList`, `updateRankedSource` and `orphanBundle` purge soft-deleted items nothing references any more, repeated until nothing more goes, then prune the bundle snapshots and soft-removed accounts no list uses. A soft-deleted list still counts as referencing its sources, since it still resolves.
 - **A referenced bundle disappearing** (ITAD stops listing it after it ends; `GET /api/bundles/:id` 404s): `bundleSnapshots.ts` keeps each referenced bundle's last-known title and appids, refreshed when a resolve succeeds in full (`listResolve.ts`'s `resolveBundleSource`). On the 404, `listsStore.ts`'s `orphanBundle` turns the snapshot into a soft-deleted manual list (`orphanOf: { bundleId }`, "<title> (no longer listed)") and re-points every source at it. Any other failure falls back to the snapshot without converting, and fails the list when there is none; a 404 for a bundle with no snapshot contributes nothing.
 
+## Sign-in
+
+Sign in with Steam (`lib/auth.js`, the `/auth/*` routes in `server.js`) is Steam's OpenID 2.0, its only sign-in for third parties. Off without `PUBLIC_ORIGIN` ([configuration.md](../user/configuration.md)): the routes answer 503 and the startup log says why.
+
+- **`GET /auth/steam/login`** first moves a visitor on another host to `PUBLIC_ORIGIN`'s, where Steam sends them back; there it sets a random `steam_login_state` cookie (5 minutes) and redirects to Steam with that state inside `openid.return_to`.
+- **`GET /auth/steam/callback`** accepts the assertion only when:
+  - its `state` matches the cookie — login CSRF, which would sign a visitor in as someone else;
+  - the signed `return_to` is the one sent for `PUBLIC_ORIGIN` and that state, never the request's `Host` — else any site using Steam sign-in could replay its visitors' assertions here;
+  - its `response_nonce` is within `NONCE_MAX_AGE_MS` of this clock and unused this process run (a drifting clock refuses every sign-in, with an `[auth]` warning);
+  - Steam confirms the signature (`check_authentication`).
+  - Then it records the user, opens a session and redirects Home; a refusal clears the state cookie and answers 400, an unreachable Steam 502.
+- **Cookies** are `HttpOnly; SameSite=Lax`, and `Secure` when `PUBLIC_ORIGIN` is `https` — the scheme visitors see, while the request's own is the proxy hop's without `TRUST_PROXY`.
+- **Sessions**: a random id in the `sid` cookie, kept in `sessions` by its SHA-256, so a copy of `db.sqlite` signs no one in. One lasts `SESSION_TTL_DAYS`; `GET /api/me` slides it forward to the full length once half is gone, with no absolute cap: accepted, as a session only reaches synced prefs. Expired rows are swept at startup and hourly; `POST /auth/logout` deletes the session.
+- **In the browser** (`authStore.ts`): the account chip's popover (`AccountChip.tsx`) links to the login; `initAuth` asks `GET /api/me` on every page load, then merges prefs ([Sync](#sync)).
+- **Signing in fills `myAccount`/`currentAccount` when unset** (`autoPopulateAccountFromLogin`), via the same `resolveAccountSlot` as Home's picker; an existing pick is never overwritten, and a failed resolve retries on the next load.
+- **An expired sign-in shows** (`authStore.ts`'s `isSessionExpired`): the `steam.isonoe.net:signed-in-as` localStorage key (its own, never synced) holds the steamid last signed in on this browser; signed out by a check or a 401 while it's set puts an amber dot on the account chip and **Sign in again** / **Stay signed out** in its popover. Sign out and Stay signed out clear the key; an `/api/me` that fails (offline, 5xx) never sets it.
+- **Sign out sends pending pushes first**, then logs out, so a debounced edit still reaches the account.
+
 ## Sync
 
 Signing in (the account chip's popover, `AccountChip.tsx`) is optional; without it nothing is sent. Signed in, the server holds a second replica, kept eventually consistent; routes in [architecture.md](architecture.md), the `user_prefs` table in [data.md](data.md).
@@ -124,14 +143,11 @@ Signing in (the account chip's popover, `AccountChip.tsx`) is optional; without 
   - **Every later sync**: per-key last-write-wins both ways; a key on one side propagates; a tie is left alone.
   - One key is one value: concurrent edits to it on two devices keep the newest whole, `lists` and `listViews` alike (two views added at once on two devices: one is lost).
   - Adopting anything from the server reloads the page, since every store seeds its state from `localStorage` once at load. An adoption storage refuses (full, disabled) is skipped with an `[auth]` warning instead, or every load would re-adopt and reload.
-- **Signing in fills `myAccount`/`currentAccount` when unset** (`autoPopulateAccountFromLogin`), via the same `resolveAccountSlot` as Home's picker; an existing pick is never overwritten, and a failed resolve retries on the next load.
 - **Table-view keys sync like any key** (`TABLE_VIEW_PREF_KEYS`, `public/tableViewKeys.ts`). They're written only on **Save** (a table change is a draft until then, [game-table.md](game-table.md#layouts-and-saved-views)), so each push is one.
   - A schema v2 blob's table-view keys read as `updatedAt: 0`, so the account's saved layout wins at the next sync: v2 wrote them on every edit and never pushed them.
 - **A push answered 401** (the session ended while the page was open; `prefs.ts`'s `sessionLost`) signs out on the spot and drops pending pushes: each edit's local `updatedAt` stays newer than the server's, so the next sign-in's merge pushes it. Two limits:
   - signing back in as another Steam account is that account's first sync on this device, so its values win over those edits;
   - another open tab keeps its own state until it reloads.
-- **An expired sign-in shows** (`authStore.ts`'s `isSessionExpired`): the `steam.isonoe.net:signed-in-as` localStorage key (its own, never synced) holds the steamid last signed in on this browser; signed out by a check or a 401 while it's set puts an amber dot on the account chip and **Sign in again** / **Stay signed out** in its popover. Sign out and Stay signed out clear the key; an `/api/me` that fails (offline, 5xx) never sets it.
-- **Sign out sends pending pushes first**, then logs out, so a debounced edit still reaches the account.
 - **An adopted entry with the same value** as this device's (another device pushed it) only takes the server's `updatedAt`: no reload.
 - **A user list's view is not a table-view key**: it is the list's own `tableView`, saved into `lists` on **Save** (`setListTableView`, minus `page`/`searchQuery`).
 
@@ -164,4 +180,4 @@ Also outside it, device-local: `steam.isonoe.net:lightbox-hint-seen`, set once t
 - **Bounded**: at most `TASTE_CACHE_MAX` tastes; saving one evicts the oldest (`at`, the last Owned load), never the ★ or current account's. An evicted account's Taste Fit asks to open its Owned again.
 - **Evicted first when storage is full**: a write that hits the quota (`QuotaExceededError`) evicts tastes oldest first until it fits — a pref write any taste, a taste write any but the ★, current and its own — and puts them back if it never does. A `setPref` write that still fails isn't pushed to the server either (the edit snaps back), warns `[prefs]` and shows a banner ([frontend.md](frontend.md#shell)).
 
-**Cross-tab sync**: not implemented. Nothing listens for `storage` events, so two open tabs can hold divergent state until one reloads.
+**Cross-tab sync**: not implemented. Nothing listens for `storage` events, so two open tabs can hold divergent state until one reloads (U274).
