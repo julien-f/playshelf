@@ -29,6 +29,7 @@ Last audited: simplify 2026-10-11 · correctness 2026-10-11 · security 2026-10-
 
 ## Correctness
 
+- **C344 · minor · S** — `public/accountData.ts`'s `settles` signal misses two cases Compare's friend suggestions (`cachedAccountFriends`) read: a failed refresh that deletes the key bumps nothing, so after two ↻ in a row both failing Compare keeps the old friends while the cache is empty; and a first fetch landing after a ↻ started updates nothing, so Compare suggests no friends until the refresh lands. Bump `settles` on both.
 - **C341 · minor · S** — `public/SearchRoute.tsx`'s `refreshGame` writes `statusText` without checking `lookupToken`: refresh game A, pick B whose lookup fails, and A's late reply erases B's "Lookup failed" (or replaces it with A's `limited` message). Guard it as the lookup is.
 - **C342 · minor · S** — since `adoptPrefEntry` notifies, the sign-in merge (`authStore.ts`) reruns the readers of each adopted key; one that writes (the account slot refresh, `accountsStore.ts`) while `syncPrefsWithServer` still awaits its pushes writes locally with `signedInSteamid` still null, so the write reaches the server only at the next sync, and may override it then. Only slot metadata (avatar, name) today. Defer reader writes until the sync settles, or push them after it.
 - **C194 · minor · S** — a list stored or synced with an unknown combine op before `isCombineOp` existed still fails to resolve on every device: nothing checks `op` when lists are read back (`public/listsStore.ts`). Drop or repair such a list on load, with a `[lists]` warning.
