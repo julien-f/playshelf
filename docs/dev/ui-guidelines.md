@@ -65,28 +65,28 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 
 ## Icons
 
-- Drawn with Lucide (`lucide-solid`), one import per icon: `import X from 'lucide-solid/icons/x'`. `npm run lint` bans the `lucide-solid` and `lucide-solid/icons` barrels, which would make the dev server transform every icon.
-- Import an icon by its canonical name: an alias kept for a renamed icon ships as a source re-export with no `.d.ts`, so it renders but fails the typecheck with `TS2307: Cannot find module 'lucide-solid/icons/<alias>'`. The alias file names the canonical one (`history.jsx` imports `./rotate-ccw-clock`).
-- `.lucide` in `styles/base.css` sizes an icon at `1em` in `currentColor` (stroke 1.75): set its size and colour on the element around it.
+- Drawn with Lucide (`lucide-solid`); importing and sizing them: [frontend.md](frontend.md#icons).
 - Decorative: an icon gets no `aria-*`, `role` or `title`, so Lucide marks it `aria-hidden`; an icon-only control keeps its `aria-label`.
 - An icon is markup, so it can't go in an `<option>` or a `title`: an option's label drops it, and a tooltip names the control in words.
 - Kept as text, since they are data or keys rather than icons: ↗ on external links, a deal record's ★/☆/🔥, a table cell's ✓/☆/⚠/⏳ (sorted and copied as text), key caps (`Kbd.tsx` draws an arrow key's glyph as a Lucide arrow, keeping the glyph as hidden text), the set operators ∪∩−, ≈ for an estimate, and the table library's own glyphs.
 
 ## Motion
 
+How each rule is built (helpers, View Transitions, reduced motion): [frontend.md](frontend.md#motion).
+
 - Durations and easing from the `--dur-*` / `--ease-out` tokens in `styles/tokens.css` (`--dur-4`: the TV's room-paced fades); motion explains a change (something opening, arriving, pressed), never decorates.
 - Only `opacity` and `transform` (or `translate`/`scale`) move; layout properties never animate.
-  - Two exceptions. The lightbox's seek line thickens from 4 to 6 px in `height` on hover or focus (`.lb-vc-scrub`). A panel section's body slides open and shut in `height` (`CollapsibleCard`), on a click only. Measured on DLC's 25 items (991 px) at 390 px wide under Chromium's 6× CPU throttle: 0 to 4 frames over 17 ms per opening (33 ms at most, usually one), none closing, over 4 runs; smooth on a Galaxy S10 (Firefox for Android).
+  - Two exceptions, each measured smooth: the lightbox's seek line thickens from 4 to 6 px in `height` on hover or focus; a panel section's body slides open and shut in `height`, on a click only ([panel-and-lightbox.md](panel-and-lightbox.md#the-side-panel)).
 - Press feedback: buttons give to `scale: 0.98` while held, clickable rows to `0.995` (a full-width row would jump at 0.98), and both snap back on release, so a menu the click opens measures its trigger at full size.
 - Explore cards and account tiles lift 3 px under a mouse (`hover: hover`), a pseudo-element filling the gap below so a pointer at the bottom edge doesn't drop them; the ranking's picks don't, being clicked in quick succession.
-- A hero tile's number counts to its new value over 400 ms (`createCountUp`), from its last non-zero value: a list empties out before each reload, so a count from or to 0 would only replay it. The drawn steps are `aria-hidden` and unselectable; the final value beside them is what's read out and copied.
-- A banner comes into place from the edge it sits on (`@starting-style`): down for the view banners, up for the storage-full one at the bottom.
-- A sort, filter or grouping change slides each row from where it was to where it lands (`slideRowsOnViewChange`, positions read on the pointerdown or keydown that starts it); the text search doesn't, as it changes on every key.
-- A table's first rows come in staggered (`cascadeFirstRows`, the first 8, 30 ms apart), once per load: a list's ↻ refresh, a view change and a new search query don't replay it.
-- An image fades in once loaded (`fadeInOnLoad`), so a row or the panel never flashes a half-drawn picture; a cached one shows at once.
-- View Transitions only for a shared element (row thumbnail → panel hero, hero → lightbox), through `viewTransition.ts`'s `morph`: feature-detected, skipped under reduced motion or while another top-layer popover or dialog is open (the lightbox's own dialog morphs: the snapshots paint above it), its `view-transition-name` set on the two elements only for the transition's length, the root cross-fade off, focus moved after `updateCallbackDone`. Not for route changes: the router has no hook, and a lazy route would freeze the screen while its chunk loads.
-- CSS first; JS only where CSS can't (measuring positions or heights). Web Animations go through `motion.ts`'s `animate`, which resolves even when it skips or is cancelled, so cleanup waiting on it always runs.
-- Reduced motion: `styles/base.css` sets every transition to `0s` and every animation to a near-instant single run, so end states are reached at once; it doesn't reach the Web Animations API, hence `animate` skipping under it; JS smooth scrolls go through `smoothScroll()`.
+- A hero tile's number counts to its new value over 400 ms, from its last non-zero value: a list empties out before each reload, so a count from or to 0 would only replay it. The drawn steps are hidden from screen readers and unselectable; the final value beside them is what's read out and copied.
+- A banner comes into place from the edge it sits on: down for the view banners, up for the storage-full one at the bottom.
+- A sort, filter or grouping change slides each row from where it was to where it lands; the text search doesn't, as it changes on every key.
+- A table's first rows come in staggered (the first 8, 30 ms apart), once per load: a list's ↻ refresh, a view change and a new search query don't replay it.
+- An image fades in once loaded, so a row or the panel never flashes a half-drawn picture; a cached one shows at once.
+- View Transitions only for a shared element (row thumbnail → panel hero, hero → lightbox), skipped under reduced motion or while another popover or dialog is open; never for route changes.
+- CSS first; JS only where CSS can't (measuring positions or heights).
+- Reduced motion: every transition and animation, JS ones included, reaches its end state at once.
 
 ## Checklist for a new UI feature
 

@@ -38,7 +38,7 @@ The dedup map, semaphores, breakers and metrics are process-local: correct for t
 ## Tooling
 
 - **`tsconfig.json`** — `strict`, `noUnusedLocals` (dead imports fail the typecheck), `noEmit`, `moduleResolution: bundler`, `verbatimModuleSyntax` (type-only imports use `import type`), over `public/**/*.ts`; `paths: {"/*": ["./public/*"]}` maps the browser-style absolute imports (`'/utils.ts'`) onto the source tree. `tsconfig.e2e.json` extends it over `e2e/`. The compiler is TypeScript 7 (`tsgo`).
-- **`eslint.config.mjs`** — `eslint-plugin-solid`'s `flat/typescript` rules, plus `no-restricted-imports` banning `lucide-solid`'s barrel imports ([ui-guidelines.md](ui-guidelines.md#icons)), parsed by `@babel/eslint-parser` ([decisions.md](decisions.md#linting-babel-not-typescript-eslint)). `solid/reactivity` is the rule that matters ([frontend.md](frontend.md#reactivity)). `.mjs` because `package.json` has no `"type": "module"`.
+- **`eslint.config.mjs`** — `eslint-plugin-solid`'s `flat/typescript` rules, plus `no-restricted-imports` banning `lucide-solid`'s barrel imports ([frontend.md](frontend.md#icons)), parsed by `@babel/eslint-parser` ([decisions.md](decisions.md#linting-babel-not-typescript-eslint)). `solid/reactivity` is the rule that matters ([frontend.md](frontend.md#reactivity)). `.mjs` because `package.json` has no `"type": "module"`.
 - **Prettier** (`.prettierrc.json`) formats the whole tree.
 
 ## API routes

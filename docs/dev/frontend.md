@@ -138,6 +138,22 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `currency.ts` — approximate fixed exchange rates, for ordering and summing mixed-currency prices and their "≈" hint.
 - `style.css` — the stylesheet entry: declares the cascade layer order and imports `styles/*.css`, each partial wrapped in its own `@layer` (`reset` and `base`: elements, and the tokens in `tokens.css`, which `presentation.css` imports too; `layout`: the shell; `components`: everything else, one section per screen), except `styles/vendor-data-table.css` (the table library's overrides and its `html:root { --color-* }` theme, unlayered and imported last: the library injects an unlayered `<style>`, which beats any layered rule whatever its specificity, so a `.dt-*` override in a layer has no effect).
 
+## Icons
+
+- One import per icon: `import X from 'lucide-solid/icons/x'`. `npm run lint` bans the `lucide-solid` and `lucide-solid/icons` barrels, which would make the dev server transform every icon.
+- Import an icon by its canonical name: an alias kept for a renamed icon ships as a source re-export with no `.d.ts`, so it renders but fails the typecheck with `TS2307: Cannot find module 'lucide-solid/icons/<alias>'`. The alias file names the canonical one (`history.jsx` imports `./rotate-ccw-clock`).
+- `.lucide` in `styles/base.css` sizes an icon at `1em` in `currentColor` (stroke 1.75): set its size and colour on the element around it.
+
+## Motion
+
+How [ui-guidelines.md](ui-guidelines.md#motion)'s rules are built.
+
+- Helpers: `createCountUp` (a hero tile's count; its drawn steps `aria-hidden`), `slideRowsOnViewChange` (positions read on the pointerdown or keydown that starts a sort, filter or grouping change), `cascadeFirstRows` (first rows staggered), `fadeInOnLoad` (images); banners slide in through `@starting-style`.
+- The lightbox's seek line is `.lb-vc-scrub`; the panel sections' height slide is `CollapsibleCard`.
+- View Transitions go through `viewTransition.ts`'s `morph`: feature-detected, its `view-transition-name` set on the two elements only for the transition's length, the root cross-fade off, focus moved after `updateCallbackDone`. The lightbox's own dialog morphs, as the snapshots paint above it. Not for route changes: the router has no hook, and a lazy route would freeze the screen while its chunk loads.
+- Web Animations go through `motion.ts`'s `animate`, which resolves even when it skips or is cancelled, so cleanup waiting on it always runs.
+- Reduced motion: `styles/base.css` sets every transition to `0s` and every animation to a near-instant single run; that doesn't reach the Web Animations API, hence `animate` skipping under it; JS smooth scrolls go through `smoothScroll()`.
+
 ## Reactivity
 
 Everything the frontend renders is driven by Solid's own reactivity — there is no "please re-render" call anywhere, and reintroducing one is the mistake this section exists to prevent.
