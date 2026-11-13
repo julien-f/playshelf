@@ -162,6 +162,6 @@ Outside the blob: `steam.isonoe.net:taste:<accountId>` (`tagTaste.ts`'s `Taste`:
 Also outside it, device-local: `steam.isonoe.net:lightbox-hint-seen`, set once the lightbox's one-time hint has shown, `steam.isonoe.net:lightbox-muted`, the viewer's own trailer mute, and `steam.isonoe.net:presentation-screen`, the screen the presentation window was last placed on.
 
 - **Bounded**: at most `TASTE_CACHE_MAX` (5) tastes; saving one evicts the oldest (`at`, the last Owned load), never the ★ or current account's. An evicted account's Taste Fit asks to open its Owned again.
-- **Evicted first when storage is full**: a write that hits the quota (`QuotaExceededError`) evicts tastes oldest first until it fits — a pref write any taste, a taste write any but the ★, current and its own — and puts them back if it never does. A `setPref` write that still fails isn't pushed to the server either (the edit snaps back), warns `[prefs]` and shows a banner ([panel-and-lightbox.md](panel-and-lightbox.md#the-side-panel)).
+- **Evicted first when storage is full**: a write that hits the quota (`QuotaExceededError`) evicts tastes oldest first until it fits — a pref write any taste, a taste write any but the ★, current and its own — and puts them back if it never does. A `setPref` write that still fails isn't pushed to the server either (the edit snaps back), warns `[prefs]` and shows a banner ([frontend.md](frontend.md#shell)).
 
 **Cross-tab sync**: not implemented. Nothing listens for `storage` events, so two open tabs can hold divergent state until one reloads.

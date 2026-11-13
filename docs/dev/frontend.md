@@ -2,9 +2,10 @@
 
 A Solid.js single-page app in `public/`, TypeScript throughout, bundled by Vite. One HTML entry for the app (`index.html` → `AppRoot.tsx`, plus `present.html` for the presentation window), `@solidjs/router` for navigation, and a persistent shell that survives every route change.
 
-The data model it renders — accounts, lists, combines, the localStorage schema — is [lists-and-accounts.md](lists-and-accounts.md). This file is the machinery: routes, modules, reactivity, URL state. The table and each list kind are [game-table.md](game-table.md); the side panel, lightbox and presentation window [panel-and-lightbox.md](panel-and-lightbox.md).
+The data model it renders — accounts, lists, combines, the localStorage schema — is [lists-and-accounts.md](lists-and-accounts.md). This file is the machinery: routes, modules, reactivity, URL state. The table and each list kind are [game-table.md](game-table.md); the side panel and lightbox [panel-and-lightbox.md](panel-and-lightbox.md); the presentation window [presentation.md](presentation.md).
 
 - [Routes](#routes)
+- [Shell](#shell)
 - [Module map](#module-map)
 - [Reactivity](#reactivity)
 - [Rows, streaming, and stale loads](#rows-streaming-and-stale-loads)
@@ -55,6 +56,14 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 **Looking up a game never navigates away from a route with a list context of its own** — the nav-bar search box and a panel's DLC/base-game links open in place (a real row if the appid is loaded, a standalone panel via `?game=` otherwise). `/search` counts as having one (its results). Only Home, `/bundles`, `/about`, the rank screen (`RankRoute`) and the 404 page navigate, to `/game/:appid`. See `AppShell.tsx`'s `openGameGlobally`.
 
 - That navigation carries `{ lookup: true }` in its history state, so the panel takes that entry as its own (`overlayHistory.ts`'s `ownPage`): ×, Esc and Back all return to the page the lookup came from in one step, rather than to Recently Looked Up. A shared `/game/:appid` link has no such state and closes to `/game`.
+
+## Shell
+
+Above 768px the shell is locked to the viewport and **`.app-scroll` is the page's scroller**, avoiding two scrollbars side by side. Nav and footer sit inside it, so they still scroll away; `.app-content` takes `flex: 1` to keep the footer down on a short page.
+
+- **`AppShell` owns the page's scroll position** (`pageScrollTop`/`scrollPageToTop` — `.app-scroll` on desktop, the document on mobile, so both are read and written). It scrolls to the top on each path change, and shows the floating **Back to top** button (an up arrow) past `TO_TOP_AFTER_PX`. The button's `position: fixed` ignores the shell's gutter, so `.panel-open` offsets it by `--panel-w`; its z-index is below the panel's.
+- **A pref write storage refuses** (`prefs.ts`'s `prefsWriteFailed`) shows `StorageFullBanner` (`role="alert"`), fixed along the bottom left of the Back to top button and over the panel. Dismiss hides it until a write succeeds again, handing focus back to where it was before the banner (else `<main>`); the next failure brings it back. The failed edit isn't kept in memory: it snaps back.
+- **Below 769px the lock is off** and the document scrolls: the panel is an overlay there, and a document that never scrolls is a URL bar that never collapses.
 
 ## Module map
 
@@ -119,8 +128,8 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `loadTiming.ts` — a list load's User Timing measures from `list:start`: `list:rows` (the table is built), `list:listed` (every row's fast part received), `list:done` (store parts too); the latest load's only. Read them in DevTools' Performance panel or with `performance.getEntriesByType('measure')`.
 - `priceLoading.ts` — the `POST /api/prices` call and the row-field mapping/fallbacks around it.
 - `panel.tsx` / `panelData.ts` / `panelNav.ts` / `panelHistory.ts` / `panelKeyboard.ts` / `ownerList.ts` — the side panel and its per-game data, prev/next nav, DLC trail rule, keyboard handler, and the pure half of the "Owned by" card (see [panel-and-lightbox.md](panel-and-lightbox.md#the-side-panel)).
-- `lightbox.tsx` / `mediaItems.ts` / `lightboxSwipe.ts` / `hlsPlayer.ts` — screenshot/video lightbox, its ordered media list, its swipe thresholds/decision, and trailer playback (shared with the presentation window) (see [panel-and-lightbox.md](panel-and-lightbox.md)).
-- `presentation.ts` / `presentationProtocol.ts` / `PresentationChip.tsx` / `PresentationView.tsx` / `presentationScreen.ts` — presenting on a second screen: the main window's side and the nav chip, their messages, the presentation window itself, and the screen it's placed on (see [panel-and-lightbox.md](panel-and-lightbox.md#the-presentation-window)).
+- `lightbox.tsx` / `mediaItems.ts` / `lightboxSwipe.ts` / `hlsPlayer.ts` — screenshot/video lightbox, its ordered media list, its swipe thresholds/decision, and trailer playback (shared with the presentation window) (see [panel-and-lightbox.md](panel-and-lightbox.md), [presentation.md](presentation.md)).
+- `presentation.ts` / `presentationProtocol.ts` / `PresentationChip.tsx` / `PresentationView.tsx` / `presentationScreen.ts` — presenting on a second screen: the main window's side and the nav chip, their messages, the presentation window itself, and the screen it's placed on (see [presentation.md](presentation.md)).
 - `overlayHistory.ts` — the history entry each open overlay pushes (see [panel-and-lightbox.md](panel-and-lightbox.md#the-side-panel)).
 - `viewTransition.ts` / `artTint.ts` — the shared-element morphs into the panel and the lightbox; the panel ground's tint from the game's art.
 - `gameSearch.ts` — the combobox/debounce UI for "look up any game" (the shell owns where results go).

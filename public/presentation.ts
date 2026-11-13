@@ -1,5 +1,5 @@
 // The main window's side of the presentation window (PresentationView.tsx): opens it and sends it what to
-// show, over a BroadcastChannel tagged with this window's id (docs/dev/panel-and-lightbox.md#the-presentation-window).
+// show, over a BroadcastChannel tagged with this window's id (docs/dev/presentation.md).
 import { createSignal } from 'solid-js';
 import { metaOrBasics } from './utils.ts';
 import { buildMediaItems, mediaLabel } from './mediaItems.ts';
