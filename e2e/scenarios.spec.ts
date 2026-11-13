@@ -3702,6 +3702,21 @@ test('L5 edge: Runs on Linux keeps ProtonDB Gold or better', async ({ page }) =>
   await expect(page.getByRole('columnheader', { name: /ProtonDB/ })).toBeVisible();
 });
 
+test('L5 edge: Runs on Linux is suggested on Wishlist too, before buying', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/wishlist');
+  await expect(rows(page)).toHaveCount(4);
+  const menu = await newView(page);
+  await menu.getByRole('button', { name: 'Runs on Linux (ProtonDB)' }).click();
+  await expect(
+    page.getByRole('navigation', { name: 'Views' }).getByRole('link', { name: /Runs on Linux/ }),
+  ).toHaveAttribute('aria-current', 'page');
+  await expect(rows(page)).toHaveCount(1); // not It Takes Two (Silver), Apex Legends (Borked), Quiet Little Game (no report)
+  await expect(rows(page).first()).toContainText('Overcooked! 2');
+  await expect(page.getByRole('columnheader', { name: /ProtonDB/ })).toBeVisible();
+  await expect(page.locator('.pref-unsaved-banner')).toBeHidden(); // a fresh view has nothing to save
+});
+
 test('L5.2: the table as it is saves as a named view', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
@@ -3745,7 +3760,7 @@ test('L5 edge: Bargains is suggested on Wishlist, and only with prices', async (
   await page.goto('/lists/wishlist');
   await expect(rows(page)).toHaveCount(4);
   menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Save as view']);
+  await expect(menu.getByRole('button')).toHaveText(['Runs on Linux (ProtonDB)', 'Save as view']);
 });
 
 test('L5.3: the tabs switch views in place, each keeping its unsaved edits', async ({ page }) => {

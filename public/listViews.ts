@@ -91,6 +91,12 @@ export const isPlayNextCandidate = (
 // Price Status at a 1-year low or better.
 const BARGAIN_STATUSES = DEAL_RECORD_TIERS.filter((t) => t.tier !== '3mo').map((t) => t.statusLabel);
 
+// Named for its source: not Steam Deck Verified. Filters AND across columns, so a native port with no report is out.
+const LINUX_NAME = 'Runs on Linux (ProtonDB)';
+const LINUX_VIEW = {
+  filters: { protondb: ['native', 'platinum', 'gold'].map((tier) => protonDbValue(tier) as string) },
+};
+
 export const VIEW_TEMPLATES: readonly ViewTemplate[] = [
   {
     id: 'recently-played',
@@ -132,9 +138,8 @@ export const VIEW_TEMPLATES: readonly ViewTemplate[] = [
   {
     id: 'runs-on-linux',
     kind: 'owned',
-    // Named for its source: not Steam Deck Verified. Filters AND across columns, so a native port with no report is out.
-    name: 'Runs on Linux (ProtonDB)',
-    view: { filters: { protondb: ['native', 'platinum', 'gold'].map((tier) => protonDbValue(tier) as string) } },
+    name: LINUX_NAME,
+    view: LINUX_VIEW,
     // No sort: Owned's default, best rated first.
     cols: ['capsule', 'name', 'protondb', 'platforms', 'steamdbRating', 'tasteFit', 'playtime', 'hltbAll'],
   },
@@ -155,6 +160,25 @@ export const VIEW_TEMPLATES: readonly ViewTemplate[] = [
       'hasDemo',
     ],
     needsPrices: true,
+  },
+  // A pre-purchase check, so offered with or without prices; its own id, as template ids are looked up across kinds.
+  {
+    id: 'wishlist-runs-on-linux',
+    kind: 'wishlist',
+    name: LINUX_NAME,
+    view: LINUX_VIEW,
+    // No sort: Wishlist's default, best rated first.
+    cols: [
+      'capsule',
+      'name',
+      'protondb',
+      'platforms',
+      'steamdbRating',
+      'tasteFit',
+      'hltbAll',
+      'releaseDate',
+      'hasDemo',
+    ],
   },
 ];
 

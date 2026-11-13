@@ -94,11 +94,14 @@ test('suggestedTemplates: per kind, minus created ones (even renamed), priced on
   const { suggestedTemplates, createFromTemplate, renameListView } = views();
   const ids = (kind, priced) => suggestedTemplates(kind, priced).map((t) => t.id);
   assert.deepEqual(ids('owned', true), ['recently-played', 'play-next', 'short-games', 'runs-on-linux']);
-  assert.deepEqual(ids('wishlist', true), ['bargains']);
-  assert.deepEqual(ids('wishlist', false), []);
+  assert.deepEqual(ids('wishlist', true), ['bargains', 'wishlist-runs-on-linux']);
+  assert.deepEqual(ids('wishlist', false), ['wishlist-runs-on-linux']);
   const v = createFromTemplate(suggestedTemplates('owned', true)[0]);
   renameListView('owned', v.id, 'Lately');
   assert.deepEqual(ids('owned', true), ['play-next', 'short-games', 'runs-on-linux']);
+  // Each kind counts its own: the Owned one created leaves Wishlist's suggested.
+  createFromTemplate(suggestedTemplates('owned', true).at(-1));
+  assert.deepEqual(ids('wishlist', false), ['wishlist-runs-on-linux']);
 });
 
 test('Play next and Short games leave out finished, abandoned and unreleased games', () => {
@@ -185,10 +188,17 @@ test('Play next sorts by Taste fit, then rating: the order with no taste profile
   ]);
 });
 
-test('Runs on Linux keeps ProtonDB Native, Platinum and Gold, as the column spells them', () => {
+test('Runs on Linux keeps ProtonDB Native, Platinum and Gold, as the column spells them, on Owned and Wishlist', () => {
   const { VIEW_TEMPLATES } = views();
   const { protonDbValue } = require('../public/gameColumns.ts');
-  const linux = VIEW_TEMPLATES.find((t) => t.id === 'runs-on-linux');
-  assert.deepEqual(linux.view.filters, { protondb: ['native', 'platinum', 'gold'].map(protonDbValue) });
-  assert.deepEqual(linux.view.filters.protondb, ['Native', 'Platinum', 'Gold']);
+  for (const [id, kind] of [
+    ['runs-on-linux', 'owned'],
+    ['wishlist-runs-on-linux', 'wishlist'],
+  ]) {
+    const linux = VIEW_TEMPLATES.find((t) => t.id === id);
+    assert.equal(linux.kind, kind);
+    assert.equal(linux.name, 'Runs on Linux (ProtonDB)');
+    assert.deepEqual(linux.view.filters, { protondb: ['native', 'platinum', 'gold'].map(protonDbValue) });
+    assert.deepEqual(linux.view.filters.protondb, ['Native', 'Platinum', 'Gold']);
+  }
 });
