@@ -21,14 +21,13 @@ const PROJECTS = Object.keys(require('./e2e-projects'));
 
 const ROOT = path.join(__dirname, '..');
 const CACHE = path.join(ROOT, 'node_modules/.cache');
-// Under the git common dir, so a build passed in one checkout (a feature worktree) is skipped in another.
-const PASS_FILE = path.join(
-  execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
-    cwd: ROOT,
-    encoding: 'utf8',
-  }).trim(),
-  'e2e-pass.json',
-);
+// Shared by every checkout: the pass record (a build passed in a feature worktree is skipped in another) and the
+// run queue.
+const GIT_COMMON = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+  cwd: ROOT,
+  encoding: 'utf8',
+}).trim();
+const PASS_FILE = path.join(GIT_COMMON, 'e2e-pass.json');
 // Builds whose passes are kept: enough for every live checkout's latest.
 const PASSES_KEPT = 20;
 // playwright.config.ts keeps the port below Linux's ephemeral range.
@@ -70,21 +69,45 @@ const listening = (port) =>
     socket.once('connect', () => done(true)).once('error', () => done(false));
   });
 
-// Claims the lock file `<lockDir>/e2e-<port>.lock` for this process, or returns false while a live one holds it.
-function lock(lockDir, port) {
-  const file = path.join(lockDir, `e2e-${port}.lock`);
+// The pid and checkout written in a lock file.
+const holderOf = (file) => {
+  const [pid, checkout] = fs.readFileSync(file, 'utf8').split('\n');
+  return { pid: Number(pid), checkout };
+};
+
+// Claims the lock file `<lockDir>/e2e-<name>.lock` for this process, or returns false while a live one holds it.
+function lock(lockDir, name) {
+  const file = path.join(lockDir, `e2e-${name}.lock`);
   try {
-    fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
+    fs.writeFileSync(file, `${process.pid}\n${ROOT}`, { flag: 'wx' });
     return file;
   } catch (err) {
     if (err.code !== 'EEXIST') throw err;
   }
   try {
-    process.kill(Number(fs.readFileSync(file, 'utf8')), 0);
+    process.kill(holderOf(file).pid, 0);
     return false;
   } catch {
     fs.rmSync(file, { force: true }); // its run died without cleaning up
-    return lock(lockDir, port);
+    return lock(lockDir, name);
+  }
+}
+
+// Takes the machine's e2e turn, waiting while another checkout's run holds it: concurrent runs each slow down
+// several-fold and trip the load-sensitive flakes (setup-backlog.md P78). Returns its lock file.
+async function waitTurn({
+  lockDir = GIT_COMMON,
+  sleep = () => new Promise((resolve) => setTimeout(resolve, 2000)),
+  say = console.log,
+} = {}) {
+  for (let said = false; ; said = true) {
+    const file = lock(lockDir, 'run');
+    if (file) return file;
+    if (!said) {
+      const { pid, checkout } = holderOf(path.join(lockDir, 'e2e-run.lock'));
+      say(`e2e: waiting for the run in ${checkout} (pid ${pid}) to finish`);
+    }
+    await sleep();
   }
 }
 
@@ -164,6 +187,11 @@ async function main() {
     }
   }
 
+  const waitStart = Date.now();
+  const turn = await waitTurn();
+  process.on('exit', () => fs.rmSync(turn, { force: true }));
+  const waited = Math.round((Date.now() - waitStart) / 1000);
+
   const start = portOf('e2e');
   let claimed;
   try {
@@ -186,7 +214,9 @@ async function main() {
   const passed = passedOn(hash);
   const { running, runArgs } = planRun(pwArgs, passed, ifChanged);
   const log = (ok, seconds) =>
-    ifChanged && running && record('e2e-runs', { asked: splitProjects(pwArgs).projects, ran: running, ok, seconds });
+    ifChanged &&
+    running &&
+    record('e2e-runs', { asked: splitProjects(pwArgs).projects, ran: running, ok, seconds, waited });
   if (!runArgs) {
     log(true, 0);
     console.log('e2e: same build and tests as the last passing run, skipped');
@@ -208,4 +238,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { claimPort, inputsHash, listening, passedOn, planRun, recordPass };
+module.exports = { claimPort, inputsHash, listening, passedOn, planRun, recordPass, waitTurn };

@@ -163,6 +163,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Reorganised the developer docs: bundles and prices, the presentation window and the taste model get their own docs, each fact has one owner, and CLAUDE.md is the only doc index.
 - A post-merge hook runs npm ci when a merge changes package-lock.json
 - An e2e pass in one checkout is skipped by the hooks in another
+- e2e runs from different checkouts take turns instead of running at once
 
 ## [0.12.0] - 2026-10-30
 
