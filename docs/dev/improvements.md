@@ -60,7 +60,6 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U197 · minor · C5, F1** — same for desktop Linux: a **Linux rating** from `GetAppReviews`' `hardware_os`, with U196's cost and sparsity caveats.
 - **U139 · polish · C4** — panel Owned by reads "never played · not played". One phrase.
 - **U237 · minor · C3** — a saved dynamic list grouped by membership shows only the current account's playtime: no Played column per player and no per-player hours in the panel's "Owned by", which the live comparison has (`createDefaultFetchers`' `onOwners`).
-- **U246 · minor · A4, C1** — a comparison can't start from the friends list: each friend is typed or picked again in Compare's player boxes. Select friends there, **Compare with me**, landing on C1's result with the current account unchanged.
 - **U247 · minor · C2** — a comparison's group missing one player has no price columns, so pricing what that player should buy means opening each panel. Price columns on comparisons, sortable (U244's totals then apply).
 - **U248 · minor · C4** — the panel's Owned by covers the account's own members or a comparison's players, never the friends who own the game. Needs one library fetch per friend: blocked on a volume review against [integrations.md](integrations.md)'s trust tiers, before any design.
 

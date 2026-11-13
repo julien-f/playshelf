@@ -29,6 +29,7 @@ import {
   getEffectiveCurrentAccount,
   getAccountOverride,
   accountDisplayLabel,
+  accountIdentifiers,
   refreshAccountInfo,
 } from './accountsStore.ts';
 import { getAccountOverrideState, adoptAccount, accountOverrideStatusText } from './accountOverride.ts';
@@ -813,7 +814,15 @@ export default function HomeRoute() {
 
         <Show when={currentAccount()}>
           {(account) => (
-            <AccountFriends accountId={account().id} myAccountId={myAccount()?.id ?? null} onExplore={pickAccount} />
+            <AccountFriends
+              accountId={account().id}
+              accountIdentifiers={accountIdentifiers(account())
+                .map((m) => m.identifier)
+                .join(',')}
+              accountLabel={accountDisplayLabel(account())}
+              myAccountId={myAccount()?.id ?? null}
+              onExplore={pickAccount}
+            />
           )}
         </Show>
       </section>

@@ -91,8 +91,13 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   3. explore one
   4. back on Home, their friends list marks mutual friends
 - **Done when**: the friend becomes the current account and joins Home's Accounts, so Compare's player boxes offer them next.
-- **Or**: 5. select several friends 6. **Compare with me** ◇ U246 7. lands on C1's result with me plus them, my current account unchanged
-- **Edges**: private friends list; a Family's merged friends list; the list's refresh after adding a friend on Steam.
+- **Or**:
+
+  5. select up to 5 friends
+  6. **Compare with <account>**
+  7. lands on C1's result with that account plus them, my current account unchanged; Back returns
+
+- **Edges**: private friends list; a Family's merged friends list (its own members can't be picked); a sixth friend (disabled, says why); the list's refresh after adding a friend on Steam.
 
 ### A5 What kind of player is this?
 
@@ -113,7 +118,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
 - **Who / goal**: a group of 2–5 friends wants the games they all own, best-rated first.
 - **Steps**:
   1. **Compare**
-  2. one player box per friend (pick known accounts or type identifiers; or start from A4's **Compare with me** ◇ U246)
+  2. one player box per friend (pick known accounts or type identifiers; or start from A4's **Compare with <account>**)
   3. submit
   4. read the "everyone" group
   5. sort by rating, filter by tag (e.g. co-op)

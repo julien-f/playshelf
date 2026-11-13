@@ -711,6 +711,81 @@ test('F3 edge: Owned says which tags the account plays most, each filtering the 
   await expect(coop).toHaveAttribute('aria-pressed', 'true');
 });
 
+const openFriends = async (page: Page) => {
+  await page.goto('/');
+  await page.getByText(/^Friends \(\d+\)$/).click();
+};
+// A friends-list entry in server.js's shape, for lists the fixtures don't hold.
+const friendJson = (steamid: string, personaname: string) => ({
+  steamid,
+  personaname,
+  avatar: '',
+  profileurl: `https://steamcommunity.com/profiles/${steamid}/`,
+  timecreated: 1300000000,
+  loccountrycode: 'FR',
+  realname: '',
+});
+
+test('A4: explore a friend from my friends list, who shows our mutual friends', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await openFriends(page);
+  await page
+    .locator('.account-friends-list li')
+    .filter({ hasText: 'Bob' })
+    .getByRole('button', { name: 'Explore' })
+    .click();
+  await expect(page.getByRole('banner')).toContainText('Bob');
+  await page.getByText('Friends (2)').click();
+  await expect(page.locator('.account-friends-list li').filter({ hasText: 'Carol' })).toContainText('Mutual');
+});
+
+test('A4.5-7: select friends, then compare them with the current account, which stays current', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await openFriends(page);
+  await expect(page.getByText('Select up to 5 friends to compare with Alice.')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Select Bob' }).check();
+  await page.getByRole('checkbox', { name: 'Select Carol' }).check();
+  await page.getByRole('link', { name: 'Compare with Alice (2)' }).click();
+  await expect(page).toHaveURL(/\/lists\/compare\?/);
+  expect(new URL(page.url()).searchParams.getAll('u')).toHaveLength(3);
+  await expect(groupRows(page).first()).toBeVisible();
+  await expect(page.locator('.account-chip-btn')).toContainText('Alice');
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator('.account-chip-btn')).toContainText('Alice');
+});
+
+test('A4 edge: past five friends the others are disabled, and the list says why', async ({ page }) => {
+  const friends = Array.from({ length: 6 }, (_, i) => friendJson(`7656119800000010${i}`, `Friend ${i + 1}`));
+  await page.route('**/api/friends**', (route) =>
+    route.fulfill({ json: { friends, unavailable: [], fetchedAt: Date.now() } }),
+  );
+  await asPlayer(page, ALICE);
+  await openFriends(page);
+  for (let i = 1; i <= 5; i++) await page.getByRole('checkbox', { name: `Select Friend ${i}` }).check();
+  await expect(page.getByRole('checkbox', { name: 'Select Friend 6' })).toBeDisabled();
+  await expect(page.getByText('Up to 5 friends: a comparison is for one group.')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Select Friend 1' }).uncheck();
+  await expect(page.getByRole('checkbox', { name: 'Select Friend 6' })).toBeEnabled();
+});
+
+test("A4 edge: the account's own members, in its friends list, can't be picked", async ({ page }) => {
+  await page.route('**/api/friends**', (route) =>
+    route.fulfill({
+      json: {
+        friends: [friendJson(ALICE.steamid, 'Alice'), friendJson(BOB.steamid, 'Bob')],
+        unavailable: [],
+        fetchedAt: Date.now(),
+      },
+    }),
+  );
+  await asPlayer(page, ALICE);
+  await openFriends(page);
+  await expect(page.getByRole('checkbox', { name: 'Select Bob' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Select Alice' })).toHaveCount(0);
+});
+
 test('A5: Favourite studios names the studios behind 2+ played games, each filtering Owned or opening its list', async ({
   page,
 }, testInfo) => {

@@ -4280,6 +4280,19 @@
   .account-friends-list li .btn {
     margin-left: auto;
   }
+  .account-friends-select {
+    inline-size: 24px;
+    block-size: 24px;
+    margin: 0;
+    accent-color: var(--accent);
+  }
+  .account-friends-compare {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-block: 4px 8px;
+  }
   .account-friends summary {
     width: fit-content;
     padding-block: 6px;
