@@ -185,6 +185,7 @@ interface CacheEntry {
   value?: unknown; // once settled, for a synchronous read
   // Landed while replaced: no reader was told, so restoring it moves the version.
   unannounced?: boolean;
+  previous?: unknown; // the value it replaces, read until it settles
 }
 // One fetch per kind and account, shared by every caller (Home, a list, the panel's ✓/☆).
 const accountCache = new Map<string, CacheEntry>();
@@ -212,12 +213,13 @@ export function accountDataVersion(kind: AccountDataKind, members: string[]): nu
 
 function storeEntry<T>(key: string, promise: Promise<T>): Promise<T> {
   const replaced = accountCache.get(key);
-  const entry: CacheEntry = { promise, at: Date.now() };
+  const entry: CacheEntry = { promise, at: Date.now(), previous: replaced?.value ?? replaced?.previous };
   accountCache.set(key, entry);
   const bump = (map: Map<string, Signal<number>>) => map.get(key)?.[1]((v) => v + 1);
   promise.then(
     (value) => {
       entry.value = value;
+      delete entry.previous;
       if (accountCache.get(key) !== entry) return void (entry.unannounced = true);
       bump(settles);
       if (replaced) bump(versions);
@@ -404,12 +406,12 @@ export function fetchAccountFriends(
 }
 
 // The friends list this page load already fetched for these members, if any — never a request.
-// Tracked: a fetch in flight still shows once it lands.
+// Tracked: a fetch in flight still shows once it lands, and a ↻ shows the list it replaces until then.
 export function cachedAccountFriends(members: string[]): AccountFriends | undefined {
   const key = cacheKey('friends', members);
   counter(settles, key)[0]();
   const entry = accountCache.get(key);
-  return isFresh(entry) ? (entry.value as AccountFriends | undefined) : undefined;
+  return isFresh(entry) ? ((entry.value ?? entry.previous) as AccountFriends | undefined) : undefined;
 }
 
 // Home's "pick an account" resolve step — there's no standalone "just resolve an identifier"
