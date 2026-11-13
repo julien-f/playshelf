@@ -84,7 +84,6 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 - **U181 · minor · A3, I3** — with **Add Steam Family account**, both lookup fields are named "Steam name, profile URL, or 64-bit ID", so a screen reader can't tell them apart. Number them ("Family member 2").
 - **U245 · polish · A1, A4** — the first account resolved doesn't become the ★ account: only a Steam sign-in stars one (`authStore.ts`), so a first visitor stars it by hand or never — and until then a friend's friends list marks no Mutual friends (A4.4). Star the first resolved account while none is starred.
-- **U267 · polish · A4** — a single account's private friends list reads "Friends list is private for 1 member.", Family wording ([glossary](glossary.md): a member is inside a Family), with nothing on how to open it. "Dave's friends list is private", plus where Steam sets it.
 - **U251 · minor · D3** — Home says nothing about what changed since the last visit: wishlist games now at a record low, new bundles holding wishlist games, owned games not yet in a ranking. Each item links to its list; "last visit" lives in localStorage (and Sync), nothing server-side.
 
 ## Consistency and polish

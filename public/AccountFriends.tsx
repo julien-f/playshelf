@@ -7,6 +7,7 @@ import { A } from '@solidjs/router';
 import ArrowRight from 'lucide-solid/icons/arrow-right';
 import Handshake from 'lucide-solid/icons/handshake';
 import RefreshCw from 'lucide-solid/icons/refresh-cw';
+import { SteamPrivacyLink } from './SteamPrivacyLink.tsx';
 import { accountSlotFrom, fetchAccountFriends, membersFromAccountId, type AccountFriend } from './accountData.ts';
 import { fmtAge } from './utils.ts';
 import { compareUrl } from './urlState.ts';
@@ -99,7 +100,10 @@ export function AccountFriends(props: {
           </p>
           <Show when={data().unavailable.length > 0}>
             <p class="account-friends-note">
-              Friends list is private for {data().unavailable.length} member{data().unavailable.length > 1 ? 's' : ''}.
+              {membersFromAccountId(props.accountId).length === 1
+                ? `${props.accountLabel}'s friends list isn't public.`
+                : `Friends list isn't public for ${data().unavailable.length} member${data().unavailable.length > 1 ? 's' : ''}.`}{' '}
+              In Steam: Edit Profile → Privacy Settings → Friends List: Public. <SteamPrivacyLink />
             </p>
           </Show>
           <Show

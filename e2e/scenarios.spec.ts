@@ -790,6 +790,17 @@ test('A4 edge: past five friends the others are disabled, and the list says why'
   await expect(page.getByRole('checkbox', { name: 'Select Friend 6' })).toBeEnabled();
 });
 
+test('A4 edge: a private friends list is named by its owner, with where Steam makes it public', async ({ page }) => {
+  await asPlayer(page, DAVE);
+  await page.goto('/');
+  await page.getByText('Friends (private)').click();
+  const note = page.locator('.account-friends-note').first();
+  await expect(note).toHaveText(
+    "Dave's friends list isn't public. In Steam: Edit Profile → Privacy Settings → Friends List: Public. Steam privacy settings ↗",
+  );
+  await expect(note.getByRole('link', { name: /Steam privacy settings/ })).toBeVisible();
+});
+
 test("A4 edge: the account's own members, in its friends list, can't be picked", async ({ page }) => {
   await page.route('**/api/friends**', (route) =>
     route.fulfill({
