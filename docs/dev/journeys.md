@@ -430,7 +430,7 @@ Tests map to journeys by title: `A1: â€¦` covers A1's built steps, `A1.1,3-4: â€
   2. go fullscreen (F, or its button)
   3. tap to show the controls; seek, mute, pause with the centre button
   4. tap again to hide them
-- **Done when**: a tap toggles the controls and never pauses by itself; targets are 44 px under a finger; a mute is kept for the next trailers; the phone turns to landscape and back after; Esc leaves fullscreen before closing.
+- **Done when**: a tap toggles the controls and never pauses by itself; targets are full-size under a finger ([ui-guidelines.md](ui-guidelines.md#touch-and-phone)); a mute is kept for the next trailers; the phone turns to landscape and back after; Esc leaves fullscreen before closing.
 - **Edges**: the browser refuses sound (muted, an Unmute button saying so); a double-tap seek, then more taps on that side; an iPhone (the native player); the trailer ends (a replay, no moving on).
 
 ## Sharing
@@ -498,7 +498,7 @@ Tests map to journeys by title: `A1: â€¦` covers A1's built steps, `A1.1,3-4: â€
 
 ### D1 "I just bought it â€” why isn't it here?"
 
-- **Who / goal**: a game I bought an hour ago is missing from Owned; library data is cached for up to 30 days.
+- **Who / goal**: a game I bought an hour ago is missing from Owned; library data is cached for up to `LIBRARY_CACHE_TTL_MINUTES` ([default.env](../../default.env)).
 - **Steps**:
   1. Owned
   2. notice the **Updated** age

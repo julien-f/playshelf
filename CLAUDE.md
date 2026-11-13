@@ -82,10 +82,10 @@ The user-level rules apply; here:
 
 After making changes:
 
-1. Update or add tests to cover the change: the single-file command while iterating, then `npm run format`. Before committing a UI change, run only `npm run test:e2e -- --project=phone`: the hook runs desktop e2e, pre-push both widths. Fixing a failing or flaky test: search [code-backlog.md](docs/dev/code-backlog.md) for its name first, and close the matching item in the same commit.
+1. Update or add tests to cover the change: the single-file command while iterating, then `npm run format`. Before committing a UI change, run only `npm run test:e2e -- --project=phone`: the hooks run the rest ([testing.md](docs/dev/testing.md#hooks)). Fixing a failing or flaky test: search [code-backlog.md](docs/dev/code-backlog.md) for its name first, and close the matching item in the same commit.
 2. Update any affected documentation — see Where things belong above — and `CHANGELOG.md` (see Changelog below).
 3. Record what was surprising, misleading or broken, and its fix: as a comment or test when tied to specific code, otherwise as a rule in the doc its reader is in (keeping the exact error text), or in [pitfalls.md](docs/dev/pitfalls.md) when no doc fits; machine-specific ones in Claude's memory. Symptom first (exact error text), then cause and fix. Delete entries once obsolete.
-4. Verify with `npm run check` (its steps: `steps()` in [check.js](scripts/check.js)). When committing, the `pre-commit` hook runs its relevant steps on what's staged (plus desktop e2e on UI changes; fix-batch lanes defer it with `E2E_DEFER=1` and run the suite once before reporting, [BATCH.md](.claude/skills/code-fix/BATCH.md)) and blocks on failure, so don't also run it by hand; the `pre-push` hook runs what CI runs (see [testing.md](docs/dev/testing.md#hooks)). Fix what it reports.
+4. Verify with `npm run check` (its steps: `steps()` in [check.js](scripts/check.js)). When committing, the `pre-commit` hook runs its relevant steps on what's staged (fix-batch lanes defer its e2e with `E2E_DEFER=1` and run the suite once before reporting, [BATCH.md](.claude/skills/code-fix/BATCH.md)) and blocks on failure, so don't also run it by hand; the `pre-push` hook runs what CI runs (see [testing.md](docs/dev/testing.md#hooks)). Fix what it reports.
 
 ## Changelog
 

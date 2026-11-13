@@ -30,8 +30,8 @@ Get a Steam API key at <https://steamcommunity.com/dev/apikey>. An optional `ITA
 
 ```bash
 npm run dev             # Vite on :58991 + Express on :3000, together
-npm run dev:mock        # Vite alone on :58993 (a worktree: its own port), /api mocked from the e2e fixtures — for UI work
-npm run check           # format, CHANGELOG, tests, typecheck, lint, CSS, doc refs, doc prose, journey test titles, setup lint — in parallel, one line each, output only for failures
+npm run dev:mock        # Vite alone (port: node scripts/ports.js mock), /api mocked from the e2e fixtures — for UI work
+npm run check           # every check (steps() in scripts/check.js), in parallel, one line each, output only for failures
 npm test                # Node's test runner
 npm run test:e2e        # the journeys' tests in a browser, against mocked data (first: npx playwright install chromium)
 npm run typecheck       # tsc --noEmit over public/ and e2e/

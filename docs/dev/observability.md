@@ -115,7 +115,7 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
 - Past a ceiling it throws an `isUpstream` error, so routes answer 502 with no new error path. Refused calls aren't counted as requests.
 - **Client share**: within each window, one client may spend `OUTBOUND_CLIENT_SHARE_PERCENT` of the ceiling (at least 1), so one IP can't spend it for everyone. Past it, the error also carries `isClientBudgetExhausted` and routes answer 429 with a message for the user. Each details part (`fetchFastDetails`, `fetchStoreDetails`) marks a result it left short as `limited`, and the details stream sends that message once as a `{ limited }` event; its workers go on, since cached games still fill in.
   - A client is `clientKey(req)` in `server.js`: the rate limiters' key (an IPv4 address or an IPv6 /56), so it needs `TRUST_PROXY` behind a proxy.
-  - The request's client rides an `AsyncLocalStorage` (`runAsClient`, set by a middleware after the body parser). `createSemaphore` binds each queued job to its caller's context, since another job's release runs it. Any new queue shared across requests must do the same.
+  - The request's client (`clientKey`, the rate limiters' key) rides an `AsyncLocalStorage` (`runAsClient`, set by a middleware after the JSON body parser). `createSemaphore` binds each queued job to its caller's context, since another job's release runs it. Any new queue shared across requests must do the same.
   - A call outside any request context (every call while tests bypass the limiters) counts only against the global ceiling.
   - Shared state keeps one client's refusal from reaching others: `createDedup` retries once in a waiter's own context when it rode on another client's refused call (or, for a details part, a `limited` result); an HLTB login or the Fanatical feed refused for one client isn't recorded as a failure.
   - `hourTopClient`/`dayTopClient` in each `budget`: the most one client spent in the current window.
@@ -130,7 +130,7 @@ Logged at the moment they happen, once per event rather than once per affected r
 - **`[budget:<group>] a client spent its hourly/daily share …`** — once per window per client and service, without the client's address.
 - **`[semaphore:<name>] queue saturated …`** — every rejection, unthrottled: it should never fire, so each one matters.
 - **`[cache]`/`[auth]` expiry sweep blocked the event loop for … ms** — a sweep (`sweep`, `lib/db.js`) that took ≥ 1 s, the `eventLoop` alert's threshold: pins a block to it.
-- **`[HLTB] search failed …`** — throttled to one per `HLTB_SEARCH_WARN_THROTTLE_MS` (30 s); the searches themselves still run and fail normally. `[HLTB] init failed` is throttled by the auth retry backoff.
+- **`[HLTB] search failed …`** — throttled to one per `HLTB_SEARCH_WARN_THROTTLE_MS`; the searches themselves still run and fail normally. `[HLTB] init failed` is throttled by the auth retry backoff.
 
 All are `console.warn`: degraded but recoverable. An error marked `isLogged` is not logged again by `routeErrorStatus` or the details parts (`logDetailsError`): it's set where the warning was printed — `assertClosed` while a breaker is open, `chargeBudget` past a budget, and HLTB's errors repeating the failure the last `[HLTB]` line warned about, or an auth hold whose cause was already logged. Without it, one open breaker or spent budget logs a line per game in a large load.
 

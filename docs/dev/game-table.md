@@ -16,7 +16,7 @@ Every list of games renders through the same `@vates/data-table-solid` table ove
 - Its compare/bucket primitives (`compareMissingLast`, `bucketNumericRange`, …) come from `@vates/data-table-core`, imported through `@vates/data-table-solid`'s re-exports — no direct `@vates/data-table-core` dependency.
 - Per-kind column objects (Tier Price/Add-on's render code, the wishlist and owned columns) stay local to `ListRoute.tsx`.
 - Most columns carry a `category` (`@vates/data-table-core` ≥ 0.13) — `Scores & Reviews`, `How Long To Beat`, `Play Time & Dates`, `Classification` (also Add-on), `Compatibility`, `Extras`, `Pricing` (`PRICE_COLUMNS` plus Tier Price) — so the Columns/Sort/Group/Filter menus collapse into per-category submenus. Identity (`capsule`/`name`) and Wishlist Rank stay uncategorized.
-- On a phone (≤ 768 px) the Name column stays in place while the table scrolls sideways: its `pinned: true` makes it sticky, which `styles/vendor-data-table.css` turns off above 768 px.
+- On a phone ([width](ui-guidelines.md#touch-and-phone)) the Name column stays in place while the table scrolls sideways: its `pinned: true` makes it sticky, which `styles/vendor-data-table.css` turns off above phone width.
 - The Image column shows `row.thumb` (the 231×87 capsule), falling back to `row.capsule` if it fails, then hiding; a row that starts from a search's tiny image keeps it until details stream in. A game with no store page (delisted) gets both guessed at Steam's conventional CDN paths (`steamAppAsset`), which outlive the page.
   - Images load browser-direct from Steam's CDN ([integrations.md](integrations.md#store-metadata--appdetails)), one per row: `capsule_image` (231×87, ~12 KB), falling back to `capsule_imagev5` (184×69, ~8 KB): the larger one costs bytes (×1.5), not requests.
 - HLTB's default column is `hltbAll` ("HLTB (h)"), HLTB's All PlayStyles ([integrations.md](integrations.md#hltb--no-npm-package)): being one representative number, it's also the ranking card's "10.5 h to beat".
@@ -125,7 +125,7 @@ Every route opens with a **hero** (`ListHero.tsx`, a `<header>`, a flat section 
 - **Prices carries two actions**: its value (the region) opens the Preferences popover, its sub-line (the price age) re-fetches prices. With a `subOnClick` each half renders as its own button (HTML has no nested buttons); otherwise value and sub-line are one button.
 - **A refresh** (`load({ refresh: true })`) keeps the table, its rows' details and the selection until the new list resolves, then rebuilds with the kept details (`withKept`) and streams only new games. It keeps the previous age, a dynamic list's formula line and `heroTitle` (blanking it would tear down the tile being clicked).
 - Tiles render through `<Index>`, not `<For>`: recomputes build fresh tile objects, and by-reference keying would replace the activated button and drop its focus.
-- On a phone (≤ 768 px) tiles become one swipeable row, and `hero-secondary` actions (a bundle's IsThereAnyDeal link and Rank; a comparison's Edit players and Save) fold behind a More actions toggle (`secondaryActions`), so the table starts higher. A bundle's tiles lead with Tiers and New to you, Ends after, so the price shows without a swipe.
+- On a phone tiles become one swipeable row, and `hero-secondary` actions (a bundle's IsThereAnyDeal link and Rank; a comparison's Edit players and Save) fold behind a More actions toggle (`secondaryActions`), so the table starts higher. A bundle's tiles lead with Tiers and New to you, Ends after, so the price shows without a swipe.
 
 ### Bundle page
 
@@ -143,8 +143,8 @@ The bundle page's hero: Ends (with a countdown), Games, the price tile, Publishe
   - It counts every row of the tier, not the filtered ones, like New to you; a filtered group can show fewer rows than its "N new".
   - Per step, unlike New to you's saving, which is over the whole tier price.
   - No verdict for an add-on or a range group (which tier holds them is unknown), none while a new game is unpriced ("2 new · 1 unpriced").
-- **Fanatical pick-and-mix** (`bundle.pickAndMix`, see [bundles-and-prices.md](bundles-and-prices.md#fanatical--pick--mix-tier-prices)): one chip per quantity tier ("5 for €5.99"); Fanatical charges every pick the per-game rate of the largest tier reached.
-  - `cheapestPicks` (`bundleRows.ts`) prices one pick per ITAD gid at that rate, or at a larger tier's price when lower (spare picks free). The plan's chip gets `bundle-tier-chip--active`; the selection toolbar shows the cost (`pickPlanDetail` under it), then the saving or overpay against the same games' best deals (`savingsText`, green/red, with its estimate in the region currency like every bundle price in another currency), owned picks left out (`selectedOwnedGids`: a package only when all its rows are owned) and counted beside it.
+- **Fanatical pick-and-mix** (`bundle.pickAndMix`, see [bundles-and-prices.md](bundles-and-prices.md#fanatical--pick--mix-tier-prices)): one chip per quantity tier ("5 for €5.99").
+  - `cheapestPicks` (`bundleRows.ts`) prices one pick per ITAD gid by the [pricing rule](bundles-and-prices.md#fanatical--pick--mix-tier-prices). The plan's chip gets `bundle-tier-chip--active`; the selection toolbar shows the cost (`pickPlanDetail` under it), then the saving or overpay against the same games' best deals (`savingsText`, green/red, with its estimate in the region currency like every bundle price in another currency), owned picks left out (`selectedOwnedGids`: a package only when all its rows are owned) and counted beside it.
   - Each row's Tier Price (`tierPerGame`, "/game") is the plan's rate (`pickRate`), rewritten on every row by an effect on selection change — the same on every row, so a sort on it doesn't reorder.
   - With `bundle.pickAndMixNames`, the toolbar adds **Buy N on Fanatical ↗** (`fanaticalBuyUrl`), the draggable **Add to Fanatical** bookmarklet (`FANATICAL_BOOKMARKLET`; clicking it here only says to drag it) and "N to pick by hand" for unmatched picks.
 - **Steam packages**: a gid resolving to several appids is one purchase. `bundlePackages` sets each row's `bundlePackage` ("package · N games" under the name, `renderNameCell`; in a pick-and-mix bundle only the lead row shows the rate, the rest "included"), the selection effect widens every tick to the whole package (`wholePackages`), and the pick count and the selection's best deals count one row per gid (`onePerGid`), while New to you counts rows (one per appid) — each package row carries the whole package's price.
@@ -153,15 +153,15 @@ The bundle page's hero: Ends (with a countdown), Games, the price tile, Publishe
 
 A comparison is an unsaved dynamic list built from the URL: one `account-owned` source per `?u=` slot, combined with `?op=` (default `group-by-membership`), resolved and labeled through the same `listResolve.ts`/`combine.ts`/`listLabels.ts` path as a stored one, so "Save as a list" is `createList()` with the same formula.
 
-- It resolves each slot itself (`resolveAccountSlot`), never touching `recentAccounts` — comparing someone isn't picking them; the form's account chips write nothing back either.
+- It resolves each slot itself (`resolveAccountSlot`), never touching `recentAccounts` ([why](lists-and-accounts.md#combine)); the form's account chips write nothing back either.
 - It rewrites the address to the resolved steam64 ids in canonical order, and orders sources by the same rule, so one URL renders one way.
 - Sources are labeled by the player alone, not "⟨player⟩ — Owned", which would repeat in every group heading.
 
 ### Other kinds
 
-- **owned / wishlist** — name the account they show (avatar, profile link, Family merge count) with Games/Updated tiles, plus Prices on the wishlist. A `?u=` link is authoritative: while it resolves, and if it fails, the stored account is not loaded in its place.
+- **owned / wishlist** — name the account they show (avatar, profile link, Family merge count) with Games/Updated tiles, plus Prices on the wishlist; a `?u=` link's account is [authoritative](lists-and-accounts.md#u-url-semantics).
 - **recent** — says it's local browser history; `params.appid` focuses one game without making it a different kind of view, and the open game is the path, not `?game=` (see [frontend.md](frontend.md#routes)).
-- **user** — its manual-or-op chip with Games/Folder/Sources/Edited, plus Prices with a priced source. A dynamic list states its formula in the hero: each source named (`listLabels.ts`), linked, with what it contributed (`Alice — Owned 343 ∪ Alice — Wishlist 115 = 457`); a dangling source is flagged in place. `group-by-membership` is one table grouped by an "Owned by"/"In" column (`membershipColumn.ts`: each row's `membership` key, in `combine.ts`'s most-sources-first order via the column's `compare`, headers saying who's in and who's missing); every other op flattens to one table.
+- **user** — its manual-or-op chip with Games/Folder/Sources/Edited, plus Prices with a priced source. A dynamic list states its formula in the hero: each source named (`listLabels.ts`'s `describeListRef`), linked, with what it contributed (`Alice — Owned 343 ∪ Alice — Wishlist 115 = 457`, from `resolveListWithSources`); a dangling source is flagged in place. `group-by-membership` is one table grouped by an "Owned by"/"In" column (`membershipColumn.ts`: each row's `membership` key, in `combine.ts`'s most-sources-first order via the column's `compare`, headers saying who's in and who's missing); every other op flattens to one table.
 
 ### `/bundles`
 
