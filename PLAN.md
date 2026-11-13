@@ -37,3 +37,9 @@ Recommendations after the design-docs work, reviewed by a frontend, a testing an
 ## 5. UX review as personas
 
 - `ux-review` on mocks: the core journeys plus A4, L1, L3, L5, at both widths; findings in improvements.md.
+
+## Status (paused 2026-11-13)
+
+- Done: metrics note, 1 (fixtures), 2 (U252 renames). Next: 3 (U246), 4 (U249), 5 (review).
+- At the merge: CHANGELOG Changed (the renames), Added (U246, U249).
+- Machine load: run with the session capped (`systemctl --user set-property --runtime <scope> CPUQuota=800% CPUWeight=10 IOWeight=10`); every commit's hook runs desktop e2e.
