@@ -464,6 +464,15 @@ export function metaOrBasics(details: GameDetails | null | undefined): GameBasic
   return details?.meta ?? details?.basics ?? null;
 }
 
+// One game's details; `limited` says why sources are missing when it's this client's spent share, not an upstream.
+export function fetchGameDetails(appid: number, { refresh = false } = {}): Promise<GameDetailsReply> {
+  return fetchJson<GameDetailsReply>(
+    `/api/game-details/${appid}${refresh ? '?refresh=1' : ''}`,
+    undefined,
+    refresh ? 'Refresh failed' : 'Lookup failed',
+  );
+}
+
 // What a /api/game-details reply sets on a game outside a list's table (ListRoute's rows: applyDetailsEvent).
 export function detailsFields(
   data: GameDetailsReply,

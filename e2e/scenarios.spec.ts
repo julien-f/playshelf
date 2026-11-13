@@ -5157,6 +5157,28 @@ test('D2 edge: past its share of lookups, the list says so once, as do the Price
   await expect(page.locator('#panel-section-achievements')).toContainText(LIMITED);
 });
 
+test('D2 edge: past its share, Refresh details, a lookup and the ranking say so rather than inviting a retry', async ({
+  page,
+}) => {
+  await mockApi(page);
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  await row(page, 'Hades').getByText('Hades').click();
+  await mockApi(page, { states: ['client-limited'] }); // routes registered last take precedence
+  await page.locator('.panel-refresh-btn').click();
+  const status = page.locator('.list-status');
+  await expect(status.locator('.list-failed')).toHaveText(LIMITED);
+  await expect(status).not.toContainText("didn't answer");
+
+  await page.goto('/search?q=hades');
+  await expect(page.locator('.search-page-status[role="status"]')).toHaveText(LIMITED);
+
+  await page.goto('/lists/owned');
+  for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Rank 2 games' }).click();
+  await expect(page.locator('.rank-route .list-status')).toHaveText(LIMITED);
+});
+
 test("D2.3: once the upstream is back, the panel's Refresh details fills in what didn't answer", async ({ page }) => {
   await mockApi(page, { states: ['upstream-down'] });
   await asPlayer(page, ALICE);
