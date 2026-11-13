@@ -71,6 +71,7 @@ interface RouteHandlers {
   openGame?: (appid: number) => boolean;
   onGameClose?: () => void;
   refreshGame?: (game: Game) => Promise<void>;
+  onListChanged?: (listId: string) => void; // the panel added or removed the open game
   onTagClick?: (dim: string, value: string) => void;
   isTagActive?: (dim: string, value: string) => boolean;
   getOwners?: (appid: number) => GameOwner[] | null; // null: the current account's own (panel.tsx)
@@ -259,6 +260,7 @@ export function AppShell(props: RouteSectionProps): JSX.Element {
       // DLC). Delegated to the mounted route rather than implemented here: the refreshed details
       // have to land on that route's own store-backed row, not just on the panel's plain copy.
       onRefresh: (game) => routeHandlers.refreshGame?.(game),
+      onListChanged: (listId) => routeHandlers.onListChanged?.(listId),
       onTagClick: (dim, value) => routeHandlers.onTagClick?.(dim, value),
       tagsFilterable,
       getOwners: (appid) => routeHandlers.getOwners?.(appid) ?? null,

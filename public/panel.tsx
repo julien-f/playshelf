@@ -91,6 +91,9 @@ import ChevronLeft from 'lucide-solid/icons/chevron-left';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import CircleDollarSign from 'lucide-solid/icons/circle-dollar-sign';
 import Ellipsis from 'lucide-solid/icons/ellipsis';
+import ListPlus from 'lucide-solid/icons/list-plus';
+import { announce } from './announce.ts';
+import { addToManualList, getLists, removeAppidsFromList } from './listsStore.ts';
 import Gamepad2 from 'lucide-solid/icons/gamepad-2';
 import Globe from 'lucide-solid/icons/globe';
 import Link from 'lucide-solid/icons/link';
@@ -121,6 +124,7 @@ export interface PanelOptions {
   tagsFilterable: () => boolean; // false: tags render as plain pills
   isTagActive: (dim: string, val: string) => boolean;
   onRefresh: (game: ReadonlyGame) => void;
+  onListChanged: (listId: string) => void; // a manual list gained or lost the open game
   onNavigateGame: (appid: number, name: string) => void;
   onClose: (opts?: { leavingRoute?: boolean }) => void;
   // The route's own owners for a game (a comparison's players), over the current account's.
@@ -158,7 +162,7 @@ export interface PanelOptions {
 //
 // Reactivity model — three kinds of state, no "please re-render" call anywhere:
 //
-//  1. The panel's own UI state (`panelGame`/`heroIdx`/`moreLinksOpen`/`panelHistory`/
+//  1. The panel's own UI state (`panelGame`/`heroIdx`/`openHeaderMenu`/`panelHistory`/
 //     `expandedSections`/`revealedAchievements`/`achievementsFilter`/`panelRefreshing`) — plain
 //     signals, set directly by this file's own click handlers.
 //  2. The open game's data — read straight off the game object, which is a Solid *store* row
@@ -182,7 +186,9 @@ const [heroIdx, setHeroIdx] = createSignal(0);
 const clampedHeroIdx = (length: number) => Math.max(0, Math.min(heroIdx(), length - 1));
 let panelPrevFocus: HTMLElement | null = null;
 const [panelRefreshing, setPanelRefreshing] = createSignal(false); // true while the host's onRefresh() is in flight
-const [moreLinksOpen, setMoreLinksOpen] = createSignal(false); // whether the header's "⋯" overflow menu (Workshop/Website) is open
+// The header menu open, if any: "⋯ More links" (Workshop/Website) or the lists holding the game.
+type HeaderMenu = 'more' | 'lists';
+const [openHeaderMenu, setOpenHeaderMenu] = createSignal<HeaderMenu | null>(null);
 
 // Stack of {appid, name} for games navigated away from via a DLC link or "DLC for <Base Game>"
 // link click (see navigateToGame/panelGoBack below) — NOT touched by an ordinary panel open (a
@@ -267,7 +273,7 @@ export function initPanel(options: PanelOptions) {
   // own dropdown — needs to catch clicks *outside* the panel too (backdrop, page behind it),
   // so this stays a document-level listener rather than something the menu button's own
   // onClick could handle alone. Uses `e.composedPath()` rather than `e.target.closest(...)` —
-  // the menu button's own click toggles `moreLinksOpen` synchronously, which re-renders this
+  // the menu button's own click toggles `openHeaderMenu` synchronously, which re-renders this
   // exact DOM subtree (a brand new button element replacing the old one) *before* this
   // document-level listener runs (it's registered after Solid's own delegated click listener,
   // so it always fires second) — by then `e.target` is the already-detached old button, whose
@@ -278,22 +284,32 @@ export function initPanel(options: PanelOptions) {
   // live (the menu never opened at all before this fix).
   document.addEventListener('click', (e) => {
     if (
-      moreLinksOpen() &&
-      !e.composedPath().some((el) => el instanceof Element && el.classList.contains('panel-icon-more'))
+      openHeaderMenu() &&
+      !e
+        .composedPath()
+        .some(
+          (el) =>
+            el instanceof HTMLElement &&
+            el.classList.contains('panel-icon-more') &&
+            el.dataset.menu === openHeaderMenu(),
+        )
     )
-      setMoreLinksOpen(false);
+      setOpenHeaderMenu(null);
   });
   // Capture, as bindNavPopover: ahead of panelKeyboard.ts's Esc, which skips a handled one.
   // Not once focus has left the panel: a layer opened above it (the shortcuts dialog, nav search) owns Esc.
   window.addEventListener(
     'keydown',
     (e) => {
-      if (e.key !== 'Escape' || !moreLinksOpen()) return;
+      const menu = openHeaderMenu();
+      if (e.key !== 'Escape' || !menu) return;
       const active = document.activeElement;
       if (active && active !== document.body && !active.closest('#game-panel')) return;
       e.preventDefault();
-      setMoreLinksOpen(false);
-      document.querySelector<HTMLElement>('#game-panel .panel-icon-more-btn')?.focus();
+      setOpenHeaderMenu(null);
+      document
+        .querySelector<HTMLElement>(`#game-panel .panel-icon-more[data-menu='${menu}'] .panel-icon-more-btn`)
+        ?.focus();
     },
     true,
   );
@@ -733,7 +749,7 @@ export function panelOpen(game: ReadonlyGame) {
   pushOverlayEntry('panel', () => panelClose(), urlWithoutPanel);
   setPanelGame(game);
   setHeroIdx(0);
-  setMoreLinksOpen(false);
+  setOpenHeaderMenu(null);
   // A reopen from inside the panel or its lightbox (↑/↓, a DLC hop) keeps the original opener.
   const active = document.activeElement as HTMLElement | null;
   if (active && active !== document.body && !active.closest('#game-panel, #screenshot-lightbox'))
@@ -785,7 +801,7 @@ export function panelClose({ leavingRoute = false, animate = true } = {}) {
   if (!game) return;
   if (animate && !leavingRoute) leavePanelGhost();
   setPanelGame(null);
-  setMoreLinksOpen(false);
+  setOpenHeaderMenu(null);
   // Closing the panel ends whatever DLC browsing trail was in progress — including a hop that
   // was handed off but never opened (a bad appid, a failed lookup), which must not be left armed
   // to attach a stale trail to some later, unrelated open of that same game.
@@ -2402,6 +2418,9 @@ function SimilarSection(props: { game: ReadonlyGame }): JSX.Element {
   );
 }
 
+const toggleHeaderMenu = (menu: HeaderMenu) => setOpenHeaderMenu(openHeaderMenu() === menu ? null : menu);
+const closeHeaderMenu = (menu: HeaderMenu) => openHeaderMenu() === menu && setOpenHeaderMenu(null);
+
 // Store and ITAD are the two links everyone wants at a glance and stay directly in the header
 // row — Workshop/Website are each conditional, tucked into a single "⋯ More" menu instead (see
 // the original file's own comment, preserved in git history, for the full reasoning).
@@ -2425,23 +2444,24 @@ function MoreLinks(props: { game: ReadonlyGame }): JSX.Element {
     <Show when={items().length}>
       <div
         class="panel-icon-more"
+        data-menu="more"
         // Else a menu left open behind focus would outlive the Esc meant for it (that closes the game).
         onFocusOut={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setMoreLinksOpen(false);
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) closeHeaderMenu('more');
         }}
       >
         <button
           type="button"
           class="panel-icon-link panel-icon-more-btn"
           aria-haspopup="true"
-          aria-expanded={moreLinksOpen() ? 'true' : 'false'}
+          aria-expanded={openHeaderMenu() === 'more' ? 'true' : 'false'}
           title="More links"
           aria-label="More links"
-          onClick={() => setMoreLinksOpen(!moreLinksOpen())}
+          onClick={() => toggleHeaderMenu('more')}
         >
           <Ellipsis />
         </button>
-        <Show when={moreLinksOpen()}>
+        <Show when={openHeaderMenu() === 'more'}>
           <ul class="panel-icon-more-menu">
             <For each={items()}>
               {(it) => (
@@ -2456,6 +2476,87 @@ function MoreLinks(props: { game: ReadonlyGame }): JSX.Element {
         </Show>
       </div>
     </Show>
+  );
+}
+
+// The manual lists, each checked while it holds the game: a click adds or removes it, saved at once.
+function ListsMenu(props: { appid: number }): JSX.Element {
+  // getLists reads a tracked pref: a list made, renamed or synced elsewhere shows up here.
+  const lists = createMemo(() => getLists().filter((l) => l.kind === 'manual'));
+  // By id: each change stores new list objects, and re-rendering the row would drop its focus.
+  const listIds = createMemo(() => lists().map((l) => l.id));
+  const holds = (id: string) => lists().some((l) => l.id === id && l.appids?.includes(props.appid));
+  const holding = createMemo(() => lists().filter((l) => l.appids?.includes(props.appid)).length);
+  let nameInput: HTMLInputElement | undefined;
+  const label = () => (holding() ? `In ${holding()} list${holding() === 1 ? '' : 's'}: add or remove` : 'Add to list');
+  const toggle = (listId: string, name: string, add: boolean) => {
+    if (add) addToManualList({ listId }, [props.appid]);
+    else removeAppidsFromList(listId, [props.appid]);
+    announce(add ? `Added to "${name}".` : `Removed from "${name}".`);
+    panelOptions.onListChanged(listId);
+  };
+  return (
+    <div
+      class="panel-icon-more"
+      data-menu="lists"
+      onFocusOut={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) closeHeaderMenu('lists');
+      }}
+    >
+      <button
+        type="button"
+        class="panel-icon-link panel-icon-more-btn panel-lists-btn"
+        aria-expanded={openHeaderMenu() === 'lists' ? 'true' : 'false'}
+        title={label()}
+        aria-label={label()}
+        onClick={() => toggleHeaderMenu('lists')}
+      >
+        <ListPlus />
+        <Show when={holding()}>
+          <span class="panel-lists-count" aria-hidden="true">
+            {holding()}
+          </span>
+        </Show>
+      </button>
+      <Show when={openHeaderMenu() === 'lists'}>
+        <ul class="panel-icon-more-menu panel-lists-menu">
+          <For each={listIds()}>
+            {(id) => {
+              const name = () => lists().find((l) => l.id === id)?.name ?? 'list';
+              return (
+                <li>
+                  <label class="panel-icon-more-item">
+                    <input
+                      type="checkbox"
+                      checked={holds(id)}
+                      onChange={(e) => toggle(id, name(), e.currentTarget.checked)}
+                    />
+                    {name()}
+                  </label>
+                </li>
+              );
+            }}
+          </For>
+          <li>
+            <form
+              class="panel-lists-new"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const name = nameInput?.value.trim();
+                if (!name || !nameInput) return;
+                announce(addToManualList({ newName: name }, [props.appid]).message);
+                nameInput.value = '';
+              }}
+            >
+              <input ref={nameInput} type="text" aria-label="New list name" placeholder="New list name" />
+              <button type="submit" class="btn">
+                Create
+              </button>
+            </form>
+          </li>
+        </ul>
+      </Show>
+    </div>
   );
 }
 
@@ -2793,6 +2894,7 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
             </a>
             <MoreLinks game={g} />
             <PresentButton />
+            <ListsMenu appid={g.appid} />
             <span class="panel-icon-divider" role="separator" aria-hidden="true" />
             <button
               type="button"

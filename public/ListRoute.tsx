@@ -275,7 +275,7 @@ import {
   createList,
   updateDynamicList,
   updateRankedSource,
-  addAppidsToList,
+  addToManualList,
   removeAppidsFromList,
   setListTableView,
   getRanking,
@@ -1410,23 +1410,11 @@ export default function ListRoute() {
     const rows = selectedRows();
     if (!target || rows.length === 0) return;
     const appids = rows.map((r) => r.appid);
-    if (target === NEW_LIST_OPTION) {
-      const name = newListName().trim();
-      if (!name) return;
-      const list = createList({ name, kind: 'manual', appids });
-      refreshManualLists();
-      showSelectionStatus(
-        `Added ${appids.length} game${appids.length === 1 ? '' : 's'} to new list "${list.name}".`,
-        list.id,
-      );
-    } else {
-      const list = getList(target);
-      addAppidsToList(target, appids);
-      showSelectionStatus(
-        `Added ${appids.length} game${appids.length === 1 ? '' : 's'} to "${list?.name ?? 'list'}".`,
-        target,
-      );
-    }
+    const name = newListName().trim();
+    if (target === NEW_LIST_OPTION && !name) return;
+    const added = addToManualList(target === NEW_LIST_OPTION ? { newName: name } : { listId: target }, appids);
+    if (target === NEW_LIST_OPTION) refreshManualLists();
+    showSelectionStatus(added.message, added.listId);
     setAddTarget('');
     setNewListName('');
     const main = document.querySelector<HTMLElement>('main');
@@ -4257,6 +4245,10 @@ export default function ListRoute() {
       openGame: handleOpenGameRequest,
       onGameClose: handleGameClose,
       refreshGame,
+      // The panel changed this list's games: rows come from its stored appids, read at load.
+      onListChanged: (listId) => {
+        if (untrack(userList)?.id === listId) void load();
+      },
       onTagClick,
       isTagActive,
       getOwners: (appid) =>

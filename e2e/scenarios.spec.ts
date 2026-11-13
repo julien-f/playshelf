@@ -2969,6 +2969,48 @@ test('L1.1-3: select games, add them to a new list, open it', async ({ page }) =
   await expect(rows(page)).toHaveCount(2);
 });
 
+const picksList = (appids: number[]) => ({
+  id: 'picks',
+  name: 'Picks',
+  kind: 'manual',
+  appids,
+  parentId: null,
+  order: 0,
+  createdAt: 0,
+  updatedAt: 0,
+});
+
+test("L1.5: from a game's panel, tick a list to add it, or make a new list with it", async ({ page }) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620])] });
+  await page.goto('/game/1145360');
+  const panel = page.locator('#game-panel');
+  await panel.getByRole('button', { name: 'Add to list' }).click();
+  const menu = await panel.locator('.panel-lists-menu').boundingBox();
+  expect(menu!.x).toBeGreaterThanOrEqual(0); // on screen at both widths
+  expect(menu!.x + menu!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await panel.getByRole('checkbox', { name: 'Picks' }).check();
+  await expect(panel.getByRole('button', { name: 'In 1 list: add or remove' })).toBeVisible();
+
+  await panel.getByRole('textbox', { name: 'New list name' }).fill('Roguelikes');
+  await page.keyboard.press('Enter');
+  await expect(panel.getByRole('checkbox', { name: 'Roguelikes' })).toBeChecked();
+  await expect(panel.getByRole('button', { name: 'In 2 lists: add or remove' })).toBeVisible();
+
+  await page.goto('/lists/picks');
+  await expect(rows(page)).toHaveCount(2);
+});
+
+test("L1 edge: unticking the list being viewed in a game's panel drops its row", async ({ page }) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620, 105600])] });
+  await page.goto('/lists/picks?game=620');
+  await expect(rows(page)).toHaveCount(2);
+  const panel = page.locator('#game-panel');
+  await panel.getByRole('button', { name: 'In 1 list: add or remove' }).click();
+  // The list reloads without the game, closing the menu: the row going is what's checked.
+  await panel.getByRole('checkbox', { name: 'Picks' }).click();
+  await expect(rows(page)).toHaveCount(1);
+});
+
 test('L1 edge: Add hands focus to the row it added as the selection bar goes', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');

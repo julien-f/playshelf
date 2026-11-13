@@ -144,6 +144,8 @@ Wishlist and bundle lists carry price columns: the best deal across every shop I
 
 Clicking any row opens a detail panel beside the table — not over it, so the list stays usable and clicking another row just swaps the panel's contents. It carries screenshots and trailers, the weighted rating and review counts, How Long To Beat estimates, achievements, recent news from the developer, current price and the current bundles it's in (each opens that bundle's list), DLC and links out. **Refresh details**, beside its name, refetches everything for that one game.
 
+Its **Add to list** icon lists your manual lists, ticked where the game already is: tick or untick one to add or remove the game, or name a new list to make one with it. The icon shows how many of your lists hold the game.
+
 **Similar in Alice's library** shows the 5 games the current account owns closest to this one by Steam tags (tags nearly every game in the library carries count less), each opening its own panel; the back button above its name returns. It needs that account's Owned list opened once on this device (the section links it), and isn't shown on Owned's own rows. **Sort list by similarity** ranks the whole open list against that game (a **Similarity** column, first sort) until you stop it or reload. **More like this on Steam ↗** searches the whole store instead.
 
 **More from** names the game's developers and publishers; each opens a list of their games on Steam — **Games by …** or **Published by …** — with ownership, prices and Taste Fit, the panel staying on the game you came from. **What don't I own?** opens the ones you don't own as a list you can save, like a bundle's **What does this add?**.

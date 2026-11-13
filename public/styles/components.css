@@ -2253,6 +2253,47 @@
   .panel-icon-more-item:hover {
     background: var(--line);
   }
+  /* How many lists hold the game: the trigger states it, a menu away from the checkboxes. */
+  .panel-lists-btn {
+    position: relative;
+  }
+  .panel-lists-count {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 16px;
+    padding-inline: 4px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: var(--fs-label);
+    line-height: 16px;
+    text-align: center;
+  }
+  /* Placed against the icon row, not its button: from mid-row it would run off the panel either way. */
+  .panel-icon-links {
+    position: relative;
+  }
+  .panel-icon-more[data-menu='lists'] {
+    position: static;
+  }
+  .panel-lists-menu {
+    right: 0;
+    left: auto;
+    max-width: 100%;
+  }
+  .panel-lists-menu label.panel-icon-more-item {
+    cursor: pointer;
+  }
+  .panel-lists-new {
+    display: flex;
+    gap: 6px;
+    padding: 4px;
+  }
+  .panel-lists-new input {
+    flex: 1;
+    min-width: 0;
+  }
 
   /* Text tabs in one sideways-scrolling row (two rows filled a phone's sticky header); the
      scroll-spy (panel.tsx) slides one accent bar under the current tab and scrolls it into view. */
