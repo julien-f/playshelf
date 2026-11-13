@@ -18,8 +18,8 @@
 // arrival from a `?u=` link just as much as on picking (see slotsFromIdentifiers).
 //
 // It owns the draft slots being typed and nothing else — no resolving, no navigation, no URL; the
-// route decides what a submitted set of slots means. The one thing it reads is accountsStore.ts,
-// synchronously, once at mount: nothing here can change what's in recents while it's open.
+// route decides what a submitted set of slots means. It reads accountsStore.ts, and the current
+// account's friends only if this page load already fetched them (accountData.ts's cache).
 import { createSignal, createMemo, createUniqueId, untrack, For, Index, Show, type JSX } from 'solid-js';
 import Plus from 'lucide-solid/icons/plus';
 import Star from 'lucide-solid/icons/star';
@@ -28,6 +28,7 @@ import {
   getRecentAccounts,
   getMyAccount,
   getAccountOverride,
+  getEffectiveCurrentAccount,
   accountDisplayLabel,
   accountIdentifiers,
 } from './accountsStore.ts';
@@ -41,6 +42,8 @@ import {
   type Slot,
   type SlotEntry,
 } from './compareSlots.ts';
+import { cachedAccountFriends } from './accountData.ts';
+import { steamVanity } from './utils.ts';
 import type { AccountSlot } from './types.ts';
 
 interface ComparePlayersFormProps {
@@ -72,6 +75,26 @@ function knownAccounts(): KnownAccount[] {
   }));
 }
 
+// The current account's friends by name, if this page load fetched them, minus anyone already known
+// (its own members too). Never a request: suggesting friends costs nothing.
+function friendAccounts(known: KnownAccount[]): KnownAccount[] {
+  const current = getEffectiveCurrentAccount();
+  if (!current) return [];
+  const taken = new Set([...current.members, ...known.filter((a) => a.members.length === 1).map((a) => a.members[0])]);
+  return (cachedAccountFriends(current.members)?.friends ?? [])
+    .filter((f) => !taken.has(f.steamid))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    .map((f) => ({
+      id: f.steamid,
+      label: f.name,
+      avatarUrl: f.avatarUrl || undefined,
+      starred: false,
+      friend: true,
+      members: [f.steamid],
+      identifiers: [steamVanity(f.profileUrl) || f.steamid], // as accountIdentifiers
+    }));
+}
+
 // Two empty players is the starting shape — a comparison needs at least two, and opening with a
 // single field makes it look like the account picker it isn't.
 function seedSlots(initial: string[][], known: KnownAccount[]): Slot[] {
@@ -85,7 +108,10 @@ function seedSlots(initial: string[][], known: KnownAccount[]): Slot[] {
 
 export function ComparePlayersForm(props: ComparePlayersFormProps): JSX.Element {
   // A memo: a `?u=` account resolving after mount still shows up as a suggestion.
-  const known = createMemo(knownAccounts);
+  const known = createMemo(() => {
+    const stored = knownAccounts();
+    return [...stored, ...friendAccounts(stored)];
+  });
   const [slots, setSlots] = createSignal<Slot[]>(seedSlots(props.initialSlots, untrack(known)));
   // Which slot's dropdown is open, what's typed in it, and which row the arrow keys are on. One
   // set of signals rather than per-slot state: only one input can be focused at a time, so only
@@ -321,6 +347,9 @@ export function ComparePlayersForm(props: ComparePlayersFormProps): JSX.Element 
                         </span>
                         <Show when={account.members.length > 1}>
                           <span class="account-count">Family · {account.members.length} accounts</span>
+                        </Show>
+                        <Show when={account.friend}>
+                          <span class="account-count">Friend</span>
                         </Show>
                       </li>
                     )}

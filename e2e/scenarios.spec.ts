@@ -3060,6 +3060,62 @@ test('C1 edge: ArrowDown steps through every player suggestion', async ({ page }
   await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true'); // wraps
 });
 
+// Alice's friends listed on Home, Erin a stored account who isn't one; then Compare, in-app.
+async function compareAfterHomeFriends(page: Page): Promise<() => number> {
+  let friendRequests = 0;
+  page.on('request', (req) => {
+    if (new URL(req.url()).pathname === '/api/friends') friendRequests++;
+  });
+  await asPlayer(page, ALICE);
+  await page.goto('/');
+  await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('erin');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.locator('.account-tiles li')).toHaveCount(2);
+  await page.locator('.account-tiles li').filter({ hasText: 'Alice' }).getByRole('button').first().click();
+  await expect(page.getByText('Friends (3)')).toBeVisible();
+  const homeRequests = friendRequests;
+  await page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link', { name: 'Compare' }).click();
+  return () => friendRequests - homeRequests;
+}
+
+test('C1 edge: the player boxes suggest the friends Home fetched, below the stored accounts, without fetching them again', async ({
+  page,
+}) => {
+  const extraRequests = await compareAfterHomeFriends(page);
+  const box = page.locator('.compare-form').getByRole('combobox').nth(1);
+  await box.focus();
+  await expect(page.getByRole('option')).toHaveText([/Erin/, /Bob.*Friend/, /Carol.*Friend/, /Dave.*Friend/]);
+  await page.getByRole('option', { name: /Carol/ }).click();
+  await expect(page.locator('.compare-token').filter({ hasText: 'Carol' })).toHaveCount(1);
+  await box.press('Escape');
+  await page.getByRole('button', { name: 'Compare libraries' }).click();
+  await expect(page.getByRole('heading', { name: 'Alice vs. Carol' })).toBeVisible();
+  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Edit players behind More actions
+  if (await more.isVisible()) await more.click();
+  // Read in the click's own task: named from the first render, never by Steam ID.
+  const chips = await page.getByRole('button', { name: 'Edit players' }).evaluate((button: HTMLElement) => {
+    button.click();
+    return [...document.querySelectorAll('.compare-token')].map((chip) => chip.textContent);
+  });
+  expect(chips).toEqual(['Alice', 'Carol']);
+  expect(extraRequests()).toBe(0);
+
+  await page.goto('/lists/compare'); // a fresh load has fetched no friends: none suggested, none fetched
+  await page.locator('.compare-form').getByRole('combobox').nth(1).focus();
+  await expect(page.getByRole('option')).toHaveText([/Erin/]);
+  expect(extraRequests()).toBe(0);
+});
+
+test('C1 edge: a friend typed by profile URL is in, so not suggested again', async ({ page }) => {
+  await compareAfterHomeFriends(page);
+  const boxes = page.locator('.compare-form').getByRole('combobox');
+  await boxes.nth(1).fill('https://steamcommunity.com/id/carol/');
+  await boxes.nth(1).press('Enter');
+  await boxes.nth(1).press('Escape');
+  await page.getByRole('button', { name: 'Add player' }).click();
+  await expect(page.getByRole('option')).toHaveText([/Erin/, /Bob/, /Dave/]);
+});
+
 test('C1 edge: the players form offers no More actions with nothing to fold', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'phone', 'phone layout only');
   await asPlayer(page, ALICE);

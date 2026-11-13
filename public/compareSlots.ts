@@ -12,6 +12,7 @@ export interface KnownAccount {
   label: string;
   avatarUrl?: string;
   starred: boolean;
+  friend?: boolean; // a friend of the current account, not a stored account
   members: string[];
   identifiers: string[];
 }

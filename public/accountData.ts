@@ -182,6 +182,7 @@ interface CacheEntry {
   promise: Promise<unknown>;
   at: number;
   failed?: boolean;
+  value?: unknown; // once settled, for a synchronous read
   // Landed while replaced: no reader was told, so restoring it moves the version.
   unannounced?: boolean;
 }
@@ -213,7 +214,8 @@ function storeEntry<T>(key: string, promise: Promise<T>): Promise<T> {
   accountCache.set(key, entry);
   const bump = () => versions.get(key)?.[1]((v) => v + 1);
   promise.then(
-    () => {
+    (value) => {
+      entry.value = value;
       if (accountCache.get(key) !== entry) entry.unannounced = true;
       else if (replaced) bump();
     },
@@ -395,6 +397,12 @@ export function fetchAccountFriends(
       fetchedAt: data.fetchedAt ?? null,
     };
   });
+}
+
+// The friends list this page load already fetched for these members, if any — never a request.
+export function cachedAccountFriends(members: string[]): AccountFriends | undefined {
+  const entry = accountCache.get(cacheKey('friends', members));
+  return isFresh(entry) ? (entry.value as AccountFriends | undefined) : undefined;
 }
 
 // Home's "pick an account" resolve step — there's no standalone "just resolve an identifier"
