@@ -22,11 +22,11 @@ Setup and dev commands are in [README.md](../../README.md), the index of the oth
 - **`lib/steam.js`** — Steam Web API and store calls (`resolveSteamId`, `getOwnedGames`, `getWishlist`, `getFriendList`, `getPlayerSummaries`, `getGameRating`, `getAppDetails`, `getStoreBrowseItem`, `prefetchStoreBrowseItems`, `resolveSteamTags`, `extractDemoAppid`, `searchStoreGames`, `getGameNews`, …), ProtonDB, and their per-host semaphores (`storeLimit`/`tagLimit`/`protonLimit`/`reviewsLimit`).
 - **`lib/hltb.js`** — HLTB auth + search (`getHLTB`), behind its own semaphore (`hltbLimit`).
 - **`lib/itad.js`** — IsThereAnyDeal calls (`getShopId`, `getBundles`, `resolveSteamAppIds`, prices) behind bundle browsing and every price column.
-- **`lib/fanatical.js`** — Fanatical's storefront feed, for pick-and-mix tier prices ([integrations.md](integrations.md#fanatical--pick-and-mix-tier-prices)).
-- **`lib/humbleChoice.js`** — Humble Choice's end date from Humble's schedule, over ITAD's early one ([integrations.md](integrations.md#bundles)).
+- **`lib/fanatical.js`** — Fanatical's storefront feed, for pick-and-mix tier prices ([bundles-and-prices.md](bundles-and-prices.md#fanatical--pick--mix-tier-prices)).
+- **`lib/humbleChoice.js`** — Humble Choice's end date from Humble's schedule, over ITAD's early one ([bundles-and-prices.md](bundles-and-prices.md#humble-choice--end-date)).
 - **`lib/itadDates.js`** — `overrideExpiry`: a better source's end date over ITAD's, tallying whether ITAD's agrees for `GET /api/metrics`' alerts.
-- **`lib/earlyExpired.js`** — `findEarlyExpired`: bundles still on sale that ITAD already expired, from its expired pages ([integrations.md](integrations.md#fanatical--pick-and-mix-tier-prices)).
-- **`lib/gamepass.js`** — the PC Game Pass catalog as Steam appids ([integrations.md](integrations.md#xbox-pc-game-pass--catalog-feed)).
+- **`lib/earlyExpired.js`** — `findEarlyExpired`: bundles still on sale that ITAD already expired, from its expired pages ([bundles-and-prices.md](bundles-and-prices.md#fanatical--pick--mix-tier-prices)).
+- **`lib/gamepass.js`** — the PC Game Pass catalog as Steam appids ([bundles-and-prices.md](bundles-and-prices.md#xbox-pc-game-pass--catalog-feed)).
 - **`lib/streamEvent.mjs`** — one game's details-stream event, without screenshots and trailers; an ES module so `e2e/mockApi.ts` shares it.
 - **`lib/upstream.js`** — `createSemaphore` (concurrency cap + per-slot pacing, registered for `GET /api/metrics`) and `upstreamError`, shared by the upstream clients.
 - **`lib/circuitBreaker.js`** — one 403-storm breaker per blocking-prone upstream (Steam store, HLTB, ProtonDB).
@@ -68,6 +68,9 @@ Rate limits ([observability.md](observability.md), [data.md](data.md)):
 
 - Every route that can reach an upstream, plus the auth routes and the prefs write, is behind a named `express-rate-limit` instance.
 - Most `skip` requests they can answer from cache. Always counting: `bundlesById` (a looser budget instead), `auth` (a fixed `max: 20` in `server.js`, login and callback), `prefs` (apart from `auth`), and the stream route (its array body defeats `details`' per-appid skip).
+- `BUNDLES_RATE_LIMIT_MAX` backs six limiters — `bundlesListLimit`, `bundlesByIdLimit`, `bundlesResolveLimit`, `pricesLimit`, `gameBundlesLimit`, `gamePassLimit` — each `skip`ping a request it can answer from cache by checking the cache keys that route reads (the same pattern as `detailsLimit`); `bundlesListLimit` checks only the page it serves, not the expired pages `findEarlyExpired` may walk. Without the skip, reloading a bundle page a few times would 429 a genuinely new bundle open.
+  - `pricesLimit` checks `itad-price:` for whichever of `gids`/`appids` was sent, plus `itad-gid:` for `appids`.
+  - `bundlesByIdLimit` can't skip — `findBundleById` walks a variable number of pages — so it gets twice the budget instead; its pages are still cached underneath.
 - A middleware after the JSON body parser runs each request under its client's key (`clientKey`, the limiters' key) in an `AsyncLocalStorage`, so the outbound calls it makes are charged to that client's share of the outbound budgets ([observability.md](observability.md#outbound-budgets)).
 - No limiter: health, metrics, `GET /api/me`, logout, `/opensearch.xml` and the SPA shell (cache-only, no upstream call).
 

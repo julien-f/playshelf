@@ -24,7 +24,7 @@ Judges the app against [docs/dev/journeys.md](../../../docs/dev/journeys.md) and
 Seed before opening _any_ route and restore only on the way out, as in [testing.md](../../../docs/dev/testing.md#looking-at-the-ui) (`empty` for a first visit, A1).
 
 - Only the demo account (in the script) may be typed, except accounts the user names for this review. Those: never committed, screenshots only in `.playwright-mcp/`, called Friend A/B everywhere — in the report and in improvements.md, never by their Steam name. On the real server, skip A4 while no allowed account has a public friends list; mocks have one (Alice's).
-- Stay inside [integrations.md](../../../docs/dev/integrations.md)'s trust tiers: one pass per scenario, no repeated ↻ refreshes. A large library's first load streams for minutes (uncached details are throttled) — judge the feedback, don't wait for it to finish.
+- Stay inside [integrations.md](../../../docs/dev/integrations.md#trust-tiers)'s trust tiers: one pass per scenario, no repeated ↻ refreshes. A large library's first load streams for minutes (uncached details are throttled) — judge the feedback, don't wait for it to finish.
 
 ## Walk each scenario
 

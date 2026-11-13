@@ -11,7 +11,7 @@ A request for something the app doesn't do yet. Fixing a filed item is [ux-fix](
 
 - Who it's for and what they're trying to do: the matching _Who / goal_ in [journeys.md](../../../docs/dev/journeys.md), and what the app already does nearby ([features.md](../../../docs/user/features.md)).
 - Check [improvements.md](../../../docs/dev/improvements.md), [code-backlog.md](../../../docs/dev/code-backlog.md) and [decisions.md](../../../docs/dev/decisions.md): it may be filed, or declined with a reason.
-- A new upstream: [integrations.md](../../../docs/dev/integrations.md)'s trust tiers first.
+- A new upstream: [integrations.md](../../../docs/dev/integrations.md#trust-tiers)'s trust tiers first.
 
 ## 1. Proposals
 

@@ -29,9 +29,11 @@ Default sort is Weighted Rating descending, except a bundle (grouped by tier, ch
 - Most columns carry a `category` (`@vates/data-table-core` ≥ 0.13) — `Scores & Reviews`, `How Long To Beat`, `Play Time & Dates`, `Classification` (also Add-on), `Compatibility`, `Extras`, `Pricing` (`PRICE_COLUMNS` plus Tier Price) — so the Columns/Sort/Group/Filter menus collapse into per-category submenus. Identity (`capsule`/`name`) and Wishlist Rank stay uncategorized.
 - On a phone (≤ 768 px) the Name column stays in place while the table scrolls sideways: its `pinned: true` makes it sticky, which `styles/vendor-data-table.css` turns off above 768 px.
 - The Image column shows `row.thumb` (the 231×87 capsule), falling back to `row.capsule` if it fails, then hiding; a row that starts from a search's tiny image keeps it until details stream in. A game with no store page (delisted) gets both guessed at Steam's conventional CDN paths (`steamAppAsset`), which outlive the page.
+  - Images load browser-direct from Steam's CDN ([integrations.md](integrations.md#store-metadata--appdetails)), one per row: `capsule_image` (231×87, ~12 KB), falling back to `capsule_imagev5` (184×69, ~8 KB): the larger one costs bytes (×1.5), not requests.
+- HLTB's default column is `hltbAll` ("HLTB (h)"), HLTB's All PlayStyles ([integrations.md](integrations.md#hltb--no-npm-package)): being one representative number, it's also the ranking card's "10.5 h to beat".
 - Prev/next ordering (`getGameList`) reads the table's `processedData()` accessor; nothing imports the unsupported `@vates/data-table-core/internal`.
 
-**Record-low badges** — `dealRecordTier(price, row)` (`utils.ts`) is the one source for them, over `DEAL_RECORD_TIERS`: green + bold + 🔥 all-time low, plain + ★ 1-year, amber + ☆ 3-month, rarest first. `<=`, since the current deal can be the low itself. A deal with no discount gets no tier, since ITAD's lows include full prices ([integrations.md](integrations.md)).
+**Record-low badges** — `dealRecordTier(price, row)` (`utils.ts`) is the one source for them, over `DEAL_RECORD_TIERS`: green + bold + 🔥 all-time low, plain + ★ 1-year, amber + ☆ 3-month, rarest first. `<=`, since the current deal can be the low itself. A deal with no discount gets no tier, since ITAD's lows include full prices ([bundles-and-prices.md](bundles-and-prices.md#prices)).
 
 - `renderBestDeal` badges the price instead of putting the shop name in the cell; the shop is in the `title` tooltip (plus the tier's `tooltipLabel`, e.g. " — all-time low") and in the hidden `bestDealShop` column.
 - The panel's Price card (`PriceSection`) keeps its own render code on `dealRecordTier`: importing `renderBestDeal` would pull `@vates/data-table-solid` into the panel. Unlike the cell, it spells each badge out ("★ 1-year low", "all-time low €2.49 🔥"), having the room.
@@ -40,11 +42,19 @@ Default sort is Weighted Rating descending, except a bundle (grouped by tier, ch
 
 **A refusal is said once, in the server's words.** Past this client's share of the outbound budgets ([observability.md](observability.md#outbound-budgets)), the details stream sends one `{ limited }` event: the status line shows its message instead of `failedSummary`'s per-source counts. A 429 on the list's prices, or on the panel's achievements, price or bundles (`refusalMessage`, kept per key by `panelData.ts`), shows the server's message instead of "didn't answer".
 
+**Prices load apart from details** (`loadPrices`, `ListRoute.tsx`; the upstream side: [bundles-and-prices.md](bundles-and-prices.md#prices)):
+
+- **Chunks**: `loadPrices` chunks to the server's `MAX_PRICE_LOOKUP_GAMES` cap, sequentially — a wishlist can exceed it, a bundle never does.
+- **A bundle's prices load concurrently with its details stream**: pricing has nothing to do with ratings/HLTB/tags.
+- **A failed call** (rate limit, upstream error) sets every row's price fields to `null` ("—", not the loading "…") and says so in the list's price status line (`loadPrices`).
+- **Default columns**: Best Deal and Discount visible; Steam Full Price (named so it reads as the list price), All-Time Low, Best Deal Shop, 1yr Low and 3mo Low hidden — Best Deal + Discount already answer "is this a good deal".
+- **Two currency fields**, since a tier's currency and a game's can differ ([bundles-and-prices.md](bundles-and-prices.md#currency-is-passed-through-not-converted)): `tierCurrency` (from the bundle's tier data, Tier Price only) and `priceCurrency` (always set from the price response, the other five price columns). One shared field once mislabeled USD tier prices with the region's symbol, or the reverse, depending on which request answered first. `formatMoney(v, currency)` (`public/utils.ts`) is called by `renderPrice` (`gameColumns.ts`) and `renderTierPrice` (`ListRoute.tsx`) with their own field.
+
 **Price columns group by bucket, not exact value** (a raw price is near-unique per row):
 
 - Every price column (Tier Price, Steam Full Price, Best Deal, the three lows) buckets against `PRICE_TIERS` (`[0, 5, 15, 30, 50, 75, 100]`), matching Steam's common price points ($4.99/$14.99/$29.99/$49.99/$74.99), which neither a linear step nor `bucketLogRange` reproduces. A real `$0` is its own "Free" bucket.
 - Discount uses a fixed 25-point step (`bucketNumericRange(25)`/`formatNumericRange(25, '%')`).
-- Bucket labels have no currency symbol (`formatPriceTier`: `"5–15"`) for an amount bucketed as is, since the region's currency varies (`tierCurrency`/`priceCurrency`, [integrations.md](integrations.md)).
+- Bucket labels have no currency symbol (`formatPriceTier`: `"5–15"`) for an amount bucketed as is, since the region's currency varies (`tierCurrency`/`priceCurrency`, above).
 - A currency more than 2× off USD in `currency.ts`'s rates (yen, won, rupee…) is converted to USD before bucketing, or everything lands in "100+", and its labels say so ("$5–$15"); a near one (euro, pound…) is bucketed as is, since converting would push its .99 prices across the bounds.
 - Tier Price's missing bucket reads "Varies" (`formatMissingGroup(formatPriceTier, 'Varies')`), matching `renderTierPrice`'s "Varies ≠ no data". `ListRoute.tsx`'s `TIER_PRICE_COLUMN` reuses the bucket helpers.
 
@@ -110,6 +120,7 @@ Per kind:
 
 - **owned / wishlist** — name the account they show (avatar, profile link, Family merge count) with Games/Updated tiles, plus Prices on the wishlist. A `?u=` link is authoritative: while it resolves, and if it fails, the stored account is not loaded in its place.
 - **bundle** — Ends (with a countdown), Games, the price tile, Published, Prices, plus ITAD's editorial note; previous/next step through whatever `/bundles` last showed, in its order (`bundleBrowseStore.ts`), with All bundles beside them; Get this bundle is the one primary action. Games with **no Steam listing** (courses, asset packs, shop-exclusive keys) render below the table as a collapsed "N more in this bundle, not on Steam" section, and the status line reads "3 of 13 games matched to a Steam listing", so the table never passes for the whole bundle.
+  - `flattenBundleGames` (`public/bundleData.ts`) dedupes the bundle's games by ITAD game id, keeping the cheapest tier: a game can appear in several ([bundles-and-prices.md](bundles-and-prices.md#bundles)).
   - **Pricing model** (`bundlePricingModel`, over base tiers — an add-on tier is bought apart): `tiered` (two or more priced tiers, labelled Tiers, "each includes the cheaper ones"), `fixed` (one, labelled Price) or `pick` (Fanatical pick-and-mix, labelled Pick & mix; its rates may be unknown). Add-on tiers show as plain "… add-on" chips; `bundleTierSummary` drops an empty unpriced tier.
   - **Tier filter**: with two or more priced base tiers (`filterTiers`), each chip is a toggle (`HeroTile.chips`, rendered by `ListHero` through `<Index>` so a press keeps focus) setting Tier Price's range to `max` = its price — cumulative, since a pricier tier includes the cheaper ones'.
     - The pressed chip is read back from the range (`activeTierPrice`); New to you then counts only those rows, add-ons left out (`atTier`, through the `activeTier` memo); the chips stay plain until the bundle's table is ready and reads "New at $X".
@@ -121,7 +132,7 @@ Per kind:
     - It counts every row of the tier, not the filtered ones, like New to you; a filtered group can show fewer rows than its "N new".
     - Per step, unlike New to you's saving, which is over the whole tier price.
     - No verdict for an add-on or a range group (which tier holds them is unknown), none while a new game is unpriced ("2 new · 1 unpriced").
-  - **Fanatical pick-and-mix** (`bundle.pickAndMix`, see [integrations.md](integrations.md#fanatical--pick-and-mix-tier-prices)): one chip per quantity tier ("5 for €5.99"); Fanatical charges every pick the per-game rate of the largest tier reached.
+  - **Fanatical pick-and-mix** (`bundle.pickAndMix`, see [bundles-and-prices.md](bundles-and-prices.md#fanatical--pick--mix-tier-prices)): one chip per quantity tier ("5 for €5.99"); Fanatical charges every pick the per-game rate of the largest tier reached.
     - `cheapestPicks` (`bundleRows.ts`) prices one pick per ITAD gid at that rate, or at a larger tier's price when lower (spare picks free). The plan's chip gets `bundle-tier-chip--active`; the selection toolbar shows the cost (`pickPlanDetail` under it), then the saving or overpay against the same games' best deals (`savingsText`, green/red, with its estimate in the region currency like every bundle price in another currency), owned picks left out (`selectedOwnedGids`: a package only when all its rows are owned) and counted beside it.
     - Each row's Tier Price (`tierPerGame`, "/game") is the plan's rate (`pickRate`), rewritten on every row by an effect on selection change — the same on every row, so a sort on it doesn't reorder.
     - With `bundle.pickAndMixNames`, the toolbar adds **Buy N on Fanatical ↗** (`fanaticalBuyUrl`), the draggable **Add to Fanatical** bookmarklet (`FANATICAL_BOOKMARKLET`; clicking it here only says to drag it) and "N to pick by hand" for unmatched picks.

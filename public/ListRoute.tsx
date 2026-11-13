@@ -873,7 +873,7 @@ export default function ListRoute() {
   const [emptyText, setEmptyText] = createSignal('');
   // kind === 'bundle' only, alongside bundleTitle above — ITAD's own page for this bundle
   // (`details`) and the real shop/affiliate purchase link exactly as ITAD returned it (`url`,
-  // never rewritten or stripped of tracking params — see docs/dev/integrations.md on why), and the
+  // never rewritten or stripped of tracking params — see docs/dev/bundles-and-prices.md on why), and the
   // gid -> Fanatical name map "Buy on Fanatical" needs (pick-and-mix bundles only).
   const [bundleLinks, setBundleLinks] = createSignal<{
     details: string | null;

@@ -1,6 +1,6 @@
 # Observability
 
-Outbound-request metrics, budgets, and the warnings the app logs on its own. Cache tiers: [data.md](data.md); upstream trust tiers: [integrations.md](integrations.md).
+Outbound-request metrics, budgets, and the warnings the app logs on its own. Cache tiers: [data.md](data.md); upstream trust tiers: [integrations.md](integrations.md#trust-tiers).
 
 ## GET /api/metrics
 
@@ -43,7 +43,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 
 - `getAlerts` (`lib/metrics.js`, thresholds in its `ALERT`), computed at each read from the same body: warnings first, then information. `firstAt`/`lastAt` date a windowed one.
 - **warn**: ≥ 3 unexpected answers on one label in the last hour (`hltb.search`); a 5xx on an inbound route; a breaker open now; a budget at ≥ 80 % of a ceiling; an event-loop delay ≥ 1 s outside the first 2 minutes after start (loading the cache blocks it then).
-- **info**: a breaker that tripped in the last hour and closed again; rate-limiter trips; loads that hit a client's budget share (`streams.limited`); a semaphore's `rejected` (lifetime, so not a warning); a start less than an hour ago (`lastHour` partial, a crash loop shows); ITAD's end dates matching an override's on every live bundle (`itad-dates`, [integrations.md](integrations.md#bundles)).
+- **info**: a breaker that tripped in the last hour and closed again; rate-limiter trips; loads that hit a client's budget share (`streams.limited`); a semaphore's `rejected` (lifetime, so not a warning); a start less than an hour ago (`lastHour` partial, a crash loop shows); ITAD's end dates matching an override's on every live bundle (`itad-dates`, [bundles-and-prices.md](bundles-and-prices.md#isthereanydeal)).
 - Not from `daily`: history, not "now"; read it by day.
 
 ### Outbound — `outbound`

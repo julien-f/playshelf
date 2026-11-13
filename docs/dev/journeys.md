@@ -6,7 +6,7 @@ What users come to the app to get done: the input for design reviews (walk each 
 - **Non-goals**: buying or trading through the app; social features beyond reading Steam's friends lists; knowing which games cross-play between stores (no source says); storing anything about an account beyond its cached public data and the user's own lists.
 - **Constraints** every design works within:
   - nothing about a user is stored server-side beyond the upstream cache and opt-in [Sync](lists-and-accounts.md#sync), so state lives in the browser and in links;
-  - request volume is bounded by upstreams that are undocumented or unsanctioned ([integrations.md](integrations.md)'s trust tiers), so a feature costing one call per friend or per game needs a volume review first;
+  - request volume is bounded by upstreams that are undocumented or unsanctioned ([integrations.md](integrations.md#trust-tiers)'s trust tiers), so a feature costing one call per friend or per game needs a volume review first;
   - defaults that work over new settings ([ui-guidelines.md](ui-guidelines.md#principles)).
 - **Core journeys**, why the app exists: A1, C1, F1, F3, B1, S1, S3. A design review always walks them, and friction there outranks the same severity elsewhere.
 

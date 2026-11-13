@@ -19,7 +19,8 @@ Each doc, and when to read it — the section you need, not the whole file:
 - [docs/dev/game-table.md](docs/dev/game-table.md) — before changing a column, sorting, grouping, saved views, a list's hero or a list kind
 - [docs/dev/panel-and-lightbox.md](docs/dev/panel-and-lightbox.md) — before changing the side panel, the lightbox, trailers or the presentation window
 - [docs/dev/lists-and-accounts.md](docs/dev/lists-and-accounts.md) — before changing accounts, `?u=`, lists, combine, ranking, sync or a localStorage key
-- [docs/dev/integrations.md](docs/dev/integrations.md) — before adding or changing any upstream call: trust tiers, what's undocumented, confirmed rules and assumptions
+- [docs/dev/integrations.md](docs/dev/integrations.md) — before adding an upstream or changing a Steam, HLTB or ProtonDB call: trust tiers, request volume, what's undocumented, confirmed rules and assumptions
+- [docs/dev/bundles-and-prices.md](docs/dev/bundles-and-prices.md) — before changing bundles, prices, Fanatical, Humble Choice or PC Game Pass
 - [docs/dev/data.md](docs/dev/data.md) — before changing a cache key, a TTL, a refresh path or a migration
 - [docs/dev/observability.md](docs/dev/observability.md) — before adding an outbound group, a rate limiter or a log warning
 - [docs/dev/journeys.md](docs/dev/journeys.md) — before a design review, an end-to-end test or a user-facing feature plan
@@ -31,7 +32,7 @@ Each doc, and when to read it — the section you need, not the whole file:
 - [docs/dev/pitfalls.md](docs/dev/pitfalls.md) — on an unexpected error: `grep -ri '<fragment>' docs/ .claude/skills/` first
 - [docs/images/](docs/images) — the screenshots the docs embed; shooting them is the `screenshots` skill
 
-Two are load-bearing: **frontend.md's reactivity rules** (`npm run lint` enforces the no-reactive-`const` one), and **integrations.md's trust tiers** — several upstreams are undocumented and unsanctioned, so don't scale request volume without revisiting them.
+Two are load-bearing: **frontend.md's reactivity rules** (`npm run lint` enforces the no-reactive-`const` one), and **[integrations.md's trust tiers](docs/dev/integrations.md#trust-tiers)** — several upstreams are undocumented and unsanctioned, so don't scale request volume without revisiting them.
 
 ## Code conventions
 
@@ -50,7 +51,7 @@ These add to the user-level `~/.claude/CLAUDE.md` working style.
   - Doc prose (this file, `README.md`, `CHANGELOG.md`, `docs/`): short bullets over paragraphs; no preamble, no summary section, lead with the point. Docs state current behavior and its why, never how it got there (that's commits and `CHANGELOG.md`); each number lives in one place (`default.env`, or the doc that owns it) and the others link it.
 - Saying something is done includes where to see it: the route and steps for a UI change, the link to a posted comment or issue after checking it exists.
 - A user-facing feature's plan review includes one as the app's users ([journeys.md](docs/dev/journeys.md#who-uses-it)'s personas): would they use it, is it worth its place?
-- When code models an upstream's behavior (pricing, limits, matching rules) from inference rather than its docs, state the assumption in the plan and confirm it before building on it; record confirmed rules and remaining assumptions in [integrations.md](docs/dev/integrations.md).
+- When code models an upstream's behavior (pricing, limits, matching rules) from inference rather than its docs, state the assumption in the plan and confirm it before building on it; record confirmed rules and remaining assumptions in [integrations.md](docs/dev/integrations.md) or [bundles-and-prices.md](docs/dev/bundles-and-prices.md).
 
 ## Ask first
 
