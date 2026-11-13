@@ -22,7 +22,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Compare up to 5 friends straight from Home's friends list
 - Add a game to your lists, or start a new one with it, from its panel
 - A Runs on Linux (ProtonDB) suggested view on Owned and Wishlist: games rated Native, Platinum or Gold on ProtonDB
-- A Runs on Linux (ProtonDB) suggested view on Owned: games rated Native, Platinum or Gold on ProtonDB
 - Compare's player boxes suggest the current account's friends
 
 ### Changed
