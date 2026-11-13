@@ -5373,6 +5373,56 @@ test("D2 edge: a Refresh details answered past its share after stepping to anoth
   await expect(page.locator('.list-status')).not.toContainText(LIMITED);
 });
 
+test("D2 edge: a Refresh details that fails after stepping to another bundle doesn't say so on the new one", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/bundles');
+  await page.getByRole('cell', { name: BUNDLE.title }).click();
+  await row(page, 'Hades').getByText('Hades').click();
+  await page.route('**/api/game-details/1145360?refresh=1', (route) =>
+    route.fulfill({ status: 502, json: { error: 'Steam is down' } }),
+  );
+  const refresh = await gate(page, '**/api/game-details/1145360?refresh=1'); // registered last: runs first
+  await page.locator('.panel-refresh-btn').click();
+  await refresh.requested;
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Next bundle' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: PICK_BUNDLE.title })).toBeVisible();
+  await expect(rows(page)).not.toHaveCount(0);
+  refresh.release();
+  // The button is disabled until the refresh has settled.
+  await row(page, 'Hades').getByText('Hades').click();
+  await expect(page.locator('.panel-refresh-btn')).toBeEnabled();
+  await expect(page.locator('.list-status')).not.toContainText('Refresh failed');
+});
+
+test("D2 edge: a lookup answered past its share after stepping to another bundle doesn't mark the new one", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.route('**/api/game-details/9000*', (route) =>
+    route.fulfill({ json: { appid: 900001, name: 'Test DLC', meta: null, failed: ['meta'], limited: LIMITED } }),
+  );
+  const lookup = await gate(page, '**/api/game-details/9000*'); // registered last: runs first
+  await page.goto('/bundles');
+  await page.getByRole('cell', { name: BUNDLE.title }).click();
+  await row(page, 'Hades').getByText('Hades').click();
+  const card = page.locator('#panel-section-dlc');
+  await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+  await card.locator('.panel-dlc-item').first().click();
+  await lookup.requested;
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Next bundle' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: PICK_BUNDLE.title })).toBeVisible();
+  await expect(rows(page)).not.toHaveCount(0);
+  lookup.release();
+  // Recorded as looked up once its reply has landed.
+  await page.getByPlaceholder('Look up any game…').click();
+  await expect(page.locator('.game-search-result').first()).toContainText('Test DLC');
+  await expect(page.locator('.list-status')).not.toContainText(LIMITED);
+});
+
 test("D2.3: once the upstream is back, the panel's Refresh details fills in what didn't answer", async ({ page }) => {
   await mockApi(page, { states: ['upstream-down'] });
   await asPlayer(page, ALICE);
