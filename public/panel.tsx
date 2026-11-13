@@ -107,6 +107,7 @@ import Cast from 'lucide-solid/icons/cast';
 import TriangleAlert from 'lucide-solid/icons/triangle-alert';
 import Wrench from 'lucide-solid/icons/wrench';
 import X from 'lucide-solid/icons/x';
+import { focusVisible, keepFocus } from './focusHandoff.ts';
 
 // A pick-and-mix bundle has no tier price; its best quantity rate stands in, as on its own page.
 function bundleTierText(b: GameBundle): string {
@@ -1376,8 +1377,13 @@ function AchievementsSection(props: { game: ReadonlyGame }): JSX.Element {
                   type={spoiler() ? 'button' : undefined}
                   class={`panel-achievement-row${a.achieved ? ' unlocked' : ''}${spoiler() ? ' panel-achievement--spoiler' : ''}`}
                   title={title || undefined}
-                  onClick={() => {
-                    if (spoiler()) revealAchievement(props.game.appid, a.apiname);
+                  // Focusable once revealed, so the reveal keeps focus on it rather than on <body>.
+                  tabindex={a.hidden && !a.achieved && !spoiler() ? -1 : undefined}
+                  onClick={(e: MouseEvent & { currentTarget: HTMLElement }) => {
+                    if (!spoiler()) return;
+                    const item = e.currentTarget.parentElement;
+                    const reveal = revealAchievement.bind(null, props.game.appid, a.apiname);
+                    void keepFocus(item, reveal, () => focusVisible(item?.firstElementChild as HTMLElement | null));
                   }}
                 >
                   <img class="panel-achievement-icon" src={icon} alt="" loading="lazy" />

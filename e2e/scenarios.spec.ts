@@ -8417,7 +8417,7 @@ test('I2 edge: a click outside closes each nav popover, and opening one closes t
   }
 });
 
-test('I2 edge: a hidden achievement is revealed by Enter, and by Space', async ({ page }) => {
+test('I2 edge: a hidden achievement is revealed by Enter, and by Space, keeping focus on it', async ({ page }) => {
   await page.route('**/api/achievements/**', (route) => {
     const req = route.request();
     const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
@@ -8435,10 +8435,13 @@ test('I2 edge: a hidden achievement is revealed by Enter, and by Space', async (
   await page.keyboard.press('Enter');
   await expect(card).toContainText('First steps');
   await expect(hidden).toHaveCount(1);
+  // Focus stays on what was just revealed, so it's read out, not dropped to <body>.
+  await expect(card.locator('.panel-achievement-row').filter({ hasText: 'First steps' })).toBeFocused();
   await hidden.focus();
   await page.keyboard.press(' ');
   await expect(card).toContainText('Completionist');
   await expect(hidden).toHaveCount(0);
+  await expect(card.locator('.panel-achievement-row').filter({ hasText: 'Completionist' })).toBeFocused();
 });
 
 test("I2 edge: Enter or Space on the panel's hero opens the lightbox once", async ({ page }) => {
