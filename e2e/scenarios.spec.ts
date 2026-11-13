@@ -7187,6 +7187,28 @@ test('F1 edge: the nav search box empties after a pick and on a second Esc', asy
   await expect(box).toHaveValue('');
 });
 
+test('F1 edge: a second Esc in the nav search box hands focus back to where it came from', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(6);
+  const box = page.getByPlaceholder('Look up any game…');
+  const share = page.getByRole('button', { name: 'Share layout' });
+  await share.focus();
+  await page.keyboard.press('/');
+  await expect(box).toBeFocused();
+  await page.keyboard.type('zz');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(share).toBeFocused();
+
+  // From nowhere in particular (the page's top), to the main content rather than <body>.
+  await page.locator('body').evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('/');
+  await expect(box).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('main.app-content')).toBeFocused();
+});
+
 test('F1 edge: the nav search box’s Clear search button empties it and keeps it focused, back on the recents', async ({
   page,
 }) => {
