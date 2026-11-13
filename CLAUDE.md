@@ -48,7 +48,7 @@ These add to the user-level `~/.claude/CLAUDE.md` working style.
   - Code comments: one line (two at most, for a _why_ that needs it), stating the _why_, only when it isn't obvious from the code; skip the comment entirely if the code speaks for itself. This governs new comments; leave the long-form ones already in the tree alone.
   - Doc prose (this file, `README.md`, `CHANGELOG.md`, `docs/`): short bullets over paragraphs; no preamble, no summary section, lead with the point. Docs state current behavior and its why, never how it got there (that's commits and `CHANGELOG.md`); each number lives in one place (`default.env`, or the doc that owns it) and the others link it.
 - Saying something is done includes where to see it: the route and steps for a UI change, the link to a posted comment or issue after checking it exists.
-- A user-facing feature's plan review includes one as the app's users ([journeys.md](docs/dev/journeys.md)'s _Who / goal_): would they use it, is it worth its place?
+- A user-facing feature's plan review includes one as the app's users ([journeys.md](docs/dev/journeys.md#who-uses-it)'s personas): would they use it, is it worth its place?
 - When code models an upstream's behavior (pricing, limits, matching rules) from inference rather than its docs, state the assumption in the plan and confirm it before building on it; record confirmed rules and remaining assumptions in [integrations.md](docs/dev/integrations.md).
 
 ## Ask first

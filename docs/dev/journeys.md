@@ -4,6 +4,26 @@ What users come to the app to get done: the input for design reviews (walk each 
 
 - **Goals**: explore Steam libraries as lists of games, with ratings, completion times and prices in one table; combine lists to answer what Steam can't (what friends both own, what a bundle adds, what the family already has); share a view; run it yourself for a group of friends.
 - **Non-goals**: buying or trading through the app; social features beyond reading Steam's friends lists; storing anything about an account beyond its cached public data and the user's own lists.
+- **Core journeys**, why the app exists: A1, C1, F1, F3, B1, S1, S3. A design review always walks them, and friction there outranks the same severity elsewhere.
+
+## Who uses it
+
+Derived from the journeys below and the features built for them, not from user research. A journey not listed here (M, D2, Y, I) is everyone's.
+
+- **Curator**: one player tending their own library — the backlog, rankings, the wishlist and its deals, a gift for a friend.
+  - Desktop for building lists and ranking; a phone on the couch for picking tonight's game.
+  - Journeys: A1, A2, A5, L1, L3–L5, R1–R3, B1, B2, B4, B5, F1–F4, S1, D1, D3.
+- **Game-night host**: gathers 2–5 friends and wants what they all own and can run, then shows it on a TV.
+  - Knows their friends' Steam names, not their ids; someone in the group often plays on Linux or a Steam Deck.
+  - Journeys: A4, A5, C1–C8.
+- **Household**: a Steam Family sharing one library, judging purchases and bundles against what anyone in it owns.
+  - Journeys: A3, L2, B3.
+- **Link recipient**: opens a friend's link with no local state and never chose the app; their first visit is the app's first impression.
+  - Wants the answer in the link, with no setup.
+  - Journeys: S3, and the receiving end of S1, S2 and C1.
+- **Instance admin**: self-hosts the app for a group of friends; an operator, so outside design reviews beyond O1.
+  - Journeys: O1.
+- Traits, not personas: a Linux or Steam Deck player, a phone, a keyboard or a screen reader can be anyone's (C5, I1–I3).
 
 Each journey: **Who / goal**, numbered **Steps** as a user would take them, **Done when** (what must be true at the end) and **Edges** worth checking. ◇ marks a step or outcome the app doesn't support yet: the target a design review pushes toward. Which steps `e2e/scenarios.spec.ts` locks (★) is derived, never written: `node scripts/journey-coverage.js`.
 

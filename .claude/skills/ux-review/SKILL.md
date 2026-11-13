@@ -9,7 +9,7 @@ Judges the app against [docs/dev/journeys.md](../../../docs/dev/journeys.md) and
 
 ## Scope
 
-- **Default: the journeys with a ★ step** (`node scripts/journey-coverage.js`). A named scenario, group or route narrows it; "full" walks every scenario.
+- **Default: the core journeys** ([journeys.md](../../../docs/dev/journeys.md)'s intro) **and those with a ★ step** (`node scripts/journey-coverage.js`), each walked as its persona ([Who uses it](../../../docs/dev/journeys.md#who-uses-it)). A named scenario, group or route narrows it; "full" walks every scenario.
 - **Re-check `U<n>`**: walk only the scenarios that [improvements.md](../../../docs/dev/improvements.md) item names, confirm the fix, then drop or narrow the item.
 - A scenario that's wrong about the app (a step that doesn't exist, a stale expectation) is a finding against the doc.
 - Say which scenarios were walked and which were skipped, and why.
@@ -23,7 +23,7 @@ Judges the app against [docs/dev/journeys.md](../../../docs/dev/journeys.md) and
 
 Seed before opening _any_ route and restore only on the way out, as in [testing.md](../../../docs/dev/testing.md#looking-at-the-ui) (`empty` for a first visit, A1).
 
-- Only the demo account (in the script) may be typed, except accounts the user names for this review. Those: never committed, screenshots only in `.playwright-mcp/`, called Friend A/B everywhere — in the report and in improvements.md, never by persona name. Skip A4 while no allowed account has a public friends list.
+- Only the demo account (in the script) may be typed, except accounts the user names for this review. Those: never committed, screenshots only in `.playwright-mcp/`, called Friend A/B everywhere — in the report and in improvements.md, never by their Steam name. Skip A4 while no allowed account has a public friends list.
 - Stay inside [integrations.md](../../../docs/dev/integrations.md)'s trust tiers: one pass per scenario, no repeated ↻ refreshes. A large library's first load streams for minutes (uncached details are throttled) — judge the feedback, don't wait for it to finish.
 
 ## Walk each scenario
@@ -58,7 +58,7 @@ After any real-server visit, restore the demo state; don't finish while `steam.i
 
 - Record every finding in [improvements.md](../../../docs/dev/improvements.md): numbered on from `node scripts/backlog-next.js U` (never reuse a closed item's number), under its area, `**U<n> · <severity> · <scenarios>** — problem. Direction.` A finding whose cause commit is already known: `--escape` as [code-fix's step 0](../code-fix/SKILL.md#0-before-starting). Update or drop items the run shows fixed.
 - **Severity**: _blocker_ (the goal can't be reached) · _major_ (reached with real confusion or a workaround) · _minor_ (friction) · _polish_.
-- Report one table ranked by severity, then one line on what worked well enough to keep:
+- Report one table ranked by severity (a core journey first within a severity), then one line on what worked well enough to keep:
 
 | U   | Severity | Scenario | Where | Finding | Suggestion |
 | --- | -------- | -------- | ----- | ------- | ---------- |
