@@ -62,6 +62,19 @@ test('A1 edge: the first account resolved becomes my ★ account; a later one do
   await expect(page.locator('.account-tiles .account-tile').first()).toHaveText(/Alice.*\(yours\)/);
 });
 
+test('A1 edge: signing in stars the signed-in account, replacing a friend looked up first', async ({ page }) => {
+  await page.goto('/');
+  const lookup = page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…');
+  await lookup.fill('bob');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Unstar Bob' })).toBeVisible();
+
+  await page.route('**/api/me', (route) => route.fulfill({ json: { steamid: ALICE.steamid, prefs: {} } }));
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Alice (yours)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Star Bob as mine' })).toBeVisible();
+});
+
 test('A2 edge: after unstarring my account, looking up a friend does not star them', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/');

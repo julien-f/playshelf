@@ -20,7 +20,7 @@ Accounts, lists, folders and preferences live in `localStorage` (`prefs.ts`). Si
 
 Two account slots, both optional, distinct from any list:
 
-- **`myAccount`** — "this is me", a pinned default identity, set by starring (★) any entry in the account picker. Home's lookup stars the very first account it resolves (none starred or current yet), signing in its account while none is starred; one reached by a `?u=` or compare link never is.
+- **`myAccount`** — "this is me", a pinned default identity, set by starring (★) any entry in the account picker. Home's lookup stars the account it resolves while none is starred or current yet; a Steam sign-in always stars the signed-in account, replacing any ★ ([Sign-in](#sign-in)); one reached by a `?u=` or compare link never is.
 - **`currentAccount`** — whoever is being explored (may be `myAccount`, someone else, or empty). Drives the account header and the Owned/Wishlist system lists.
 
 Both are full `AccountSlot` objects (see the schema below), not id references, so clearing history never orphans either.
@@ -127,7 +127,9 @@ Sign in with Steam (`lib/auth.js`, the `/auth/*` routes in `server.js`) is Steam
 - **Cookies** are `HttpOnly; SameSite=Lax`, and `Secure` when `PUBLIC_ORIGIN` is `https` — the scheme visitors see, while the request's own is the proxy hop's without `TRUST_PROXY`.
 - **Sessions**: a random id in the `sid` cookie, kept in `sessions` by its SHA-256, so a copy of `db.sqlite` signs no one in. One lasts `SESSION_TTL_DAYS`; `GET /api/me` slides it forward to the full length once half is gone, with no absolute cap: accepted, as a session only reaches synced prefs. Expired rows are swept at startup and hourly; `POST /auth/logout` deletes the session.
 - **In the browser** (`authStore.ts`): the account chip's popover (`AccountChip.tsx`) links to the login; `initAuth` asks `GET /api/me` on every page load, then merges prefs ([Sync](#sync)).
-- **Signing in fills `myAccount`/`currentAccount` when unset** (`autoPopulateAccountFromLogin`), via the same `resolveAccountSlot` as Home's picker; an existing pick is never overwritten, and a failed resolve retries on the next load.
+- **Signing in always stars the signed-in account** (`autoPopulateAccountFromLogin`, via the same `resolveAccountSlot` as Home's picker), replacing any ★ — e.g. a friend Home starred on a first lookup — and fills `currentAccount` when unset, never overwriting it.
+  - A sign-in is a check whose steamid isn't the `signed-in-as` key below (first sign-in, after Sign out, another account); a later load of the same sign-in only fills an unset ★, so one picked since stays. Re-signing in the same account after an expiry keeps the ★ too.
+  - The key is written once the account is in, so a prefs adoption's reload or a failed resolve still stars it on the next load.
 - **An expired sign-in shows** (`authStore.ts`'s `isSessionExpired`): the `steam.isonoe.net:signed-in-as` localStorage key (its own, never synced) holds the steamid last signed in on this browser; signed out by a check or a 401 while it's set puts an amber dot on the account chip and **Sign in again** / **Stay signed out** in its popover. Sign out and Stay signed out clear the key; an `/api/me` that fails (offline, 5xx) never sets it.
 - **Sign out sends pending pushes first**, then logs out, so a debounced edit still reaches the account.
 

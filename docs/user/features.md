@@ -25,7 +25,7 @@ There is no account to create. The accounts you look at, the lists you build and
 Enter a Steam profile URL, vanity name or 64-bit ID on the home page to explore that account. Several identifiers at once resolve into one **Family** — their libraries are merged, so a game anyone in the family owns counts as owned.
 
 - **Current account** — whoever you're exploring right now. The nav bar always says who that is, with one-click links to their **Owned** and **Wishlist** lists.
-- **My account** — the first account you ever look up on Home (or sign in with) is starred as yours; star another on Home's account card to change it. An account opened from a link is never starred.
+- **My account** — the account you look up on Home while none is starred or showing yet is starred as yours; signing in with Steam always stars the signed-in account instead. Star another on Home's account card to change it. An account opened from a link is never starred.
 - **Accounts** you look up are kept, with no limit, as one tile each (avatar and name) on the home page's account card: yours first, then by name, the same order in the nav-bar chip, which switches account without going back home. Hover or focus a tile, or press **Edit**, to remove one; past 8 accounts a filter finds one by name.
 - **The copy button copies an account's Steam identifier** — its custom URL name when it has one (`gaben`), its 64-bit ID otherwise — from the home page's account card (one per member for a Family) and from every account in the nav-bar chip. Any remembered account's identifier is one click away, current or not. That's the identifier to hand to someone else, or to paste back into the account field here.
 
@@ -211,7 +211,7 @@ A lightbox on another screen, for showing trailers and screenshots to the people
 
 ## Sync
 
-**Sign in with Steam** (in the nav-bar account chip) to keep your accounts, lists, views, rankings, statuses, recently looked-up games and region the same on every device. Signing in is optional; it also sets your account if you hadn't picked one. Changes sync as you make them, and the newest edit of each setting wins. A device signing in for the first time takes the account's settings rather than overwriting them.
+**Sign in with Steam** (in the nav-bar account chip) to keep your accounts, lists, views, rankings, statuses, recently looked-up games and region the same on every device. Signing in is optional; it also stars the signed-in account as yours. Changes sync as you make them, and the newest edit of each setting wins. A device signing in for the first time takes the account's settings rather than overwriting them.
 
 A sign-in lasts as long as you keep visiting ([Session lifetime](configuration.md)). If it expires anyway, an amber dot on the account chip says so, and its menu offers **Sign in again**, which syncs the changes made in the meantime, or **Stay signed out**.
 
