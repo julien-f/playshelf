@@ -130,6 +130,7 @@ import {
   smoothScroll,
   refusalMessage,
 } from './utils.ts';
+import { keepFocus, type FocusCandidate } from './focusHandoff.ts';
 import {
   shareTableView,
   resetTableView,
@@ -1207,7 +1208,7 @@ export default function ListRoute() {
     const rows = selectedRows();
     applyRanking(rows.reduce((s, row) => exclude(s, row.appid), state));
     showSelectionStatus(`Excluded ${rows.length} game${rows.length === 1 ? '' : 's'} from the ranking.`);
-    table?.selection.clear();
+    void keepFocus(selectionBar, () => table?.selection.clear(), focusSelectedRow(rows.map((r) => r.appid)));
   }
   // ── kind === 'shared' ─────────────────────────────────────────────────────────────────────
   // /lists/shared?f=<formula> — another dynamic list's formula, decoded straight from the URL
@@ -1413,17 +1414,25 @@ export default function ListRoute() {
     showSelectionStatus(added.message, added.listId);
     setAddTarget('');
     setNewListName('');
-    const main = document.querySelector<HTMLElement>('main');
-    // One the user can see, so focusing it doesn't scroll back to the first one added.
-    const focusTo =
-      appids.find((appid) => {
+    // Back to a row it added, not the toast's Open list, which would hold the toast up while focused.
+    void keepFocus(selectionBar, () => table?.selection.clear(), focusSelectedRow(appids));
+  }
+  // The selection bar unmounts once nothing is selected: focus it held goes to a row instead.
+  let selectionBar: HTMLDivElement | undefined;
+  // One the user can see, so focusing it doesn't scroll back to the first one.
+  function focusSelectedRow(appids: number[]): FocusCandidate {
+    return () => {
+      const main = document.querySelector<HTMLElement>('main');
+      const onScreen = appids.find((appid) => {
         const rect = gameRowEl(main, appid)?.getBoundingClientRect();
         return rect && rect.bottom > 0 && rect.top < window.innerHeight;
-      }) ?? appids[0];
-    table?.selection.clear();
-    // Clearing the selection unmounts the bar that held focus: back to a row it added, not the
-    // toast's Open list, which would hold the toast up for as long as it kept focus.
-    if (!focusGameRow(main, focusTo)) main?.focus();
+      });
+      return focusGameRow(main, onScreen ?? appids[0]);
+    };
+  }
+  function handleClearSelection(): void {
+    const appids = selectedRows().map((r) => r.appid);
+    void keepFocus(selectionBar, () => table?.selection.clear(), focusSelectedRow(appids));
   }
 
   // Only ever called while viewing a manual list (`kind === 'user' && userList().kind ===
@@ -1442,8 +1451,20 @@ export default function ListRoute() {
     const rows = selectedRows();
     if (!list || rows.length === 0) return;
     const appids = rows.map((r) => r.appid);
-    removeAppidsFromList(list.id, appids);
-    await load();
+    // The row now where the first removed one was, so focus stays at the same place in the table.
+    const at = table?.processedData().findIndex((r) => appids.includes(r.appid)) ?? -1;
+    await keepFocus(
+      selectionBar,
+      async () => {
+        removeAppidsFromList(list.id, appids);
+        await load();
+      },
+      () => {
+        const left = table?.processedData() ?? [];
+        const next = left[Math.min(Math.max(at, 0), left.length - 1)];
+        return !!next && focusGameRow(document.querySelector<HTMLElement>('main'), next.appid);
+      },
+    );
     showSelectionStatus(`Removed ${appids.length} game${appids.length === 1 ? '' : 's'} from "${list.name}".`);
   }
   let total = 0;
@@ -4575,7 +4596,7 @@ export default function ListRoute() {
       </Show>
       {/* Last, and stuck to the bottom: appearing above the table shifted every row under the pointer. */}
       <Show when={selectedRows().length > 0}>
-        <div class="selection-toolbar">
+        <div ref={selectionBar} class="selection-toolbar">
           <span class="selection-count">{selectedRows().length} selected</span>
           <Show when={pickPlan()}>
             {(plan) => (
@@ -4697,7 +4718,7 @@ export default function ListRoute() {
               Exclude
             </button>
           </Show>
-          <button type="button" onClick={() => table?.selection.clear()}>
+          <button type="button" onClick={handleClearSelection}>
             Clear selection
           </button>
         </div>

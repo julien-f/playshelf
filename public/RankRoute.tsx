@@ -29,6 +29,7 @@ import { withAccountParam } from './urlState.ts';
 import { computeSteamdbRating, detailsFields, fetchJson, isTextEntry, scoreColor, steamAppAsset } from './utils.ts';
 import { registerRouteHandlers } from './AppShell.tsx';
 import Kbd from './Kbd.tsx';
+import { focusFirst, focusLost, handOffFocus } from './focusHandoff.ts';
 import type { Game, GameDetails, GameDetailsReply } from './types.ts';
 
 const MAX_UNDO = 100;
@@ -145,6 +146,11 @@ export default function RankRoute() {
       fetchDetails(p.candidate);
       fetchDetails(p.opponent);
     }
+  });
+
+  // Arriving from a list's button (Rank N games, Re-rank, Continue ranking) leaves focus on <body>.
+  createEffect(() => {
+    if (pair() && focusLost()) handOffFocus(focusFirst('.rank-card-pick'));
   });
 
   // Focused before opening, so closing returns focus there however the panel was opened (I + ←/→ too).

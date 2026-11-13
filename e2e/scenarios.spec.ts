@@ -3077,6 +3077,28 @@ test('L1 edge: Add hands focus to an added row still on screen, not back to the 
   await expect(onScreen).toBeFocused();
 });
 
+test('L1 edge: Clear selection hands focus to a selected row as the selection bar goes', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  const picked = rows(page).nth(1);
+  await picked.getByRole('checkbox').check();
+  await page.locator('.selection-toolbar').getByRole('button', { name: 'Clear selection' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.selection-toolbar')).toHaveCount(0);
+  await expect(picked).toBeFocused();
+});
+
+test('L1 edge: Remove from this list hands focus to the next row left', async ({ page }) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620, 105600])] });
+  await page.goto('/lists/picks');
+  await expect(rows(page)).toHaveCount(2);
+  await rows(page).first().getByRole('checkbox').check();
+  await page.locator('.selection-toolbar').getByRole('button', { name: 'Remove from this list' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page).first()).toBeFocused();
+});
+
 test("L1 edge: the new list's toast stays while pointed at", async ({ page }) => {
   await page.clock.install();
   await asPlayer(page, ALICE);
@@ -3949,6 +3971,31 @@ test('R1 edge: a ranked list resumes with "Continue ranking", not the nav\'s Com
   await expect(page.getByRole('heading', { name: 'Ranking of Alice — Wishlist' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue ranking' })).toBeVisible();
   await expect(page.getByRole('main').getByRole('button', { name: /^Compare/ })).toHaveCount(0);
+});
+
+test('R1 edge: Exclude keeps focus on a selected row as the selection bar goes', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/wishlist');
+  await page.getByRole('button', { name: /Rank this list/ }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('heading', { name: /^Ranking of/ })).toBeVisible();
+  const toolbar = page.locator('.selection-toolbar');
+  const picked = rows(page).first();
+  await picked.getByRole('checkbox').check();
+  await toolbar.getByRole('button', { name: 'Exclude' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(toolbar).toHaveCount(0);
+  await expect(picked).toBeFocused();
+});
+
+test("R1 edge: ranking selected games lands on the first pick, not the page's top", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  for (const name of ['Portal 2', 'Terraria', 'Hades']) await row(page, name).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Rank 3 games' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Comparing 3 chosen games.')).toBeVisible();
+  await expect(page.locator('.rank-card-pick').first()).toBeFocused();
 });
 
 test('R2 edge: a Wishlist ranking keeps its price columns', async ({ page }) => {

@@ -16,7 +16,7 @@ export function focusFirst(selector: string): FocusCandidate {
 
 const focusMain: FocusCandidate = () => focusVisible(document.querySelector<HTMLElement>('main.app-content'));
 
-const focusLost = () => document.activeElement === document.body || !document.activeElement?.isConnected;
+export const focusLost = () => document.activeElement === document.body || !document.activeElement?.isConnected;
 
 export function handOffFocus(...candidates: FocusCandidate[]): void {
   for (const candidate of [...candidates, focusMain]) if (candidate()) return;
