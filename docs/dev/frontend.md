@@ -103,12 +103,12 @@ Above 768px the shell is locked to the viewport and **`.app-scroll` is the page'
 - `listLabels.ts` — how an op and a source read on screen, shared by the hero, Home's combine form, and the tree.
 - `membershipColumn.ts` — the "Owned by"/"In" column a group-by-membership list is grouped by (see [game-table.md](game-table.md#each-list-kind-in-practice)).
 - `gameStatuses.ts` — the viewer's own Finished/Abandoned mark per game, one synced map for whoever uses the browser.
-- `tagTaste.ts` — tag-weight vectors: an account's `Taste`, Taste Fit, Group Fit, similarity and the profile figures built on them.
+- `tagTaste.ts` — tag-weight vectors: an account's `Taste`, Taste Fit, Group Fit, similarity and the profile figures built on them (see [taste.md](taste.md)).
 - `bundleSnapshots.ts` — the last-known title and games of each bundle a saved list uses, kept for when ITAD stops listing it.
 - `myOwnership.ts` — one cached pair of owned/wishlisted appid sets for the effective account, behind both the panel's badge and the search dropdown's markers.
 - `recentGames.ts` — the recently-looked-up list backing `/game`.
-- `PlayerProfile.tsx` — the profile cards: Owned's `OwnedProfile`, and the `ProfileBadge` and `TagBars` a comparison reuses.
-- `playerProfile.ts` — how an account plays beyond its tags: play style (`playStyle`), story games played to length (`storyGames`) and the archetype titling them (`archetypeOf`), from rows and an hours accessor so a comparison's players reuse it.
+- `PlayerProfile.tsx` — the profile cards: Owned's `OwnedProfile`, and the `ProfileBadge` and `TagBars` a comparison reuses (see [taste.md](taste.md)).
+- `playerProfile.ts` — how an account plays beyond its tags: play style (`playStyle`), story games played to length (`storyGames`) and the archetype titling them (`archetypeOf`), from rows and an hours accessor so a comparison's players reuse it (see [taste.md](taste.md)).
 - `tasteCache.ts` — each account's stored Taste, bounded, and the room a full storage makes by evicting them (`setItemMakingRoom`, which `prefs.ts` writes through).
 - `creatorData.ts` — a developer's/publisher's games (`/api/creator-games`), the list's title and path.
 - `gamePassData.ts` — the Steam games in PC Game Pass (`/api/game-pass`), the list's title and path, and an Xbox store link for the ones not on Steam.

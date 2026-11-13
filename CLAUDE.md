@@ -19,6 +19,7 @@ Each doc, and when to read it — the section you need, not the whole file:
 - [docs/dev/game-table.md](docs/dev/game-table.md) — before changing a column, sorting, grouping, saved views, a list's hero or a list kind
 - [docs/dev/panel-and-lightbox.md](docs/dev/panel-and-lightbox.md) — before changing the side panel, the lightbox or trailers
 - [docs/dev/presentation.md](docs/dev/presentation.md) — before changing the presentation window or its messages
+- [docs/dev/taste.md](docs/dev/taste.md) — before changing a taste score, the profile card, Players or Similar in library
 - [docs/dev/lists-and-accounts.md](docs/dev/lists-and-accounts.md) — before changing accounts, `?u=`, lists, combine, ranking, sync or a localStorage key
 - [docs/dev/integrations.md](docs/dev/integrations.md) — before adding an upstream or changing a Steam, HLTB or ProtonDB call: trust tiers, request volume, what's undocumented, confirmed rules and assumptions
 - [docs/dev/bundles-and-prices.md](docs/dev/bundles-and-prices.md) — before changing bundles, prices, Fanatical, Humble Choice or PC Game Pass
