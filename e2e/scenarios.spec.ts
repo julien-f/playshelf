@@ -38,7 +38,7 @@ test('A1: first visit — resolve my account, then open my library', async ({ pa
   await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('alice');
   await page.getByRole('button', { name: 'Look up', exact: true }).click();
   await expect(page.getByRole('main')).toContainText('Owned: 6');
-  await expect(page.getByText('Friends (private)')).toBeVisible(); // the mock's friends lists are private
+  await expect(page.getByText('Friends (3)')).toBeVisible();
 
   await page.getByRole('main').getByRole('link', { name: 'Owned', exact: true }).click();
   await expect(rows(page)).toHaveCount(6);
@@ -230,10 +230,10 @@ test('A2.1-2,4: explore a friend, then switch back to my ★ account from the na
 });
 
 test('A2 edge: the nav chip reads as an account, not as a second selected route', async ({ page }) => {
-  await asPlayer(page, ALICE);
+  await asPlayer(page, CAROL);
   await page.goto('/lists/owned');
   const chip = page.locator('.account-chip-btn');
-  await expect(chip.locator('.account-chip-initial')).toHaveText('A'); // no avatar in the fixtures
+  await expect(chip.locator('.account-chip-initial')).toHaveText('C'); // Carol has no avatar
   await chip.hover();
   await expect(chip).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const route = page.locator('.site-nav-link.active');

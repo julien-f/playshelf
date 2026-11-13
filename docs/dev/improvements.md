@@ -98,17 +98,13 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 States `npm run dev:mock` can't show yet — each needs a fixture or state in `e2e/mockApi.ts`:
 
-- avatars, and a large library (thousands of games: A1's edge, how high the table starts at scale);
-- friends lists always private (A4, C4's ◇) and `/api/me` always signed out (Y1–Y3);
 - a static wishlist, so R2's "buying a game drops it from the ranking" can't be shown;
-- a private profile, so A1's "looks empty — does the UI say why?" edge can't be judged;
 - prices in any currency but EUR, so B2's repricing can't be judged;
-- search results (`/api/search-games`) and bundles carry no image, so the search dropdown's thumbnails and /bundles' Image column show blank;
-- a trailer that plays: Hades' fixture trailer has no stream, so playback and its idle-hide can only be seen on the real server.
+- a library of thousands of games: `big-library` adds 1200 (A1's edge, how high the table starts at scale).
 
 ## Not yet reviewed
 
-- A4 (no allowed account has a public friends list); Y1–Y3 (needs a Steam sign-in).
+- Y1–Y3 on the real server (needs a Steam sign-in; mocks have `signed-in`).
 - On a real phone: trailer playback (headless Chromium showed black frames), pinch and double-tap zoom, swipe-to-close.
 - Firefox and Safari: only Chromium was walked (View Transitions are Chromium/Safari-only).
-- O1's `GET /api/metrics` (no mock); D1's age highlight, C2's price columns per group, L1's panel **Add to list**, D3 (◇ not started).
+- O1's `GET /api/metrics` (no mock).

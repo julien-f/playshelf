@@ -41,15 +41,19 @@ function findPlayer(identifier: string): Player | undefined {
   return PLAYERS.find((p) => p.steamid === id || p.vanity === id.toLowerCase());
 }
 
-function playerJson(p: Player) {
+// Absolute, served by the /api/mock-media route: the app keeps only http(s) image URLs (`safeHref`).
+const imageUrl = (origin: string, label: string) => `${origin}/api/mock-media/${encodeURIComponent(label)}.svg`;
+
+function playerJson(p: Player, origin: string) {
+  const avatar = p.noAvatar ? '' : imageUrl(origin, p.personaname[0]);
   return {
     steamid: p.steamid,
-    communityvisibilitystate: 3,
+    communityvisibilitystate: p.private ? 1 : 3,
     personaname: p.personaname,
     profileurl: `https://steamcommunity.com/id/${p.vanity}/`,
-    avatar: '',
-    avatarmedium: '',
-    avatarfull: '',
+    avatar,
+    avatarmedium: avatar,
+    avatarfull: avatar,
     timecreated: 1300000000,
     loccountrycode: 'FR',
     gameCount: p.owned.length,
@@ -239,14 +243,14 @@ function priceInfo(appid: number) {
   };
 }
 
-function pickBundleJson() {
+function pickBundleJson(origin: string) {
   return {
-    ...bundleJson(PICK_BUNDLE),
+    ...bundleJson(origin, PICK_BUNDLE),
     tiers: [
       {
         price: null,
         addon: false,
-        games: PICK_BUNDLE.games.map((g) => ({ id: g.gid, slug: g.gid, title: g.title, type: 'game', assets: {} })),
+        games: PICK_BUNDLE.games.map((g) => bundleGameJson(g, origin)),
       },
     ],
     pickAndMix: PICK_BUNDLE.pickAndMix,
@@ -254,7 +258,16 @@ function pickBundleJson() {
   };
 }
 
-function bundleJson(b: typeof BUNDLE | typeof PICK_BUNDLE = BUNDLE) {
+const bundleGameJson = (g: { gid: string; title: string }, origin: string) => ({
+  id: g.gid,
+  slug: g.gid,
+  title: g.title,
+  type: 'game',
+  mature: false,
+  assets: { banner145: imageUrl(origin, g.title) },
+});
+
+function bundleJson(origin: string, b: typeof BUNDLE | typeof PICK_BUNDLE = BUNDLE) {
   return {
     id: b.id,
     title: b.title,
@@ -270,9 +283,7 @@ function bundleJson(b: typeof BUNDLE | typeof PICK_BUNDLE = BUNDLE) {
     tiers: BUNDLE.tiers.map((price, i) => ({
       price: money(price),
       addon: false,
-      games: BUNDLE.games
-        .filter((g) => g.tier === i + 1)
-        .map((g) => ({ id: g.gid, slug: g.gid, title: g.title, type: 'game', mature: false, assets: {} })),
+      games: BUNDLE.games.filter((g) => g.tier === i + 1).map((g) => bundleGameJson(g, origin)),
     })),
   };
 }
@@ -334,7 +345,7 @@ export function respond(
       status: 200,
       contentType: 'image/svg+xml',
       body: svg(decodeURIComponent(mediaPath[1])),
-      delayMs: SLOW_MEDIA_MS,
+      ...(states.has('slow-media') && { delayMs: SLOW_MEDIA_MS }),
     };
 
   if (path === '/api/health')
@@ -358,6 +369,9 @@ export function respond(
     const missing = identifiers.find((_, i) => !players[i]);
     if (missing) return json({ error: `Cannot find Steam account: "${missing}"` }, 400);
     const members = players as Player[];
+    const hidden = members.find((p) => p.private);
+    if (hidden)
+      return json({ error: `Cannot access library for ${hidden.steamid} — profile may be set to private` }, 400);
     const big = states.has('big-library');
     const appids = [...new Set([...members.flatMap((p) => p.owned), ...(big ? BIG_LIBRARY_APPIDS : [])])];
     const playtime = Object.fromEntries(
@@ -365,7 +379,7 @@ export function respond(
     );
     return json({
       games: appids.map((a) => ({ appid: a, name: ((big && bigLibraryGame(a)) || game(a)).name })),
-      players: members.map(playerJson),
+      players: members.map((p) => playerJson(p, url.origin)),
       playtime,
       lastPlayed: {},
       recentPlaytime: Object.fromEntries(
@@ -382,9 +396,20 @@ export function respond(
     const items = members.flatMap((p) =>
       (p.wishlist ?? []).map((appid) => ({ appid, priority: 0, dateAdded: '2026-01-01' })),
     );
-    return json({ items, players: members.map(playerJson), fetchedAt: accountFetchedAt() });
+    const players = members.map((p) => ({ ...playerJson(p, url.origin), itemCount: p.wishlist?.length ?? 0 }));
+    return json({ items, players, fetchedAt: accountFetchedAt() });
   }
-  if (path === '/api/friends') return json({ friends: [], unavailable: body.members ?? [], fetchedAt: Date.now() });
+  // As server.js: the members' public friends lists merged, the members with a private one in `unavailable`.
+  if (path === '/api/friends') {
+    const members = (body.members ?? []).map(findPlayer).filter(Boolean) as Player[];
+    const friends = [...new Set(members.flatMap((p) => p.friends ?? []))].map((vanity) => {
+      const f = findPlayer(vanity)!;
+      const { steamid, personaname, avatar, profileurl, timecreated, loccountrycode } = playerJson(f, url.origin);
+      return { steamid, personaname, avatar, profileurl, timecreated, loccountrycode, realname: '' };
+    });
+    const unavailable = members.filter((p) => !p.friends).map((p) => p.steamid);
+    return json({ friends, unavailable, fetchedAt: Date.now() });
+  }
 
   if (path === '/api/game-details/stream') {
     const lines = (body.games ?? []).map(
@@ -414,7 +439,7 @@ export function respond(
     const results = CATALOG.filter((g) => g.name.toLowerCase().includes(q)).map((g) => ({
       appid: g.appid,
       name: g.name,
-      tinyImage: '',
+      tinyImage: g.appid === MEDIA_APPID ? '' : imageUrl(url.origin, g.name), // F2: Hades shows none
     }));
     return json({ results });
   }
@@ -443,7 +468,7 @@ export function respond(
 
   const bundleGames = [...BUNDLE.games, ...PICK_BUNDLE.games];
   const coopBundleJson = () => {
-    const b = bundleJson();
+    const b = bundleJson(url.origin);
     if (!states.has('untiered')) return b;
     const [first, ...rest] = b.tiers;
     return {
@@ -452,7 +477,12 @@ export function respond(
     };
   };
   if (path === '/api/bundles') {
-    return json({ bundles: [coopBundleJson(), pickBundleJson()], offset: 0, limit: 50, fetchedAt: Date.now() });
+    return json({
+      bundles: [coopBundleJson(), pickBundleJson(url.origin)],
+      offset: 0,
+      limit: 50,
+      fetchedAt: Date.now(),
+    });
   }
   if (path === '/api/bundles/resolve') {
     const failed = states.has('resolve-failed') ? [BUNDLE.games[0].gid] : [];
@@ -464,13 +494,15 @@ export function respond(
   }
   const bundle = path.match(/^\/api\/bundles\/(\d+)$/);
   if (bundle) {
-    const found = { [BUNDLE.id]: coopBundleJson, [PICK_BUNDLE.id]: pickBundleJson }[Number(bundle[1])];
+    const found = { [BUNDLE.id]: coopBundleJson, [PICK_BUNDLE.id]: () => pickBundleJson(url.origin) }[
+      Number(bundle[1])
+    ];
     return found ? json({ bundle: found(), fetchedAt: Date.now() }) : json({ error: 'Bundle not found' }, 404);
   }
   const inBundles = path.match(/^\/api\/game-bundles\/(\d+)$/);
   if (inBundles) {
     const appid = Number(inBundles[1]);
-    const bundles = [coopBundleJson(), pickBundleJson()].flatMap((b) => {
+    const bundles = [coopBundleJson(), pickBundleJson(url.origin)].flatMap((b) => {
       const tier = b.tiers.find((t) =>
         t.games.some((g) => [bundleGames.find((x) => x.gid === g.id)?.appid].flat().includes(appid)),
       );
