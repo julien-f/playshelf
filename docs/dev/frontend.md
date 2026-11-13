@@ -134,6 +134,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `Kbd.tsx` / `SearchClearButton.tsx` — a key cap; the × emptying a search field.
 - `pageTitle.ts` — the two-layer `document.title` (route context, overridden by an open game).
 - `types.ts` — `Game`, `ReadonlyGame`, and the account/list interfaces; the single source of truth for row shape.
+- `SteamPrivacyLink.tsx` — the link to Steam's privacy settings, beside a private-profile message.
 - `focusHandoff.ts` — hands focus on when the element holding it goes (`keepFocus`), per ui-guidelines.md's Keyboard rule.
 - `utils.ts` — shared formatting/scoring helpers (`scoreColor`, `formatMoney`, `computeSteamdbRating`, `dealRecordTier`, `discountPct`, …).
 - `currency.ts` — approximate fixed exchange rates, for ordering and summing mixed-currency prices and their "≈" hint.

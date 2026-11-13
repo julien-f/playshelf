@@ -130,7 +130,7 @@ import {
   smoothScroll,
   refusalMessage,
 } from './utils.ts';
-import { keepFocus, type FocusCandidate } from './focusHandoff.ts';
+import { inViewport, keepFocus, type FocusCandidate } from './focusHandoff.ts';
 import {
   shareTableView,
   resetTableView,
@@ -1428,8 +1428,8 @@ export default function ListRoute() {
     return () => {
       const main = document.querySelector<HTMLElement>('main');
       const onScreen = appids.find((appid) => {
-        const rect = gameRowEl(main, appid)?.getBoundingClientRect();
-        return rect && rect.bottom > 0 && rect.top < window.innerHeight;
+        const el = gameRowEl(main, appid);
+        return el && inViewport(el);
       });
       return focusGameRow(main, onScreen ?? appids[0]);
     };

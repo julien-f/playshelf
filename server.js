@@ -268,8 +268,8 @@ function sendRouteError(res, route, err) {
   const unreadable = err.name === 'SyntaxError';
   const status = routeErrorStatus(route, err, unreadable);
   const error = status === 500 ? INTERNAL_ERROR : unreadable ? 'Unreadable reply from upstream' : err.message;
-  // A client error may say more than its message: which accounts (privateLibraryError).
-  res.status(status).json({ error, ...(status === 400 && err.body) });
+  // privateLibraryError's accounts, for the UI to name them.
+  res.status(status).json({ error, ...(status === 400 && err.accounts && { accounts: err.accounts }) });
 }
 
 const app = express();

@@ -1,5 +1,5 @@
 import { esc, fetchJson, isTextEntry } from './utils.ts';
-import { focusVisible, handOffFocus } from './focusHandoff.ts';
+import { focusVisible, handOffFocus, inViewport } from './focusHandoff.ts';
 import { createComponent, createEffect, untrack } from 'solid-js';
 import ArrowRight from 'lucide-solid/icons/arrow-right';
 import { peekMyOwnership, trackMyOwnership } from './myOwnership.ts';
@@ -311,7 +311,8 @@ export function initGameSearch({
       }
       // Leave the box, so the page's own shortcuts work again.
       if (escClosedResults) inputEl.value = '';
-      handOffFocus(() => focusVisible(cameFrom));
+      // Not one scrolled out of sight since: focusing it would jump the page there.
+      handOffFocus(() => !!cameFrom && inViewport(cameFrom) && focusVisible(cameFrom));
       return;
     }
     if (e.key === 'ArrowDown') {

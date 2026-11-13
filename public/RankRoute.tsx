@@ -149,8 +149,11 @@ export default function RankRoute() {
   });
 
   // Arriving from a list's button (Rank N games, Re-rank, Continue ranking) leaves focus on <body>.
+  let arrived = false;
   createEffect(() => {
-    if (pair() && focusLost()) handOffFocus(focusFirst('.rank-card-pick'));
+    if (arrived || !pair()) return;
+    arrived = true;
+    if (focusLost()) handOffFocus(focusFirst('.rank-card-pick'));
   });
 
   // Focused before opening, so closing returns focus there however the panel was opened (I + ←/→ too).

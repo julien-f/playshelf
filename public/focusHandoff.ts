@@ -9,6 +9,12 @@ export function focusVisible(el: HTMLElement | null | undefined): boolean {
   return document.activeElement === el;
 }
 
+// At least partly within the window's height.
+export function inViewport(el: Element): boolean {
+  const rect = el.getBoundingClientRect();
+  return rect.bottom > 0 && rect.top < window.innerHeight;
+}
+
 // The first visible match of `selector`, for a candidate naming its target by place.
 export function focusFirst(selector: string): FocusCandidate {
   return () => [...document.querySelectorAll<HTMLElement>(selector)].some(focusVisible);

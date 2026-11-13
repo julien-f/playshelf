@@ -7259,6 +7259,15 @@ test('F1 edge: a second Esc in the nav search box hands focus back to where it c
   await expect(box).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.locator('main.app-content')).toBeFocused();
+
+  // Not to one scrolled out of sight since, which would jump the page back to it.
+  await page.setViewportSize({ width: page.viewportSize()!.width, height: 360 });
+  await rows(page).first().focus();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(rows(page).first()).not.toBeInViewport();
+  await page.keyboard.press('/');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('main.app-content')).toBeFocused();
 });
 
 test('F1 edge: the nav search box’s Clear search button empties it and keeps it focused, back on the recents', async ({

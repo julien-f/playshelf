@@ -369,12 +369,13 @@ export function respond(
     const missing = identifiers.find((_, i) => !players[i]);
     if (missing) return json({ error: `Cannot find Steam account: "${missing}"` }, 400);
     const members = players as Player[];
-    const hidden = members.find((p) => p.private);
-    if (hidden)
+    // As server.js's privateLibraryError: every private member named.
+    const hidden = members.filter((p) => p.private);
+    if (hidden.length)
       return json(
         {
-          error: `${hidden.personaname}'s games aren't public. In Steam: Edit Profile → Privacy Settings → My profile and Game details: Public.`,
-          accounts: [{ steamid: hidden.steamid, name: hidden.personaname }],
+          error: `${new Intl.ListFormat('en', { type: 'conjunction' }).format(hidden.map((p) => `${p.personaname}'s`))} games aren't public. In Steam: Edit Profile → Privacy Settings → My profile and Game details: Public.`,
+          accounts: hidden.map((p) => ({ steamid: p.steamid, name: p.personaname })),
         },
         400,
       );
