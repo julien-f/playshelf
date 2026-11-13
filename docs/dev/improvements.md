@@ -86,7 +86,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 ## Consistency and polish
 
-- **U246 · polish · S1, L1** — on someone else's library (`?u=`), a Status filter pill reads just "Status:": statuses show only on the viewer's own account (`showingMyAccount()`), so the Play next view's exclusion has no value to name there. Hide the pill, or name the excluded values, where the column has none.
+- **U272 · polish · S1, L1** — on someone else's library (`?u=`), a Status filter pill reads just "Status:": statuses show only on the viewer's own account (`showingMyAccount()`), so the Play next view's exclusion has no value to name there. Hide the pill, or name the excluded values, where the column has none.
 - **U39 · polish · A4** — the search box shifts sideways as the account chip's label changes length ("Alice" vs. "Alice + Bob + Carol"); missing thumbnails have no placeholder, nor does a friend without an avatar on Home's friends list (Carol; Compare's Players draws her initial); wishlisted/owned name colours have no legend (still true in Recently Looked Up).
 - **U263 · polish · A1, L5** — Owned's h1 and tab title read "Alice's Library", the word the [glossary](glossary.md) avoids for Owned, under a nav link and Home card named Owned. "Alice's Owned games", or "Owned · Alice".
 - **U265 · polish · B1, C1** — ☆ means two things: wishlisted after a game's name (title "On wishlist", in tables and Compare) and near a record low after a price (the [glossary](glossary.md)'s only meaning), side by side in a bundle's rows ("It Takes Two ☆ · €7.00 ★"). A distinct wishlist mark (the heart Home's Wishlist card uses).
