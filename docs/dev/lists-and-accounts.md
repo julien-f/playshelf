@@ -20,7 +20,7 @@ Accounts, lists, folders and preferences live in `localStorage` (`prefs.ts`). Si
 
 Two account slots, both optional, distinct from any list:
 
-- **`myAccount`** — "this is me", a pinned default identity, set by starring (★) any entry in the account picker.
+- **`myAccount`** — "this is me", a pinned default identity, set by starring (★) any entry in the account picker. While none is set, the first account resolved from Home's lookup or by signing in becomes it; one reached by a `?u=` or compare link never does.
 - **`currentAccount`** — whoever is being explored (may be `myAccount`, someone else, or empty). Drives the account header and the Owned/Wishlist system lists.
 
 Both are full `AccountSlot` objects (see the schema below), not id references, so clearing history never orphans either.

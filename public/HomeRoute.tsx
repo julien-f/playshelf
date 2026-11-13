@@ -240,7 +240,10 @@ export default function HomeRoute() {
     setResolving(true);
     setResolveError(null);
     try {
-      pickAccount(await resolveAccountSlot(trimmed));
+      const account = await resolveAccountSlot(trimmed);
+      // The first account looked up is the visitor's own; one reached by a link never is.
+      if (!getMyAccount()) setMyAccount(account);
+      pickAccount(account);
       setResolveInputs(['']);
     } catch (err) {
       setResolveError({ text: (err as Error).message, isPrivate: !!(err instanceof ApiError && err.accounts) });

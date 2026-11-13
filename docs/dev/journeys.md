@@ -55,7 +55,7 @@ Tests map to journeys by title ([testing.md](testing.md#end-to-end-tests)).
   1. open `/`
   2. paste a profile URL, vanity name or steam64 id
   3. resolve
-  4. it becomes my ★ account automatically, being the first ◇ U270
+  4. it becomes my ★ account automatically, being the first
   5. open **Owned**
 - **Done when**: the account card shows avatar, name, owned/wishlist counts; the nav chip names the account; Owned streams in rows with rating/HLTB filled progressively; reloading keeps everything.
 - **Edges**: unknown identifier; private profile (named, with where Steam makes it public ◇ U269); a very large library (thousands of games); slow upstream.
