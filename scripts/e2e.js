@@ -21,7 +21,16 @@ const PROJECTS = Object.keys(require('./e2e-projects'));
 
 const ROOT = path.join(__dirname, '..');
 const CACHE = path.join(ROOT, 'node_modules/.cache');
-const PASS_FILE = path.join(CACHE, 'e2e-pass');
+// Under the git common dir, so a build passed in one checkout (a feature worktree) is skipped in another.
+const PASS_FILE = path.join(
+  execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  }).trim(),
+  'e2e-pass.json',
+);
+// Builds whose passes are kept: enough for every live checkout's latest.
+const PASSES_KEPT = 20;
 // playwright.config.ts keeps the port below Linux's ephemeral range.
 const MAX_PORT = 32767;
 
@@ -29,7 +38,7 @@ const MAX_PORT = 32767;
 const NARROWING = /^(-g|--grep|--grep-invert|--last-failed|--only-changed|--shard)(=|$)/;
 const PROJECT_ARG = /^--project(?:=(.*))?$/;
 
-// Names relative to `base`, so a build on another port hashes the same.
+// Names relative to `base`, so a build on another port or in another checkout hashes the same.
 const filesUnder = (dir, base) =>
   fs
     .readdirSync(dir, { recursive: true })
@@ -42,7 +51,7 @@ const filesUnder = (dir, base) =>
 function inputsHash(outDir) {
   const hash = crypto.createHash('sha256').update(process.version);
   const files = [
-    ...filesUnder(outDir, path.dirname(outDir)),
+    ...filesUnder(outDir, outDir),
     ...filesUnder(path.join(ROOT, 'e2e'), ROOT),
     ...['playwright.config.ts', 'scripts/e2e-projects.js', 'package-lock.json'].map((f) => [f, path.join(ROOT, f)]),
   ];
@@ -92,15 +101,30 @@ async function claimPort(start, { fixed = false, lockDir = CACHE, isBusy = liste
   throw new Error(fixed ? `port ${start} (E2E_PORT) is in use` : `no free port from ${start} to ${MAX_PORT}`);
 }
 
-// The projects already passed on `hash`.
-const passedOn = (hash) => {
+// Build hash → projects passed on it, oldest first.
+const readPasses = (file) => {
   try {
-    const [passed, ...projects] = fs.readFileSync(PASS_FILE, 'utf8').trim().split('\n');
-    return new Set(passed === hash ? projects : []);
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
-    return new Set();
+    return {};
   }
 };
+
+// The projects already passed on `hash`.
+const passedOn = (hash, file = PASS_FILE) => new Set(readPasses(file)[hash] ?? []);
+
+// Adds `projects` to `hash`'s passes, keeping the PASSES_KEPT latest builds; written whole then renamed, so a
+// concurrent run never reads half a file.
+function recordPass(hash, projects, file = PASS_FILE) {
+  const passes = readPasses(file);
+  const merged = [...new Set([...(passes[hash] ?? []), ...projects])];
+  delete passes[hash];
+  passes[hash] = merged;
+  const kept = Object.fromEntries(Object.entries(passes).slice(-PASSES_KEPT));
+  const tmp = `${file}.${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(kept));
+  fs.renameSync(tmp, file);
+}
 
 // Splits Playwright args into the projects they run in full (null when they run part of a project's tests,
 // so a pass says nothing about the rest) and the other args.
@@ -178,11 +202,10 @@ async function main() {
     env: { ...process.env, E2E_BUILT: OUT_DIR },
   });
   log(status === 0, Math.round((Date.now() - started) / 1000));
-  if (status === 0 && running)
-    fs.writeFileSync(PASS_FILE, `${[hash, ...new Set([...passed, ...running])].join('\n')}\n`);
+  if (status === 0 && running) recordPass(hash, running);
   process.exit(status ?? 1);
 }
 
 if (require.main === module) main();
 
-module.exports = { claimPort, listening, planRun };
+module.exports = { claimPort, inputsHash, listening, passedOn, planRun, recordPass };

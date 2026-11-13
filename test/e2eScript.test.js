@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
-const { claimPort, listening, planRun } = require('../scripts/e2e');
+const { claimPort, inputsHash, listening, passedOn, planRun, recordPass } = require('../scripts/e2e');
 
 test('planRun: records a pass only for the projects a run covers in full', () => {
   const none = new Set();
@@ -72,4 +72,32 @@ test('listening: true while a server accepts on the port, false once it closes',
   assert.equal(await listening(port), true);
   await new Promise((resolve) => server.close(resolve));
   assert.equal(await listening(port), false);
+});
+
+test('inputsHash: the same build hashes the same whatever its port directory', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-hash-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const builds = ['41234', '41999'].map((port) => {
+    const dir = path.join(root, port);
+    fs.mkdirSync(path.join(dir, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'index.html'), '<html>');
+    fs.writeFileSync(path.join(dir, 'assets/app.js'), 'x');
+    return dir;
+  });
+  assert.equal(inputsHash(builds[0]), inputsHash(builds[1]));
+});
+
+test("recordPass: keeps each build's passed projects apart, so another checkout's pass stays readable", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-pass-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'e2e-pass.json');
+  assert.deepEqual([...passedOn('a', file)], []);
+  recordPass('a', ['desktop'], file);
+  recordPass('b', ['phone'], file);
+  recordPass('a', ['phone'], file);
+  assert.deepEqual([...passedOn('a', file)].sort(), ['desktop', 'phone']);
+  assert.deepEqual([...passedOn('b', file)], ['phone']);
+  for (let i = 0; i < 50; i++) recordPass(`h${i}`, ['desktop'], file);
+  assert.deepEqual([...passedOn('a', file)], [], 'the oldest builds are dropped');
+  assert.deepEqual([...passedOn('h49', file)], ['desktop']);
 });
