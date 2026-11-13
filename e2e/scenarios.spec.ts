@@ -453,9 +453,11 @@ test("S3 edge: editing a shared layout warns it's lost on reload unless kept", a
   // Back to the link's own layout: nothing of the viewer's is left to lose.
   await toggle.click();
   await expect(banner).toContainText('for this visit only');
-  await banner.getByRole('button', { name: 'Keep as my layout' }).click();
+  await banner.getByRole('button', { name: 'Keep as my layout' }).focus();
+  await page.keyboard.press('Enter');
   await expect(banner).toHaveCount(0);
   await expect(page.getByText('Unsaved changes to')).toHaveCount(0); // kept is saved
+  await expect(page.getByRole('button', { name: 'Share layout' })).toBeFocused(); // not dropped to <body>
 });
 
 test("S3 edge: another browser's list link explains lists are local", async ({ page }) => {
@@ -2703,6 +2705,25 @@ test('L3 edge: a table change waits for Save, survives a reload in the tab, and 
   await banner.getByRole('button', { name: 'Save' }).click();
   await expect(banner).toHaveCount(0);
   expect(await stored()).toContain('releaseDate');
+});
+
+test("L3 edge: Save and Discard hand focus to Share layout as the banner goes, not the page's top", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  const sort = page.locator('.dt-th[data-col-key="releaseDate"] .dt-th-sort');
+  const banner = page.locator('.pref-unsaved-banner');
+  const share = page.getByRole('button', { name: 'Share layout' });
+  await sort.click();
+  await banner.getByRole('button', { name: 'Discard' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(banner).toHaveCount(0);
+  await expect(share).toBeFocused();
+  await sort.click();
+  await banner.getByRole('button', { name: 'Save' }).click();
+  await expect(banner).toHaveCount(0);
+  await expect(share).toBeFocused();
 });
 
 test('Y1 edge: signed in, a saved table layout syncs, without page or search, and only on Save', async ({ page }) => {

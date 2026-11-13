@@ -134,6 +134,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `Kbd.tsx` / `SearchClearButton.tsx` — a key cap; the × emptying a search field.
 - `pageTitle.ts` — the two-layer `document.title` (route context, overridden by an open game).
 - `types.ts` — `Game`, `ReadonlyGame`, and the account/list interfaces; the single source of truth for row shape.
+- `focusHandoff.ts` — hands focus on when the element holding it goes (`keepFocus`), per ui-guidelines.md's Keyboard rule.
 - `utils.ts` — shared formatting/scoring helpers (`scoreColor`, `formatMoney`, `computeSteamdbRating`, `dealRecordTier`, `discountPct`, …).
 - `currency.ts` — approximate fixed exchange rates, for ordering and summing mixed-currency prices and their "≈" hint.
 - `style.css` — the stylesheet entry: declares the cascade layer order and imports `styles/*.css`, each partial wrapped in its own `@layer` (`reset` and `base`: elements, and the tokens in `tokens.css`, which `presentation.css` imports too; `layout`: the shell; `components`: everything else, one section per screen), except `styles/vendor-data-table.css` (the table library's overrides and its `html:root { --color-* }` theme, unlayered and imported last: the library injects an unlayered `<style>`, which beats any layered rule whatever its specificity, so a `.dt-*` override in a layer has no effect).

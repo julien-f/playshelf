@@ -28,7 +28,7 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 ## Keyboard
 
 - Every action is reachable from the keyboard with visible focus; `?` lists the shortcuts.
-- Focus follows reading order and is never dropped to `<body>`: closing a popover returns focus to its opener, activating a control keeps focus on it, removing the focused element moves focus to its nearest equivalent.
+- Focus follows reading order and is never dropped to `<body>`: closing a popover returns focus to its opener, activating a control keeps focus on it, removing the focused element moves focus to its nearest equivalent (`keepFocus`, `public/focusHandoff.ts`).
 - Esc closes the innermost thing first (search text, popover, lightbox, panel). No shortcut overrides a browser one or fires while typing in a field.
 
 ## Touch and phone

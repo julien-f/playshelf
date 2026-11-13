@@ -1,6 +1,12 @@
 import { Show, createSignal, onCleanup, type JSX } from 'solid-js';
 import Link from 'lucide-solid/icons/link';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
+import { focusFirst, keepFocus } from './focusHandoff.ts';
+
+// Where focus goes when a layout banner holding it goes: the table's own layout controls.
+export function keepLayoutFocus(banner: Element, change: () => void): void {
+  void keepFocus(banner, change, focusFirst('.list-view-actions .btn'), focusFirst('.dt-search-input'));
+}
 
 // Hidden while `changes` is empty.
 export function UnsavedChangesBanner(props: {
@@ -10,14 +16,15 @@ export function UnsavedChangesBanner(props: {
   onSave: () => void;
   onDiscard: () => void;
 }): JSX.Element {
+  let banner!: HTMLDivElement;
   return (
     <Show when={props.changes.length}>
-      <div class="pref-unsaved-banner">
+      <div ref={banner} class="pref-unsaved-banner">
         Unsaved changes to {props.name} ({props.changes.join(', ')}) — {props.note}
-        <button type="button" class="btn" onClick={() => props.onSave()}>
+        <button type="button" class="btn" onClick={() => keepLayoutFocus(banner, props.onSave)}>
           Save
         </button>
-        <button type="button" class="btn" onClick={() => props.onDiscard()}>
+        <button type="button" class="btn" onClick={() => keepLayoutFocus(banner, props.onDiscard)}>
           Discard
         </button>
       </div>
