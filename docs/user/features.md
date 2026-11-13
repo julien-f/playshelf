@@ -215,7 +215,7 @@ A lightbox on another screen, for showing trailers and screenshots to the people
 
 A sign-in lasts as long as you keep visiting ([Session lifetime](configuration.md)). If it expires anyway, an amber dot on the account chip says so, and its menu offers **Sign in again**, which syncs the changes made in the meantime, or **Stay signed out**.
 
-Table layouts sync too, once saved (see [Table layouts](#table-layouts)). Unsaved layout changes stay on their device.
+Table layouts sync too, once saved (see [Table layouts](#table-layouts)). Unsaved layout changes last only while their tab is open.
 
 ## Keyboard shortcuts
 
