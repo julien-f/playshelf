@@ -100,17 +100,19 @@ function version(key: string): { track: () => void; notify: () => void } {
 }
 
 // Another tab wrote the blob: rerun the readers of each key it changed (all of them on a clear).
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (e) => {
-    if (e.key === null) return batch(() => versions.forEach((v) => v.notify()));
-    if (e.key !== PREFS_STORAGE_KEY) return;
-    const [before, after] = [parseEntries(e.oldValue), parseEntries(e.newValue)];
-    const changed = (key: string) => JSON.stringify(before[key]?.value) !== JSON.stringify(after[key]?.value);
-    batch(() => {
-      for (const [key, v] of versions) if (changed(key)) v.notify();
-    });
+// Exported for test/prefs.test.js: the module loads once there, before any `window` stub.
+export function onStorage(e: Pick<StorageEvent, 'key' | 'oldValue' | 'newValue' | 'storageArea'>): void {
+  if (e.storageArea !== localStorage) return;
+  if (e.key === null) return batch(() => versions.forEach((v) => v.notify()));
+  if (e.key !== PREFS_STORAGE_KEY) return;
+  const [before, after] = [parseEntries(e.oldValue), parseEntries(e.newValue)];
+  const changed = (key: string) => JSON.stringify(before[key]?.value) !== JSON.stringify(after[key]?.value);
+  batch(() => {
+    for (const [key, v] of versions) if (changed(key)) v.notify();
   });
 }
+
+if (typeof window !== 'undefined') window.addEventListener('storage', onStorage);
 
 // Whether storage refused setPref's last write; AppShell.tsx's banner says so.
 const [writeFailing, setWriteFailing] = createSignal(false);
@@ -263,9 +265,9 @@ export function getAllPrefEntries(): Record<string, PrefEntry> {
 // the server's copy of that key is newer than this device's own. Bypasses setPref specifically to
 // avoid that echo. Returns whether the write was persisted.
 export function adoptPrefEntry(key: string, value: unknown, updatedAt: number): boolean {
-  const entries = readEntries();
-  entries[key] = { value, updatedAt };
-  const written = writeEntries(entries);
-  if (written) version(key).notify();
+  const c = readCache();
+  const same = key in c.entries && storedJson(c, key) === JSON.stringify(value);
+  const written = writeEntries({ ...c.entries, [key]: { value, updatedAt } });
+  if (written && !same) version(key).notify();
   return written;
 }

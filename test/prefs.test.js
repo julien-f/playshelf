@@ -409,8 +409,45 @@ test('getPref is reactive per key: an effect reruns on its own key only', async 
   setPref('lists', []);
   setPref('region', 'GB');
   adoptPrefEntry('region', 'DE', 1);
+  adoptPrefEntry('region', 'DE', 2); // same value, newer time: nothing to rerun
   dispose();
   assert.deepEqual(seen, [null, 'GB', 'DE']);
+});
+
+test("onStorage: another tab's write reruns only the readers of the keys it changed", async () => {
+  const { getPref, onStorage, PREFS_STORAGE_KEY } = require('../public/prefs.ts');
+  const { createRoot, createEffect } = await import('solid-js');
+  const blob = (entries) => JSON.stringify({ schemaVersion: 3, ...entries });
+  const before = blob({ region: { value: 'GB', updatedAt: 1 }, lists: { value: [], updatedAt: 1 } });
+  const after = blob({ region: { value: 'GB', updatedAt: 1 }, lists: { value: [{ id: 'a' }], updatedAt: 2 } });
+  localStorage.setItem(PREFS_STORAGE_KEY, before);
+  const seen = [];
+  const dispose = createRoot((dispose) => {
+    createEffect(() => seen.push(['region', getPref('region')]));
+    createEffect(() => seen.push(['lists', getPref('lists').length]));
+    return dispose;
+  });
+  const event = (fields) => ({
+    key: PREFS_STORAGE_KEY,
+    oldValue: before,
+    newValue: after,
+    storageArea: localStorage,
+    ...fields,
+  });
+
+  localStorage.setItem(PREFS_STORAGE_KEY, after); // what the other tab did
+  onStorage(event({ key: 'other-key' }));
+  onStorage(event({ storageArea: {} })); // sessionStorage
+  onStorage(event({}));
+  onStorage(event({ key: null })); // a clear reruns every reader
+  dispose();
+  assert.deepEqual(seen, [
+    ['region', 'GB'],
+    ['lists', 0],
+    ['lists', 1],
+    ['region', 'GB'],
+    ['lists', 1],
+  ]);
 });
 
 // ── failed writes ───────────────────────────────────────────────────────────────────────────────
