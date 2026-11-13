@@ -731,7 +731,66 @@ test('POST /api/common-games: 400 when a library is private', async (t) => {
 
   const res = await api.post('/api/common-games').send({ members: [ID1, ID2] });
   assert.equal(res.status, 400);
-  assert.match(res.body.error, /private/);
+  assert.match(res.body.error, /games aren't public/);
+});
+
+// GetOwnedGames answers no `games` for `privateIds`, a 503 for `downIds`.
+function mockLibraries(t, { privateIds = [], downIds = [], summariesDown = false }) {
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('GetPlayerSummaries')) {
+      if (summariesDown) return { ok: false, status: 503, json: async () => ({}) };
+      const ids = new URL(url).searchParams.get('steamids').split(',');
+      return {
+        ok: true,
+        json: async () => ({
+          response: { players: ids.map((steamid) => ({ steamid, personaname: `P${steamid.slice(-1)}` })) },
+        }),
+      };
+    }
+    const id = new URL(url).searchParams.get('steamid');
+    if (downIds.includes(id)) return { ok: false, status: 503, json: async () => ({}) };
+    if (privateIds.includes(id)) return { ok: true, json: async () => ({ response: {} }) };
+    return { ok: true, json: async () => ({ response: { games: [] } }) };
+  });
+}
+
+test('POST /api/common-games: a private library is named, with where Steam sets it', async (t) => {
+  _reset();
+  mockLibraries(t, { privateIds: [ID2] });
+  const res = await api.post('/api/common-games').send({ members: [ID1, ID2] });
+  assert.equal(res.status, 400);
+  const name = `P${ID2.slice(-1)}`;
+  assert.equal(
+    res.body.error,
+    `${name}'s games aren't public. In Steam: Edit Profile → Privacy Settings → My profile and Game details: Public.`,
+  );
+  assert.deepEqual(res.body.accounts, [{ steamid: ID2, name }]);
+});
+
+test('POST /api/common-games: every private library is named', async (t) => {
+  _reset();
+  mockLibraries(t, { privateIds: [ID1, ID2] });
+  const res = await api.post('/api/common-games').send({ members: [ID1, ID2] });
+  assert.equal(res.status, 400);
+  assert.match(res.body.error, new RegExp(`^P${ID1.slice(-1)}'s and P${ID2.slice(-1)}'s games aren't public`));
+  assert.equal(res.body.accounts.length, 2);
+});
+
+test('POST /api/common-games: a private library is named by id when player summaries fail', async (t) => {
+  _reset();
+  mockLibraries(t, { privateIds: [ID2], summariesDown: true });
+  const res = await api.post('/api/common-games').send({ members: [ID1, ID2] });
+  assert.equal(res.status, 400);
+  assert.match(res.body.error, new RegExp(`^${ID2}'s games aren't public`));
+  assert.deepEqual(res.body.accounts, [{ steamid: ID2, name: ID2 }]);
+});
+
+test("POST /api/common-games: an upstream failure isn't hidden behind a private library", async (t) => {
+  _reset();
+  mockLibraries(t, { privateIds: [ID1], downIds: [ID2] });
+  const res = await api.post('/api/common-games').send({ members: [ID1, ID2] });
+  assert.equal(res.status, 502);
+  assert.equal(res.body.accounts, undefined);
 });
 
 // ── POST /api/wishlist — input validation ─────────────────────────────────────

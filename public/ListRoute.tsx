@@ -166,6 +166,7 @@ import {
   DEFAULT_COMPARE_OP,
 } from './urlState.ts';
 import { SharedViewBanner } from './SharedViewBanner.tsx';
+import { SteamPrivacyLink } from './SteamPrivacyLink.tsx';
 import { UnsavedChangesBanner, ViewActions } from './TableViewControls.tsx';
 import {
   PLAY_NEXT_MAX_HOURS,
@@ -1285,7 +1286,10 @@ export default function ListRoute() {
   const [compareAccounts, setCompareAccounts] = createSignal<AccountSlot[]>([]);
   const [editingPlayers, setEditingPlayers] = createSignal(false);
   // Players the last comparison couldn't resolve, with why — the rest still compare (U14).
-  const [compareFailures, setCompareFailures] = createSignal<{ identifiers: string[]; message: string }[]>([]);
+  // `label`: the player's name once known (a private profile), else as typed.
+  const [compareFailures, setCompareFailures] = createSignal<
+    { identifiers: string[]; label: string; message: string; isPrivate: boolean }[]
+  >([]);
   function compareOthers(): void {
     const failed = new Set(compareFailures().map((f) => f.identifiers.join(',')));
     navigate(
@@ -2460,14 +2464,20 @@ export default function ListRoute() {
       setStatusText('Resolving accounts…');
       const settled = await Promise.allSettled(slots.map((identifiers) => resolveAccountSlot(identifiers)));
       if (loadGuard.isStale(gen)) return;
-      const failures = settled.flatMap((r, i) =>
-        r.status === 'rejected' ? [{ identifiers: slots[i], message: (r.reason as Error).message }] : [],
-      );
+      const failures = settled.flatMap((r, i) => {
+        if (r.status === 'fulfilled') return [];
+        const accounts = r.reason instanceof ApiError ? r.reason.accounts : undefined;
+        // A Family slot keeps its typed label: the message names the member.
+        const named = slots[i].length === 1 && accounts?.length === 1 ? accounts[0].name : undefined;
+        const label = named ?? slots[i].join(' + ');
+        return [{ identifiers: slots[i], label, message: (r.reason as Error).message, isPrivate: !!accounts }];
+      });
       if (failures.length) {
         // Named as far as known: a resolved player by name, a failed one as typed.
+        const failedLabel = new Map(failures.map((f) => [f.identifiers, f.label]));
         setListTitle(
           settled
-            .map((r, i) => (r.status === 'fulfilled' ? accountDisplayLabel(r.value) : slots[i].join(' + ')))
+            .map((r, i) => (r.status === 'fulfilled' ? accountDisplayLabel(r.value) : failedLabel.get(slots[i])))
             .join(' vs. '),
         );
         setCompareFailures(failures);
@@ -4419,7 +4429,11 @@ export default function ListRoute() {
           <For each={compareFailures()}>
             {(f) => (
               <p>
-                <TriangleAlert /> <strong>{f.identifiers.join(' + ')}</strong> — {f.message}
+                <TriangleAlert /> <strong>{f.label}</strong> — {f.message}
+                <Show when={f.isPrivate}>
+                  {' '}
+                  <SteamPrivacyLink />
+                </Show>
               </p>
             )}
           </For>

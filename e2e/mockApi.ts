@@ -371,7 +371,13 @@ export function respond(
     const members = players as Player[];
     const hidden = members.find((p) => p.private);
     if (hidden)
-      return json({ error: `Cannot access library for ${hidden.steamid} — profile may be set to private` }, 400);
+      return json(
+        {
+          error: `${hidden.personaname}'s games aren't public. In Steam: Edit Profile → Privacy Settings → My profile and Game details: Public.`,
+          accounts: [{ steamid: hidden.steamid, name: hidden.personaname }],
+        },
+        400,
+      );
     const big = states.has('big-library');
     const appids = [...new Set([...members.flatMap((p) => p.owned), ...(big ? BIG_LIBRARY_APPIDS : [])])];
     const playtime = Object.fromEntries(

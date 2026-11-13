@@ -72,6 +72,21 @@ test('A1 edge: Look up keeps focus while it resolves', async ({ page }) => {
   await expect(page.getByRole('main')).toContainText('Owned: 6');
 });
 
+const PRIVATE_LIBRARY =
+  "Frank's games aren't public. In Steam: Edit Profile → Privacy Settings → My profile and Game details: Public.";
+
+test('A1 edge: a private profile is named, with where Steam makes it public', async ({ page }) => {
+  await page.goto('/');
+  await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('frank');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  const error = page.locator('.error');
+  await expect(error).toContainText(PRIVATE_LIBRARY);
+  await expect(error.getByRole('link', { name: /Steam privacy settings/ })).toHaveAttribute(
+    'href',
+    'https://steamcommunity.com/my/edit/settings',
+  );
+});
+
 test('A1 edge: an Explore card opens its list from anywhere on the card', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/');
@@ -2745,6 +2760,16 @@ test('Y1 edge: signed in, a saved table layout syncs, without page or search, an
   await expect.poll(() => pushed.length).toBe(1);
   expect(pushed[0]).not.toHaveProperty('searchQuery');
   expect(pushed[0]).not.toHaveProperty('page');
+});
+
+test('C1 edge: a private player is named in the title and the warning, not as typed', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=frank');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Alice vs. Frank');
+  const warning = page.locator('.compare-failures');
+  await expect(warning.locator('strong')).toHaveText('Frank');
+  await expect(warning).toContainText(PRIVATE_LIBRARY);
+  await expect(warning.getByRole('link', { name: /Steam privacy settings/ })).toBeVisible();
 });
 
 test('C1 edge: my account comes first, is prefilled, and only once', async ({ page }) => {
