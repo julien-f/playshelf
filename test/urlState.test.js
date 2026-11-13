@@ -91,7 +91,7 @@ test('urlWithParams: yields the bare pathname rather than a lone "?" once nothin
   assert.equal(urlWithParams(new URLSearchParams(), '/'), '/');
 });
 
-test('urlWithParams: the params naming the list (f, name, view) sort ahead of game', () => {
+test('urlWithParams: the list params (f, name) and its layout (view) sort ahead of game', () => {
   for (const key of ['f', 'name', 'view']) {
     const params = new URLSearchParams(`?game=440&${key}=x&u=alice`);
     assert.equal(urlWithParams(params, '/lists/p'), `/lists/p?u=alice&${key}=x&game=440`);
@@ -103,6 +103,20 @@ test("urlWithParams: keeps a shared formula's :;(), literal, its leaves' escapes
   const params = new URLSearchParams(url.split('?')[1]);
   params.set('game', '440');
   assert.equal(urlWithParams(params, '/lists/shared'), `${url}&game=440`);
+});
+
+// What the address bar shows: browsers re-encode some characters (`'`) in an http(s) query.
+function addressBar(path) {
+  const url = new URL(path, 'http://localhost');
+  return url.pathname + url.search;
+}
+
+test('urlWithParams: writes a shared formula as the address bar shows it', () => {
+  const params = new URLSearchParams();
+  params.set('f', "union:(d:Don'tNod!;p:a,b~c)");
+  const written = urlWithParams(params, '/lists/shared');
+  assert.equal(addressBar(written), written);
+  assert.equal(written, '/lists/shared?f=union:(d:Don%27tNod!;p:a,b~c)');
 });
 
 // ── ?u= — the account-override param ──────────────────────────────────────────
@@ -141,7 +155,7 @@ test("withAccountParam: a shared list's link reads the same with or without a u=
   ];
   const result = encodeListFormula({ op: 'union', sources }, () => undefined);
   const url = shareListUrl(result.formula);
-  assert.equal(withAccountParam(url, '?u=alice'), url.replace('?', '?u=alice&'));
+  assert.equal(addressBar(withAccountParam(url, '?u=alice')), addressBar(url.replace('?', '?u=alice&')));
 });
 
 test("withAccountParam: does not carry a comparison's several slots — they are not an override", () => {
