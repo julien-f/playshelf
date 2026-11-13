@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A tiered bundle's tier headers say what each step adds for you and whether it beats buying those games apart
 - Recently Looked Up shows when you last looked up each game.
 - An amber dot on the account chip when your Steam sign-in has expired, with Sign in again or Stay signed out in its menu
+- Compare up to 5 friends straight from Home's friends list
+- Add a game to your lists, or start a new one with it, from its panel
 
 ### Changed
 
@@ -44,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Large lists load faster when several people use the app at once: names, ratings, tags, ProtonDB and HLTB fill in before genres, Metacritic and achievements
 - GET /api/metrics opens with what's wrong now (`alerts`), groups each upstream's live state together and dates its worst event-loop block
 - Each visit now extends the Steam sign-in, instead of it expiring a fixed time after signing in
+- The table's Share view and Default view buttons are now Share layout and Reset layout; Taste Fit, Group Fit and Tag Match columns are capitalized like the others
 
 ### Fixed
 
@@ -111,6 +114,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - GET /api/metrics says when ITAD's bundle end dates match Fanatical's or Humble's again, so their overrides can be dropped.
 - session-end.js also lists what production's metrics show since its last run: warnings, event-loop blocks, server errors, unexpected upstream answers and an undeployed main.
 - Design docs: personas and core journeys, a UI glossary, and every unbuilt journey step tracked by a backlog item (checked by `npm run check`)
+- Mock data has avatars, public friends lists, a private profile and images, so design reviews can walk more journeys
 
 ## [0.12.0] - 2026-10-30
 

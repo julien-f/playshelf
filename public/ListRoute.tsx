@@ -275,7 +275,7 @@ import {
   createList,
   updateDynamicList,
   updateRankedSource,
-  addAppidsToList,
+  addToManualList,
   removeAppidsFromList,
   setListTableView,
   getRanking,
@@ -377,7 +377,7 @@ const fmtPercent = (v: unknown) => (v == null ? '—' : `${v}%`);
 
 const TASTE_FIT_KEY = 'tasteFit';
 const PLAY_NEXT = 'play-next'; // listViews.ts's template id
-// What Taste fit is scored against; said in the list status (tasteFitNote), not only on hover.
+// What Taste Fit is scored against; said in the list status (tasteFitNote), not only on hover.
 interface TasteSource {
   label: string | null; // null: no current account
   taste: Taste | null; // null: its Owned list not opened on this device yet
@@ -385,10 +385,10 @@ interface TasteSource {
 }
 
 function tasteFitNote({ label, taste, linked }: TasteSource): string | null {
-  if (!label) return 'Taste fit needs an account: pick one on Home';
-  if (!taste) return linked ? null : `Taste fit needs ${label}'s Owned list opened on this device`;
-  if (!taste.profile) return `Taste fit: ${label} has too few games played`;
-  return `Taste fit: ${label}'s taste as of ${fmtLocalDate(new Date(taste.at))}`;
+  if (!label) return 'Taste Fit needs an account: pick one on Home';
+  if (!taste) return linked ? null : `Taste Fit needs ${label}'s Owned list opened on this device`;
+  if (!taste.profile) return `Taste Fit: ${label} has too few games played`;
+  return `Taste Fit: ${label}'s taste as of ${fmtLocalDate(new Date(taste.at))}`;
 }
 
 // How close a game is to the current account's taste.
@@ -396,7 +396,7 @@ function tasteFitColumn(source: () => TasteSource | null): ColumnDef<Record<stri
   const taste = () => source()?.taste;
   return {
     key: TASTE_FIT_KEY,
-    label: 'Taste fit',
+    label: 'Taste Fit',
     type: 'number',
     value: (row) => {
       const t = taste();
@@ -422,7 +422,7 @@ function groupFitColumn(fits: () => PlayerFits | null, labels: string[]): Column
   };
   return {
     key: GROUP_FIT_KEY,
-    label: 'Group fit',
+    label: 'Group Fit',
     type: 'number',
     align: 'start', // its cells read as text
     value: (row) => least(row.appid)?.score ?? null,
@@ -949,7 +949,7 @@ export default function ListRoute() {
     if (adjusted !== applied) table.setViewState(adjusted);
   }
   const viewTable = { setViewState: applyView, getViewState: () => table?.getViewState() ?? {} };
-  // The table whose tag filter the Tag match column scores against; a signal so it re-sorts.
+  // The table whose tag filter the Tag Match column scores against; a signal so it re-sorts.
   const [filterTable, setFilterTable] = createSignal<TableState<Game> | null>(null);
   // The game the Similarity column ranks the list against (the panel's Sort list by similarity).
   const [similarTo, setSimilarTo] = createSignal<number | null>(null);
@@ -1369,7 +1369,7 @@ export default function ListRoute() {
       },
     };
   }
-  // True once load() has built the table, false while loading. Gates the "🔗 Share view"/"Default
+  // True once load() has built the table, false while loading. Gates the "🔗 Share layout"/"Default
   // view" toolbar's own <Show> rather than leaving it visible-but-broken against a `table` that
   // doesn't exist yet.
   const [tableReady, setTableReady] = createSignal(false);
@@ -1378,7 +1378,8 @@ export default function ListRoute() {
 
   // ── Row-selection-based add/remove-to-list (see this file's own header comment) ────────────
   const [selectedRows, setSelectedRows] = createSignal<Game[]>([]);
-  const [manualLists, setManualLists] = createSignal<GameList[]>(getLists().filter((l) => l.kind === 'manual'));
+  // getLists reads a tracked pref: a list made in the panel or synced in is offered at once.
+  const manualLists = createMemo(() => getLists().filter((l) => l.kind === 'manual'));
   const NEW_LIST_OPTION = '__new__';
   const [addTarget, setAddTarget] = createSignal('');
   const [newListName, setNewListName] = createSignal('');
@@ -1401,32 +1402,15 @@ export default function ListRoute() {
     selectionStatusTimer = setTimeout(() => setSelectionActionStatus(null), 6000);
   }
 
-  function refreshManualLists(): void {
-    setManualLists(getLists().filter((l) => l.kind === 'manual'));
-  }
-
   async function handleAddSelectedToList(): Promise<void> {
     const target = addTarget();
     const rows = selectedRows();
     if (!target || rows.length === 0) return;
     const appids = rows.map((r) => r.appid);
-    if (target === NEW_LIST_OPTION) {
-      const name = newListName().trim();
-      if (!name) return;
-      const list = createList({ name, kind: 'manual', appids });
-      refreshManualLists();
-      showSelectionStatus(
-        `Added ${appids.length} game${appids.length === 1 ? '' : 's'} to new list "${list.name}".`,
-        list.id,
-      );
-    } else {
-      const list = getList(target);
-      addAppidsToList(target, appids);
-      showSelectionStatus(
-        `Added ${appids.length} game${appids.length === 1 ? '' : 's'} to "${list?.name ?? 'list'}".`,
-        target,
-      );
-    }
+    const name = newListName().trim();
+    if (target === NEW_LIST_OPTION && !name) return;
+    const added = addToManualList(target === NEW_LIST_OPTION ? { newName: name } : { listId: target }, appids);
+    showSelectionStatus(added.message, added.listId);
     setAddTarget('');
     setNewListName('');
     const main = document.querySelector<HTMLElement>('main');
@@ -2120,7 +2104,7 @@ export default function ListRoute() {
     if (kind === 'compare') return 'compareListView';
     // Shared across every /lists/shared link, not per-link — the "kind has no stored list of its
     // own to hang a view on" reasoning above applies just as much here, and a link is one-off by
-    // nature (a bookmark of *this* view specifically is what "🔗 Share view" is already for).
+    // nature (a bookmark of *this* view specifically is what "🔗 Share layout" is already for).
     if (kind === 'shared') return 'sharedListView';
     // Pick-and-mix bundles share their own layout: grouped and sorted for picking, not by tier.
     if (kind === 'bundle') return untrack(bundleMeta)?.model === 'pick' ? 'pickBundleListView' : 'bundleListView';
@@ -2209,9 +2193,9 @@ export default function ListRoute() {
     const keys = [...Object.keys(view.filters ?? {}), ...Object.keys(view.rangeFilters ?? {})];
     return keys.some((k) => PRICE_KEYS.has(k)) && tableData().some((row) => row.bestDealPrice === undefined);
   });
-  // "🔗 Share view"/"Default view" — see tableViewPrefs.ts for the share-on-demand-only reasoning
+  // "🔗 Share layout"/"Reset layout" — see tableViewPrefs.ts for the share-on-demand-only reasoning
   // (a link written to the live URL goes stale the moment the table changes again).
-  // A 🔗 Share view link's layout, on screen but not saved (see layoutDraft's restore).
+  // A 🔗 Share layout link's layout, on screen but not saved (see layoutDraft's restore).
   const [viewingShared, setViewingShared] = createSignal(false);
   const [sharedViewEdited, setSharedViewEdited] = createSignal(false);
   function handleDiscardSharedView(): void {
@@ -2251,7 +2235,7 @@ export default function ListRoute() {
     const defined = definedList();
     return kind === 'game-pass' || (!!defined && listHasGamePassSource(defined.list, defined.get));
   }
-  // A /lists/<id> link only opens here; a dynamic list's 🔗 Share list replaces Share view outright.
+  // A /lists/<id> link only opens here; a dynamic list's 🔗 Share list replaces Share layout outright.
   function isDynamicList(): boolean {
     return kind === 'user' && userList()?.kind === 'dynamic';
   }
@@ -2889,7 +2873,7 @@ export default function ListRoute() {
                     : kind === 'creator' || kind === 'game-pass'
                       ? [...RECENT_DEFAULT_VISIBLE, TASTE_FIT_KEY]
                       : OWNED_DEFAULT_VISIBLE;
-      // A Taste fit with no taste on this device would be a column of "—": hidden until there is one.
+      // A Taste Fit with no taste on this device would be a column of "—": hidden until there is one.
       const defaultVisible = kindDefaultVisible.filter((key) => key !== TASTE_FIT_KEY || !!tasteSource.taste);
       const sort = isRanked
         ? RANKED_DEFAULT_SORT
@@ -3658,7 +3642,7 @@ export default function ListRoute() {
     return { players, ground: commonGround(rows, compared), compared, rows };
   });
   // Defaults to the first player with a profile who isn't me (my ★ or current account): suggesting
-  // to myself is what Taste fit does.
+  // to myself is what Taste Fit does.
   const [suggestTarget, setSuggestTarget] = createSignal<number | null>(null);
   const suggestTo = () => {
     const chosen = suggestTarget();
@@ -3895,13 +3879,13 @@ export default function ListRoute() {
     if (kind === 'compare' && visible?.has(GROUP_FIT_KEY) && loadedRows() && !(playerProfiles() && playersOpen())) {
       const fits = groupFits();
       const left = comparePlayers.filter((_, i) => !fits?.profiled[i]).map((p) => p.label);
-      if (left.length) notes.push(`Group fit leaves out ${left.join(', ')}: too few games played here`);
+      if (left.length) notes.push(`Group Fit leaves out ${left.join(', ')}: too few games played here`);
     }
     return notes;
   });
   // Owned's profile alone (no other list renders it), once every row's details are in, so it doesn't reshuffle as they stream.
   const profileRows = () => (kind === 'owned' ? loadedRows() : null);
-  // Owned learns its account's taste for Taste fit elsewhere.
+  // Owned learns its account's taste for Taste Fit elsewhere.
   createEffect(() => {
     const rows = profileRows();
     if (!rows) return;
@@ -3911,7 +3895,7 @@ export default function ListRoute() {
     const keep = untrack(() => [getMyAccount()?.id, getCurrentAccount()?.id]).filter((id) => id != null);
     if (!taste) return;
     saveTaste(account.id, taste, keep);
-    // So Owned's own Taste fit scores on a first visit, and not from a taste stored before a change.
+    // So Owned's own Taste Fit scores on a first visit, and not from a taste stored before a change.
     setTasteFitSource((source) => source && { ...source, taste });
   });
   const playsMostlyProfile = createMemo(() => {
@@ -4257,6 +4241,10 @@ export default function ListRoute() {
       openGame: handleOpenGameRequest,
       onGameClose: handleGameClose,
       refreshGame,
+      // The panel changed this list's games: rows come from its stored appids, read at load.
+      onListChanged: (listId) => {
+        if (untrack(userList)?.id === listId) void load();
+      },
       onTagClick,
       isTagActive,
       getOwners: (appid) =>

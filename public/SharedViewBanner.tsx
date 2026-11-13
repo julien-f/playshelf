@@ -1,6 +1,6 @@
 import type { JSX } from 'solid-js';
 
-// Shown while a table follows the layout of a 🔗 Share view link: it applies to this visit only,
+// Shown while a table follows the layout of a 🔗 Share layout link: it applies to this visit only,
 // and view persistence stays paused until the viewer keeps it or goes back to their own.
 export function SharedViewBanner(props: { edited: boolean; onKeep: () => void; onDiscard: () => void }): JSX.Element {
   return (

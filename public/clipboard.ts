@@ -1,5 +1,5 @@
 // One "copy this text, then say so" helper, shared by every copy button in the app — the panel's
-// 🔗, the tables' "🔗 Share view", and the account-identifier buttons on Home and the nav chip.
+// 🔗, the tables' "🔗 Share layout", and the account-identifier buttons on Home and the nav chip.
 // Each of the first two grew its own writeText-then-swap-the-label-for-1.5s pair, and they had
 // already drifted: both silently did nothing when the Clipboard API was unavailable (it needs a
 // secure context, and can be permission-denied), leaving a button that looks broken, while the

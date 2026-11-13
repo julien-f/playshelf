@@ -27,7 +27,7 @@ Decision order:
 3. Paid with no known price → `null`.
 4. ≥ $50 → AAA. $20–$50 → AA with 20k+ reviews or a Metacritic entry, else Indie. < $20 → Indie whatever the reviews (Vampire Survivors, Stardew Valley, Terraria stay Indie).
 
-It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vectors, so Similar in this list and Group fit weigh budget, which no Steam tag says; Plays mostly never shows it.
+It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vectors, so Similar in this list and Group Fit weigh budget, which no Steam tag says; Plays mostly never shows it.
 
 - **No publisher/developer allowlist**: it would be the strongest signal, but needs externally maintained knowledge (name variants, acquisitions, spin-offs); the heuristic stays self-updating from Steam's data.
 - **Accepted misclassifications**: cheap rereleases of old AAA IP, prestige-priced niche sims from small studios, veteran-founded studios shipping a small polished game. Hence "(est.)" in the label.

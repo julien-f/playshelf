@@ -162,11 +162,11 @@ export function initGameSearch({
     const moreHtml = !moreRowShown()
       ? ''
       : gameSearchMoreHtml(
-          showingRecents ? 'See all recently looked up ' : `See all results for "${lastTerm}" `,
+          showingRecents ? 'See all Recently Looked Up ' : `See all results for "${lastTerm}" `,
           moreActive,
         );
     resultsEl.innerHTML = showingRecents
-      ? gameSearchSectionHtml('Recently looked up') + options + moreHtml
+      ? gameSearchSectionHtml('Recently Looked Up') + options + moreHtml
       : options + moreHtml;
     resultsEl.querySelector('#game-search-more-opt')?.append(moreArrow);
     if (activeIdx >= 0 && activeIdx < lastResults.length)

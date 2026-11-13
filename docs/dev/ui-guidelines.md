@@ -21,7 +21,7 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 ## Feedback
 
 - Every action visibly changes something where the user is looking; a result with nothing to see (a copied link) is announced through a live region.
-- Reversible actions (sort, filter, hide a column, switch account) act at once, no confirmation. Clearing many at once (Default view) is where an undo is worth it; deleting is soft or confirmed.
+- Reversible actions (sort, filter, hide a column, switch account) act at once, no confirmation. Clearing many at once (Reset layout) is where an undo is worth it; deleting is soft or confirmed.
 - Disabled controls look it (`:disabled`, or `[aria-disabled='true']` when a press must say why: half opacity, `not-allowed` cursor) and say why in text, beside them or on press, not only a tooltip (touch and keyboard users never see one), or are hidden when there's nothing to act on.
 - Empty states say what emptied the screen (no games, a filter matching nothing, a private profile) and offer the way back.
 
@@ -62,7 +62,7 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 
 - Sizes come from the `--fs-*` scale in `styles/tokens.css` (caps labels, meta and chips, tables and controls, prose, card titles, page titles, big figures); px sizes are for icon glyphs only. `test/typeScale.test.js` enforces it for the app's own CSS (the presentation window's `clamp()` TV sizes included), not the table library's.
 - Two weights: 400, and 600 for emphasis.
-- Two faces, the platform's own, so a page load downloads no font: `--font-sans` (a `system-ui` stack) for text; `--font-mono` (a `ui-monospace` stack) with tabular figures for a figure standing alone (`<time>`, `<output>`, `<data>`, a price, a score, a duration). Table cells stay in the text face, with tabular figures, since a cell can't be told numeric from CSS. A column of figures aligns to the end, so digits line up (data-table's default for `type: 'number'`); a number column whose cells read as text (Group fit's player) sets `align: 'start'`.
+- Two faces, the platform's own, so a page load downloads no font: `--font-sans` (a `system-ui` stack) for text; `--font-mono` (a `ui-monospace` stack) with tabular figures for a figure standing alone (`<time>`, `<output>`, `<data>`, a price, a score, a duration). Table cells stay in the text face, with tabular figures, since a cell can't be told numeric from CSS. A column of figures aligns to the end, so digits line up (data-table's default for `type: 'number'`); a number column whose cells read as text (Group Fit's player) sets `align: 'start'`.
 - The face differs per platform: don't size a layout to one face's metrics or rely on a symbol glyph matching its neighbours (key caps: `Kbd.tsx`).
 
 ## Icons

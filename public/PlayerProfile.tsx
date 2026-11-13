@@ -63,7 +63,7 @@ export function TagBars(props: {
               class="profile-bar"
               classList={{ active: props.isActive(played.tag) }}
               aria-pressed={props.isActive(played.tag)}
-              title={`Filter by ${played.tag}, ranked by Tag match · ${i() === 0 ? 'the top tag' : `${pct(played.weight)} as strong as ${props.tags[0].tag}`}`}
+              title={`Filter by ${played.tag}, ranked by Tag Match · ${i() === 0 ? 'the top tag' : `${pct(played.weight)} as strong as ${props.tags[0].tag}`}`}
               onClick={() => props.onTag(played.tag)}
             >
               <span class="profile-bar-name">{played.tag}</span>
@@ -416,7 +416,7 @@ export function OwnedProfile(props: {
                     class="btn"
                     aria-pressed={props.backlogShown}
                     aria-label={`Play next: ${props.unplayed} ${props.unplayed === 1 ? 'game' : 'games'} played ${props.playNextHours} h or less`}
-                    title="Open Play next: these games, best Taste fit first"
+                    title="Open Play next: these games, best Taste Fit first"
                     onClick={() => props.onBacklog()}
                   >
                     Play next
