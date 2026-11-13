@@ -105,7 +105,7 @@ Owned and Wishlist (`ViewKind`) have named views of the list (`listViews.ts`), s
 - **New view** (`NewViewMenu`, in the hero beside Rank this list): the suggested views not created yet, then "Save the table as it is now" under a name.
 - **Suggested views** (`suggestedTemplates`): the kind's `VIEW_TEMPLATES` with no view created from them (by `template`, so a renamed one still counts), the `needsPrices` ones only while prices show. Creating one stamps its view and columns into a new saved view (`createFromTemplate`).
   - Owned: Recently played (by Last Played), Play next (`PLAY_NEXT_MAX_HOURS` played or less, not finished, abandoned or coming soon; by Taste Fit, then rating), Short games (Play next's bounds plus HLTB Main ≤ 5 h; best rated first), Runs on Linux (ProtonDB) (native, platinum or gold).
-  - Wishlist: Bargains (Price Status at a 1-year low or better, by Discount).
+  - Wishlist: Bargains (Price Status at a 1-year low or better, by Discount), Runs on Linux (ProtonDB) (as Owned's, with or without prices).
   - A template holds no price column without `needsPrices`, nor a sort or column set equal to the list's default: either reads back as unsaved.
   - Owned's profile opens Play next too ([taste.md](taste.md#owneds-profile)).
 

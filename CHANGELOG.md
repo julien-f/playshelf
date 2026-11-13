@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - An amber dot on the account chip when your Steam sign-in has expired, with Sign in again or Stay signed out in its menu
 - Compare up to 5 friends straight from Home's friends list
 - Add a game to your lists, or start a new one with it, from its panel
-- A Runs on Linux (ProtonDB) suggested view on Owned: games rated Native, Platinum or Gold on ProtonDB
+- A Runs on Linux (ProtonDB) suggested view on Owned and Wishlist: games rated Native, Platinum or Gold on ProtonDB
 
 ### Changed
 

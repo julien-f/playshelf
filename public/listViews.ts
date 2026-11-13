@@ -15,7 +15,7 @@ export const LIST_VIEWS_KEY = 'listViews';
 
 function read(): ListViews {
   const views = getPref<ListViews>(LIST_VIEWS_KEY, {});
-  return { ...views, owned: views.owned?.map(upgraded) };
+  return { ...views, owned: views.owned?.map((v) => upgraded('owned', v)) };
 }
 function write(kind: ViewKind, views: SavedView[]): void {
   setPref(LIST_VIEWS_KEY, { ...read(), [kind]: views });
@@ -65,7 +65,7 @@ export function deleteListView(kind: ViewKind, id: string): void {
 // Play next's bound, shared with Owned's profile-line count that opens it.
 export const PLAY_NEXT_MAX_HOURS = 2;
 
-// Suggested views, stamped into a SavedView at creation; `cols` are its visible columns in display order. No price
+// Suggested views, stamped into a SavedView at creation; an id is unique within its kind; `cols` are its visible columns in display order. No price
 // column without `needsPrices`, nor a sort or column set equal to the list's default: either reads back as unsaved.
 export interface ViewTemplate {
   id: string;
@@ -90,6 +90,12 @@ export const isPlayNextCandidate = (
 
 // Price Status at a 1-year low or better.
 const BARGAIN_STATUSES = DEAL_RECORD_TIERS.filter((t) => t.tier !== '3mo').map((t) => t.statusLabel);
+
+// Named for its source: not Steam Deck Verified. Filters AND across columns, so a native port with no report is out.
+const LINUX_NAME = 'Runs on Linux (ProtonDB)';
+const LINUX_VIEW = {
+  filters: { protondb: ['native', 'platinum', 'gold'].map((tier) => protonDbValue(tier) as string) },
+};
 
 export const VIEW_TEMPLATES: readonly ViewTemplate[] = [
   {
@@ -132,9 +138,8 @@ export const VIEW_TEMPLATES: readonly ViewTemplate[] = [
   {
     id: 'runs-on-linux',
     kind: 'owned',
-    // Named for its source: not Steam Deck Verified. Filters AND across columns, so a native port with no report is out.
-    name: 'Runs on Linux (ProtonDB)',
-    view: { filters: { protondb: ['native', 'platinum', 'gold'].map((tier) => protonDbValue(tier) as string) } },
+    name: LINUX_NAME,
+    view: LINUX_VIEW,
     // No sort: Owned's default, best rated first.
     cols: ['capsule', 'name', 'protondb', 'platforms', 'steamdbRating', 'tasteFit', 'playtime', 'hltbAll'],
   },
@@ -155,6 +160,25 @@ export const VIEW_TEMPLATES: readonly ViewTemplate[] = [
       'hasDemo',
     ],
     needsPrices: true,
+  },
+  // A pre-purchase check, so offered with or without prices.
+  {
+    id: 'runs-on-linux',
+    kind: 'wishlist',
+    name: LINUX_NAME,
+    view: LINUX_VIEW,
+    // No sort: Wishlist's default, best rated first.
+    cols: [
+      'capsule',
+      'name',
+      'protondb',
+      'platforms',
+      'steamdbRating',
+      'tasteFit',
+      'hltbAll',
+      'releaseDate',
+      'hasDemo',
+    ],
   },
 ];
 
@@ -177,7 +201,7 @@ export function createFromTemplate(template: ViewTemplate): SavedView {
   return createListView(template.kind, template.name, stamp(template), template.id);
 }
 
-// Each template's earlier stamps as stored then, key order included (compared as JSON). A stored view still equal to
+// Each Owned template's earlier stamps as stored then, key order included (compared as JSON). A stored view still equal to
 // one was never edited, so it reads as today's stamp; an edited one is left as it is.
 const PLAYTIME_MAX_2 = { playtime: { min: '', max: '2' } };
 const SHORT_RANGES = { ...PLAYTIME_MAX_2, hltbMain: { min: '', max: '5' } };
@@ -212,8 +236,8 @@ const PAST_JSON = new Map(
   Object.entries(PAST_STAMPS).map(([id, past]) => [id, new Set(past.map((v) => JSON.stringify(v)))]),
 );
 
-function upgraded(saved: SavedView): SavedView {
-  const template = VIEW_TEMPLATES.find((t) => t.id === saved.template);
+function upgraded(kind: ViewKind, saved: SavedView): SavedView {
+  const template = VIEW_TEMPLATES.find((t) => t.kind === kind && t.id === saved.template);
   if (!template || !PAST_JSON.get(template.id)?.has(JSON.stringify(saved.tableView))) return saved;
   return { ...saved, tableView: stamp(template) };
 }

@@ -250,7 +250,7 @@ Tests map to journeys by title ([testing.md](testing.md#end-to-end-tests)).
 
 ### L5 Switch between views of my library
 
-- **Who / goal**: keep "Recently played", "Play next", "Short games" and "Runs on Linux (ProtonDB)" on Owned, or "Bargains" on Wishlist, and switch between them without filtering again.
+- **Who / goal**: keep "Recently played", "Play next", "Short games" and "Runs on Linux (ProtonDB)" on Owned, or "Bargains" and "Runs on Linux (ProtonDB)" on Wishlist, and switch between them without filtering again.
 - **Steps**:
   1. Owned
   2. **New view**: a suggested view, or **Save as view** for the table as it is
