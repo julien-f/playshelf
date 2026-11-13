@@ -953,6 +953,10 @@ export default function ListRoute() {
   // up by the one appid being opened.
   const [standaloneRows, setStandaloneRows] = createStore<Record<number, Game>>({});
   const loadGuard = createStaleGuard();
+  // A `{ limited }` reply marks only the load it was asked for, not one stepped to since.
+  function noteLimited(gen: number, limited: string | undefined): void {
+    if (limited && !loadGuard.isStale(gen)) setDetailsLimited(limited);
+  }
   let table: TableState<Game> | null = null;
   let disposeTable: (() => void) | null = null;
   let unsyncView: (() => void) | null = null;
@@ -1809,6 +1813,7 @@ export default function ListRoute() {
 
   async function openStandaloneInPlace(appid: number): Promise<void> {
     const token = ++standaloneLookupToken;
+    const gen = loadGuard.current();
     if (!isValidAppid(appid)) return;
     // No `App <appid>` placeholder in the data — panel.tsx's own title renders that fallback, so
     // the empty name here stays honest ("not resolved yet") for everything else that reads it.
@@ -1818,7 +1823,7 @@ export default function ListRoute() {
     try {
       const data = await fetchGameDetails(appid);
       if (token !== standaloneLookupToken) return; // a newer lookup has since taken over
-      if (data.limited) setDetailsLimited(data.limited);
+      noteLimited(gen, data.limited);
       setStandaloneRows(
         appid,
         produce((draft) => {
@@ -1987,7 +1992,7 @@ export default function ListRoute() {
           }
           if (event.done) continue;
           if (event.limited) {
-            if (!loadGuard.isStale(gen)) setDetailsLimited(event.limited);
+            noteLimited(gen, event.limited);
             continue;
           }
           const parts = event.part ? [event.part] : (['fast', 'store'] as const);
@@ -2083,7 +2088,7 @@ export default function ListRoute() {
     const gen = loadGuard.current();
     try {
       const data: DetailsEvent = { ...(await fetchGameDetails(game.appid, { refresh: true })), appid: game.appid };
-      if (data.limited && !loadGuard.isStale(gen)) setDetailsLimited(data.limited);
+      noteLimited(gen, data.limited);
       const updated = rowStore.mutateRow(game.appid, (draft) => applyDetailsEvent(draft, data));
       if (!updated && standaloneRows[game.appid]) {
         setStandaloneRows(
@@ -2095,7 +2100,7 @@ export default function ListRoute() {
       }
       restorePendingShot();
     } catch (err) {
-      setStatusText(`Refresh failed: ${(err as Error).message}`);
+      if (!loadGuard.isStale(gen)) setStatusText(`Refresh failed: ${(err as Error).message}`);
     }
   }
 

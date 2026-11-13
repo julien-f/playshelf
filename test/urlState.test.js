@@ -155,7 +155,7 @@ test("withAccountParam: a shared list's link reads the same with or without a u=
   ];
   const result = encodeListFormula({ op: 'union', sources }, () => undefined);
   const url = shareListUrl(result.formula);
-  assert.equal(addressBar(withAccountParam(url, '?u=alice')), addressBar(url.replace('?', '?u=alice&')));
+  assert.equal(withAccountParam(url, '?u=alice'), url.replace('?', '?u=alice&'));
 });
 
 test("withAccountParam: does not carry a comparison's several slots — they are not an override", () => {

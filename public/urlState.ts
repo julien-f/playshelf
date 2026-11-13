@@ -42,7 +42,7 @@ export function urlWithParams(params: URLSearchParams, pathname: string = locati
 }
 
 // reorderUrlParams' query, with a shared formula (`?f=`) as readable as the address bar allows: the
-// characters shareListUrl leaves literal are unescaped back, except `'`, which browsers re-encode.
+// characters shareListUrl leaves literal are unescaped back.
 function queryString(params: URLSearchParams): string {
   return reorderUrlParams(params)
     .toString()
