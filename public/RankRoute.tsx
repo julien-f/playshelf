@@ -26,7 +26,14 @@ import { setBaseTitle } from './pageTitle.ts';
 import { panelOpen, panelClose, isPanelOpen, getPanelGame } from './panel.tsx';
 import { isLightboxOpen } from './lightbox.tsx';
 import { withAccountParam } from './urlState.ts';
-import { computeSteamdbRating, detailsFields, fetchJson, isTextEntry, scoreColor, steamAppAsset } from './utils.ts';
+import {
+  computeSteamdbRating,
+  detailsFields,
+  fetchGameDetails,
+  isTextEntry,
+  scoreColor,
+  steamAppAsset,
+} from './utils.ts';
 import { registerRouteHandlers } from './AppShell.tsx';
 import Kbd from './Kbd.tsx';
 import { focusFirst, focusLost, handOffFocus } from './focusHandoff.ts';
@@ -118,22 +125,16 @@ export default function RankRoute() {
     }
   }
 
-  function getDetails(appid: number, refresh = false): Promise<GameDetailsReply> {
-    return fetchJson<GameDetailsReply>(
-      `/api/game-details/${appid}${refresh ? '?refresh=1' : ''}`,
-      undefined,
-      refresh ? 'Refresh failed' : 'Details failed',
-    );
-  }
   function setDetails(appid: number, data: GameDetailsReply): void {
     setGames(appid, { ...detailsFields(data), name: data.name || `App ${appid}` });
+    if (data.limited) setStatus(data.limited);
   }
 
   // Cached per appid for this mount; the server's own cache makes a repeat cheap anyway.
   function fetchDetails(appid: number): void {
     if (appid in games) return;
     setGames(appid, { appid, name: `App ${appid}`, loading: true, details: null });
-    getDetails(appid)
+    fetchGameDetails(appid)
       .then((data) => setDetails(appid, data))
       .catch(() => {
         /* card falls back to the header image and appid */
@@ -166,7 +167,7 @@ export default function RankRoute() {
   // The panel's ↻ Refresh; tags stay plain pills, since nothing here filters by them.
   async function refreshGame(game: Game): Promise<void> {
     try {
-      setDetails(game.appid, await getDetails(game.appid, true));
+      setDetails(game.appid, await fetchGameDetails(game.appid, { refresh: true }));
     } catch (err) {
       setStatus(`Refresh failed: ${(err as Error).message}`);
     }

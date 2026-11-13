@@ -116,6 +116,7 @@ import {
   NO_DETAILS,
   FAST_DETAIL_SOURCES,
   STORE_DETAIL_SOURCES,
+  fetchGameDetails,
   fetchJson,
   fmtAge,
   fmtLastPlayed,
@@ -280,7 +281,7 @@ import {
 import { encodeListFormula, decodeListFormula, shareListUrl, inMemoryDynamicList } from './listShare.ts';
 import { copyWithFeedback } from './clipboard.ts';
 import { setBaseTitle } from './pageTitle.ts';
-import type { AccountSlot, GameDetailsReply, Game, GameList, GameMeta, CombineOp, ListRef } from './types.ts';
+import type { AccountSlot, Game, GameList, GameMeta, CombineOp, ListRef } from './types.ts';
 import { applyDetailsEvent, type DetailsEvent } from './detailsEvent.ts';
 import {
   getList,
@@ -1815,8 +1816,9 @@ export default function ListRoute() {
     const game = standaloneRows[appid];
     openGame(game);
     try {
-      const data = await fetchJson<GameDetailsReply>(`/api/game-details/${appid}`, undefined, 'Lookup failed');
+      const data = await fetchGameDetails(appid);
       if (token !== standaloneLookupToken) return; // a newer lookup has since taken over
+      if (data.limited) setDetailsLimited(data.limited);
       setStandaloneRows(
         appid,
         produce((draft) => {
@@ -2079,11 +2081,8 @@ export default function ListRoute() {
   async function refreshGame(game: Game): Promise<void> {
     const unresolved = !game.details?.meta;
     try {
-      const data = await fetchJson<DetailsEvent>(
-        `/api/game-details/${game.appid}?refresh=1`,
-        undefined,
-        'Refresh failed',
-      );
+      const data: DetailsEvent = { ...(await fetchGameDetails(game.appid, { refresh: true })), appid: game.appid };
+      if (data.limited) setDetailsLimited(data.limited);
       const updated = rowStore.mutateRow(game.appid, (draft) => applyDetailsEvent(draft, data));
       if (!updated && standaloneRows[game.appid]) {
         setStandaloneRows(

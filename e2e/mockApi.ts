@@ -19,7 +19,7 @@
 //   signed-in      signed in with Steam as Alice, whose account already has prefs (fixtures.ts's signedInPrefs)
 //   creator-capped a developer's/publisher's list is Steam's first page of 523 games
 //   tagless        no game has Steam tags
-//   client-limited this client spent its share of the outbound budgets: details say so once, achievements and prices 429
+//   client-limited this client spent its share of the outbound budgets: details say so (once per stream), achievements and prices 429
 //   big-library    the library also owns bigLibrary.ts's 1200 synthetic games (scripts/perf-measure.js)
 import type { Page } from '@playwright/test';
 import { PLAYERS, CATALOG, BUNDLE, PICK_BUNDLE, SIGNED_IN, signedInPrefs, game, type Player } from './fixtures.ts';
@@ -434,7 +434,7 @@ export function respond(
     };
   }
   const one = path.match(/^\/api\/game-details\/(\d+)$/);
-  if (one) return json(detailsFor(Number(one[1])));
+  if (one) return json({ ...detailsFor(Number(one[1])), ...(limited && { limited: LIMITED }) });
   const metaOnly = path.match(/^\/api\/game-meta\/(\d+)$/);
   if (metaOnly) {
     const appid = Number(metaOnly[1]);
