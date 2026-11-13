@@ -7,6 +7,10 @@
     {
       "prompt": "review both backlogs for conflicts and synergies, pick one and ship it",
       "expect": "backlog-run"
+    },
+    {
+      "prompt": "Plan C313 from docs/dev/code-backlog.md per CLAUDE.md (specialist review, wait for my approval), then ship it",
+      "expect": "backlog-run"
     }
   ]
 }

@@ -17,7 +17,7 @@ Judges the app against [docs/dev/journeys.md](../../../docs/dev/journeys.md) and
 ## Which server
 
 - **Mocked first: `npm run dev:mock` (`:58993`, a worktree's own port in one: `node scripts/ports.js mock`; `node scripts/mock-server.js up` starts or reuses it, `down` stops it)** for clarity, layout, keyboard, consistency and the empty/error states — `document.cookie = 'mock=no-itad'` (or another state from `e2e/mockApi.ts`'s header) before a load switches one on; clear it after. Its storage is separate from the real prefs, so no seed/restore — but it keeps earlier runs' lists, so start clean: `node scripts/ux-measure.js --fresh /` and run it (clears it, sets `alice`; `bob`, `carol` are in `e2e/fixtures.ts`). A state the fixtures lack is a gap in `e2e/mockApi.ts` to report, not a reason to switch servers.
-- **Real: `npm run dev` (`:58991`; `node scripts/dev-server.js up|down`)** only for what mocks can't show — loading and progress on a real library, freshness ages, real upstream failures — and for scenarios needing real data. Those visits need the demo state below.
+- **Real: `npm run dev` (`:58991`, a worktree's own port in one: `node scripts/ports.js dev`; `node scripts/dev-server.js up|down`)** only for what mocks can't show — loading and progress on a real library, freshness ages, real upstream failures — and for scenarios needing real data. Those visits need the demo state below.
 
 ## Demo state (real server only) — before the first page load
 

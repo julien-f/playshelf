@@ -279,7 +279,7 @@ export interface AccountSlot {
   // (accountsStore.ts's accountIdentifiers)
   memberAvatars?: Record<string, string>; // a Family's steam64 → avatar, same reason as avatarUrl
   unresolved?: string[]; // members whose player summaries failed; never stored (accountsStore.ts's withStoredDisplay)
-  removedAt?: number; // soft-removed from the recents UI, kept while referenced by a dynamic list
+  removedAt?: number; // hidden from the recents UI (removed, or never picked), kept while a list references it
 }
 
 // A node in the user's list-organizing tree — flat arrays keyed by parentId, not a nested

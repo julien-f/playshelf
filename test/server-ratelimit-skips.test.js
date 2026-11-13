@@ -20,6 +20,7 @@ const assert = require('node:assert/strict');
 const supertest = require('supertest');
 const { app } = require('../server');
 const { _reset, setCache } = require('../lib/cache');
+const { ageCache } = require('./ageCache');
 const { SESSION_COOKIE, createSession, upsertUser } = require('../lib/auth');
 
 const api = supertest(app);
@@ -86,7 +87,7 @@ test('search limiter: a cached vanity name skips it like a cached Steam64 id', a
   const commonGames =
     (members, refresh = false) =>
     () =>
-      api.post('/api/common-games').send({ members, refresh });
+      api.post(`/api/common-games${refresh ? '?refresh=1' : ''}`).send({ members });
   await assertMissesCountHitsDont(calls, {
     misses: {
       'uncached Steam64': commonGames(['76561198000000001']),
@@ -111,7 +112,7 @@ test('friends limiter: counts cache misses but never counts cache hits', async (
   const friends =
     (members, refresh = false) =>
     () =>
-      api.post('/api/friends').send({ members, refresh });
+      api.post(`/api/friends${refresh ? '?refresh=1' : ''}`).send({ members });
   await assertMissesCountHitsDont(calls, {
     misses: {
       'uncached Steam64': friends(['76561198000000001']),
@@ -130,13 +131,15 @@ test('news limiter: counts cache misses but never counts cache hits', async (t) 
   _reset();
   const calls = mockUpstreams(t);
   setCache('news:410', []);
+  ageCache();
+  setCache('news:411', []);
 
   const news = (path) => () => api.get(`/api/game-news/${path}`);
   await assertMissesCountHitsDont(calls, {
     misses: { 400: news(400), 401: news(401) },
     over: news(402),
     refresh: news('410?refresh=1'),
-    hits: { 410: news(410) },
+    hits: { 410: news(410), 'forced, under FORCE_MIN_AGE_MINUTES old': news('411?refresh=1') },
   });
 });
 
@@ -145,13 +148,17 @@ test('achievements limiter: counts cache misses but never counts cache hits', as
   const calls = mockUpstreams(t);
   const PLAYER = '76561198000000099';
   // Not part of the skip: a cached positive count just keeps the route off the store API.
-  for (const appid of [500, 501, 502, 510]) setCache(`meta:${appid}`, { name: 'Game', achievementCount: 1 });
+  for (const appid of [500, 501, 502, 510]) setCache(`appdetails:${appid}`, { name: 'Game', achievementCount: 1 });
   setCache('gameschema:510', { name: 'A', achievements: [{ apiname: 'A', name: 'A', hidden: false }] });
   setCache('achrarity:510', { A: 50 });
   setCache(`playerach:${PLAYER}:510`, []);
   setCache('achrarity:500', { A: 50 });
   setCache(`playerach:${PLAYER}:500`, []);
   setCache('resolve:cachedvanity', PLAYER);
+  ageCache();
+  setCache('gameschema:511', { name: 'A', achievements: [{ apiname: 'A', name: 'A', hidden: false }] });
+  setCache('achrarity:511', { A: 50 });
+  setCache('appdetails:511', { name: 'Game', achievementCount: 1 });
 
   const achievements =
     (appid, steamids = '') =>
@@ -168,6 +175,7 @@ test('achievements limiter: counts cache misses but never counts cache hits', as
       'schema, rarity and player cached': achievements(510, PLAYER),
       'cached vanity': achievements(510, 'cachedvanity'),
       'no steamids': achievements(510),
+      'forced, no steamids, under FORCE_MIN_AGE_MINUTES old': achievements('511', '&refresh=1'),
     },
   });
 });
@@ -259,7 +267,7 @@ test('game pass limiter: counts cache misses but never counts cache hits', async
 test('meta limiter: counts cache misses but never counts cache hits', async (t) => {
   _reset();
   const calls = mockUpstreams(t);
-  setCache('meta:810', { name: 'Cached' });
+  setCache('appdetails:810', { name: 'Cached' });
 
   const meta = (appid) => api.get(`/api/game-meta/${appid}`);
   assert.equal((await meta(800)).status, 200);

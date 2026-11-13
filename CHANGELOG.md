@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - An amber dot on the account chip when your Steam sign-in has expired, with Sign in again or Stay signed out in its menu
 - Compare up to 5 friends straight from Home's friends list
 - Add a game to your lists, or start a new one with it, from its panel
+- A Runs on Linux (ProtonDB) suggested view on Owned: games rated Native, Platinum or Gold on ProtonDB
 
 ### Changed
 
@@ -47,6 +48,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - GET /api/metrics opens with what's wrong now (`alerts`), groups each upstream's live state together and dates its worst event-loop block
 - Each visit now extends the Steam sign-in, instead of it expiring a fixed time after signing in
 - The table's Share view and Default view buttons are now Share layout and Reset layout; Taste Fit, Group Fit and Tag Match columns are capitalized like the others
+- Large lists load HowLongToBeat times at a steadier pace so the site isn't blocked, and fewer requests go out for unreleased games, DLC, soundtracks and repeated refreshes
+- A list whose game details are all cached loads them with about a third less server CPU
+- Game details load with about a quarter less server CPU, reading only the store page fields the app uses
+- A recently released game's reviews, play times, ProtonDB rating and store data now refresh as it ages instead of staying a year old
+- Play next, Short games and the Barely played count leave out games not out yet, like a pre-order; a hidden Availability column says which are Coming soon
+- Play next lists best rated first when the account has too few games played for Taste Fit, and says so
+- Loading a large list makes about 50 times fewer calls to Steam for its tags and store details
 
 ### Fixed
 
@@ -93,6 +101,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Keyboard focus no longer drops to the page's top when the control holding it goes: the layout banners' buttons, the selection bar's actions, a revealed hidden achievement, a second Esc in the game search, and arriving on the rank screen.
 - A private Steam profile is named instead of shown by its ID, with the Steam setting that makes it public and a link to Steam's privacy settings; the same for a private friends list.
 - An unsaved table change in one comparison no longer carries over to a comparison of other players.
+- The site no longer stops answering for several seconds about once an hour.
+- Achievement icons show again for recently released games.
+- An unreleased game's store data, reviews, ProtonDB and HowLongToBeat results are refreshed within a day again, instead of staying up to a year
+- An unexpected reply from Steam or ProtonDB shows as a failed source to retry, instead of as no data for up to a year
+- Tags Steam adds show on games within a month, instead of up to a year later
+- Achievements a game adds after its first look show once its store page lists them, instead of up to a year later
+- On the Bundles page, ↻ also refreshes the bundles shown past their ITAD end date, and "Updated" gives the oldest page's age
+- Fanatical pick-and-mix prices stay shown when Fanatical's feed fails after its cached copy expired
+- Refreshing an account updates its ✓/☆ marks everywhere, and moving between Home, its lists and a game no longer downloads its library again
+- A game's panel reopened after a while fetches its price, bundles, news and achievements again instead of showing stale ones
+- A released game's ProtonDB and HowLongToBeat lookups no longer wait for its Steam reviews
+- A tag name list cached before tags expired monthly now expires within a month too
+- A game whose Steam store page comes back malformed now reports Steam's error instead of a server error
+- An account whose load and refresh both failed is asked again on the next visit instead of failing for 10 minutes
+- After two quick refreshes of an account where the second failed, the owned and wishlist marks now show the first one's data
+- A saved comparison names its players instead of showing their Steam IDs, and so does a list saved from a shared link or a ranking made from someone else's link.
+- Reopening a game from the table morphs its picture into the panel again, not only on its first open
 
 ### Development
 
@@ -118,6 +143,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - session-end.js also lists what production's metrics show since its last run: warnings, event-loop blocks, server errors, unexpected upstream answers and an undeployed main.
 - Design docs: personas and core journeys, a UI glossary, and every unbuilt journey step tracked by a backlog item (checked by `npm run check`)
 - Mock data has avatars, public friends lists, a private profile and images, so design reviews can walk more journeys
+- `node scripts/prod-check.js --all` lists production's warnings over the whole daily window, for a metrics review.
+- Pushing after a UI commit runs only the phone e2e half: each width's pass is remembered
+- db-query.js reads the statement from stdin, so a multi-line query needs no shell quoting
+- Shipped migrations no longer change when a cache group is added
+- Account refreshes send ?refresh=1 like every other route, and the frontend's refresh option has one name
+- The test suite checks that the cache tier table in docs/dev/data.md matches the cache groups in the code
+- The mock server sends a game's platforms as the real server does
+- A feature branch merges in its own worktree with `node scripts/merge.js start|finish`
+- The real dev server runs on a worktree's own ports with the main checkout's settings and cache
+- A feature skill for new feature requests; backlog-run takes item ids and hands over the next one
+- Hook e2e runs log which projects they ran, summarized by `setup-facts.js --cost`
 
 ## [0.12.0] - 2026-10-30
 

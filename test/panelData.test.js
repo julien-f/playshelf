@@ -9,6 +9,7 @@ const {
   achievementsSteamUrl,
   PANEL_SETTLE_MS,
 } = require('../public/panelData.ts');
+const { CLIENT_CACHE_MAX_AGE_MS } = require('../public/utils.ts');
 
 const meta = (id) => ({ name: `DLC ${id}`, capsule: `c${id}.jpg`, releaseDate: '1 Jan, 2020', comingSoon: false });
 
@@ -99,10 +100,26 @@ test('a failed forced refresh keeps what each source last loaded', async (t) => 
   assert.deepEqual(bundles, DATA.bundles);
 
   state.down = true;
-  assert.deepEqual(await loadAll({ force: true }), [news, achievements, price, bundles]);
+  assert.deepEqual(await loadAll({ refresh: true }), [news, achievements, price, bundles]);
   // An unforced call answers from the cache synchronously, not with a promise.
   assert.equal(cache.fetchAchievements(620, members), achievements);
   assert.equal(cache.fetchPrice(620, 'FR'), price);
+});
+
+test('an entry past the max age reads as missing: refetched, and not a fallback', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'] });
+  const state = mockPanelRoutes(t, DATA);
+  const cache = createPanelDataCache();
+  await cache.fetchPrice(620, 'FR');
+  t.mock.timers.tick(CLIENT_CACHE_MAX_AGE_MS - 1);
+  assert.equal(cache.fetchPrice(620, 'FR') instanceof Promise, false, 'still fresh');
+  t.mock.timers.tick(1);
+  const asked = state.urls.length;
+  state.down = true;
+  const stale = cache.fetchPrice(620, 'FR');
+  assert.ok(stale instanceof Promise, 'refetched');
+  assert.equal(await stale, null, "yesterday's price isn't shown as a fallback");
+  assert.equal(state.urls.length, asked + 1);
 });
 
 test('price and bundles are cached per region, and asked in it', async (t) => {
@@ -146,7 +163,7 @@ test("a lookup refused past this client's share keeps the server's message until
   assert.equal(cache.achievementsRefusal(620, members), undefined, 'a plain failure is no refusal');
   state.down = false;
   state.limited = true;
-  const force = { force: true };
+  const force = { refresh: true };
   assert.deepEqual(
     await Promise.all([cache.fetchAchievements(620, members, force), cache.fetchPrice(620, 'FR', force)]),
     [null, null],
@@ -249,7 +266,7 @@ test('settled: a ↻ during the pause wins over the paused load', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const cache = createPanelDataCache();
   const paused = cache.fetchNews(620, { settled: () => true });
-  const forced = cache.fetchNews(620, { force: true });
+  const forced = cache.fetchNews(620, { refresh: true });
   t.mock.timers.tick(PANEL_SETTLE_MS);
   await new Promise(setImmediate);
   // The forced answer first, then any the paused load sent.
@@ -337,7 +354,7 @@ test('isItadOff: a failed /api/health is not "off", and is asked again next time
   const cache = createPanelDataCache();
   assert.equal(await cache.fetchPrice(620, 'FR'), null);
   assert.equal(cache.isItadOff(), false);
-  await cache.fetchPrice(620, 'FR', { force: true }); // unforced, the cached null answers
+  await cache.fetchPrice(620, 'FR', { refresh: true }); // unforced, the cached null answers
   assert.equal(healthCalls, 2);
 });
 
@@ -355,9 +372,9 @@ test('achievementsRequestUrl: sends steamids only when there is an account', () 
   assert.equal(achievementsRequestUrl(440, []), '/api/achievements/440');
 });
 
-test('achievementsRequestUrl: force adds refresh=1, with or without an account', () => {
-  assert.equal(achievementsRequestUrl(440, ['1'], { force: true }), '/api/achievements/440?steamids=1&refresh=1');
-  assert.equal(achievementsRequestUrl(440, [], { force: true }), '/api/achievements/440?refresh=1');
+test('achievementsRequestUrl: refresh adds refresh=1, with or without an account', () => {
+  assert.equal(achievementsRequestUrl(440, ['1'], { refresh: true }), '/api/achievements/440?steamids=1&refresh=1');
+  assert.equal(achievementsRequestUrl(440, [], { refresh: true }), '/api/achievements/440?refresh=1');
 });
 
 test('achievementsSteamUrl: links the first member of a Family; null with no account', () => {

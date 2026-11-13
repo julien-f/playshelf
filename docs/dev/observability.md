@@ -4,7 +4,7 @@ Outbound-request metrics, budgets, and the warnings the app logs on its own. Cac
 
 ## GET /api/metrics
 
-No auth, same trust level as `GET /api/health`. In memory, reset on restart, except `cacheEntries` and `daily`, the only history beyond the trailing hour. Keys in reading order: what's wrong now, what's live per upstream, the server, the two windows, history. Is all quiet: `curl -s <host>/api/metrics | jq .alerts` (empty); `node scripts/prod-check.js` (run by `session-end.js`) lists production's warnings, event-loop blocks, inbound 5xx and upstream statuses no call declares `expected`, new since its last run, and an undeployed `origin/main`.
+No auth, same trust level as `GET /api/health`. In memory, reset on restart, except `cacheEntries` and `daily`, the only history beyond the trailing hour. Keys in reading order: what's wrong now, what's live per upstream, the server, the two windows, history. Is all quiet: `curl -s <host>/api/metrics | jq .alerts` (empty); `node scripts/prod-check.js` (run by `session-end.js`) lists production's warnings, event-loop blocks, inbound 5xx and upstream statuses no call declares `expected`, new since its last run, and an undeployed `origin/main`; `--all` lists them over the whole `daily` window, for a review, without moving that baseline.
 
 - Locally, `dev:mock` answers `e2e mock: no fixture for GET /api/metrics`: it mocks every `/api` route. Run the real server on a scratch database instead: `PORT=<free> DB_FILE=<scratch>.sqlite STEAM_API_KEY=x node server.js` (no upstream call is made until a route needs one).
 
@@ -26,7 +26,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
               limiterTrips: { [name]: count },
               dedupHits:    { [name]: count },
               cache:        { [group]: { hits, misses, forced } },
-              windowWaits:  { 'store-details': { waits, avgWaitMs, maxWaitMs } },
+              windowWaits:  { 'store-details' | 'hltb-search': { waits, avgWaitMs, maxWaitMs } },
               heldAnswers:  { hltb: count },
               streams:      { count, games, fastUncached, storeUncached, closedEarly, closedEarlyCold, limited,
                               concurrentMax, cold, avgListedMs, maxListedMs, avgDoneMs, maxDoneMs },
@@ -71,8 +71,8 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 ### `dedupHits`, `cache`, `cacheEntries`
 
 - `dedupHits`: concurrent calls `createDedup(name)` (`lib/dedup.js`) coalesced into one in flight — `steam`, `hltb`, `itad`, `fanatical`, `gamepass`, `details` (`server.js`'s game details). A burst points at a retry loop or a polling client.
-- `cache`: `getCached()` outcomes per `lib/cache.js` `GROUPS` label (`library`, `resolve`, `rating`, `meta`, `search`, `news`, `bundles`, `itad-ids`). `forced` (a user's ↻) is kept apart from `misses`. A rate limiter's cache check doesn't record, so each request counts once; nor does a game's tags reusing the parsed tag-name map (`meta`), which reads no row. Tells "traffic grew" apart from "the cache stopped working" when outbound counts jump.
-- `cacheEntries`: row count per group, read from `db.sqlite` (survives restarts, lists every group). With `cache`: few entries plus many misses means a TTL too short; many entries plus many misses, a key space the cache can't help.
+- `cache`: `getCached()` outcomes per `lib/cache.js` `GROUPS` label (`library`, `resolve`, `rating`, `meta`, `search`, `news`, `bundles`, `itad-ids`). `forced` (a user's ↻ that refetches) is kept apart from `misses`; a ↻ answered from a row under `FORCE_MIN_AGE_MINUTES` old counts as a hit. A rate limiter's cache check doesn't record, so each request counts once; nor does a game's tags reusing the parsed tag-name map (`meta`), which reads no row. Tells "traffic grew" apart from "the cache stopped working" when outbound counts jump.
+- `cacheEntries`: row count per group, read from `db.sqlite` (survives restarts, lists every group; counts expired rows until the sweep evicts them, and the rating and meta groups' kept for their grace, [data.md](data.md#cache-tiers)). With `cache`: few entries plus many misses means a TTL too short; many entries plus many misses, a key space the cache can't help.
 
 ### List loading — `streams`, `windowWaits`, `heldAnswers`
 
@@ -83,7 +83,7 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
   - `closedEarly`: the client left before the end; `closedEarlyCold` of those, ones with something to fetch — the slowest loads, missing from the timings.
   - `concurrentMax`: streams open (every client's) when one started, the largest; `server.openStreams` is the live count.
   - Timings only from `cold` streams (something to fetch, ran to the end): `listed` when every game's fast part was sent (all rows listed), `done` at the end (store parts too). `null` with no cold stream. Absent from `lastHour` with no stream in it.
-- `windowWaits`: reservations that queued for a rolling cap's place (`createWindow`, `lib/upstream.js`), and how long. Counted per attempt: a 429's retry reserves again. Waits with no 429s on `getAppDetails` mean the cap, not Steam, is the limit; 429s with no waits, a cap too high.
+- `windowWaits`: reservations that queued for a rolling cap's place (`createWindow`, `lib/upstream.js`), and how long. Counted per attempt: a 429's retry reserves again. Waits with no 429s on `getAppDetails` (or HLTB's `search`) mean the cap, not the upstream, is the limit; 429s with no waits, a cap too high.
 - `heldAnswers.hltb`: lookups HLTB's failed-lookup hold answered without a request; `upstreams.hltb.held`, games held now.
 - Already answered elsewhere: appdetails 429s (`outbound['steam-store'].getAppDetails.statuses`), whether `UPSTREAM_MIN_INTERVAL_MS` is the limit (`upstreams[group].semaphores`' queues and the labels' latency).
 
@@ -111,6 +111,7 @@ What tuning the details stream's pools (`STREAM_CONCURRENCY`, server.js's `STREA
 
 - `chargeBudget(group)` runs at the top of `trackedFetch` and caps calls per service per hour and per day (`OUTBOUND_HOURLY_MAX`/`OUTBOUND_DAILY_MAX`, see [configuration.md](../user/configuration.md); `0` disables).
 - The only limit that isn't per client: it protects a key's quota from all clients together, and from the app's own retry loops.
+- It counts calls, not items: one `steam-browse` call can carry 50 games (`prefetchStoreBrowseItems`).
 - Past a ceiling it throws an `isUpstream` error, so routes answer 502 with no new error path. Refused calls aren't counted as requests.
 - **Client share**: within each window, one client may spend `OUTBOUND_CLIENT_SHARE_PERCENT` of the ceiling (at least 1), so one IP can't spend it for everyone. Past it, the error also carries `isClientBudgetExhausted` and routes answer 429 with a message for the user. Each details part (`fetchFastDetails`, `fetchStoreDetails`) marks a result it left short as `limited`, and the details stream sends that message once as a `{ limited }` event; its workers go on, since cached games still fill in.
   - A client is `clientKey(req)` in `server.js`: the rate limiters' key (an IPv4 address or an IPv6 /56), so it needs `TRUST_PROXY` behind a proxy.
@@ -128,6 +129,7 @@ Logged at the moment they happen, once per event rather than once per affected r
 - **`[budget:<group>] hourly/daily outbound budget exhausted …`** — once per window per service, with the time the window rolls over.
 - **`[budget:<group>] a client spent its hourly/daily share …`** — once per window per client and service, without the client's address.
 - **`[semaphore:<name>] queue saturated …`** — every rejection, unthrottled: it should never fire, so each one matters.
+- **`[cache]`/`[auth]` expiry sweep blocked the event loop for … ms** — a sweep (`sweep`, `lib/db.js`) that took ≥ 1 s, the `eventLoop` alert's threshold: pins a block to it.
 - **`[HLTB] search failed …`** — throttled to one per `HLTB_SEARCH_WARN_THROTTLE_MS` (30 s); the searches themselves still run and fail normally. `[HLTB] init failed` is throttled by the auth retry backoff.
 
 All are `console.warn`: degraded but recoverable. An error marked `isLogged` is not logged again by `routeErrorStatus` or the details parts (`logDetailsError`): it's set where the warning was printed — `assertClosed` while a breaker is open, `chargeBudget` past a budget, and HLTB's errors repeating the failure the last `[HLTB]` line warned about, or an auth hold whose cause was already logged. Without it, one open breaker or spent budget logs a line per game in a large load.

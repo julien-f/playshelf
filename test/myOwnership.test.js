@@ -17,6 +17,7 @@ beforeEach(() => {
   // Unlike currentAccount (a pref, wiped with localStorage above), the `?u=` override is
   // module-level state in accountsStore.ts — cleared by hand so it can't leak between tests.
   setAccountOverride(null);
+  clearAccountDataCache();
 });
 
 // createMyOwnershipCache() is imported fresh (not re-required) per test — it's a factory
@@ -25,6 +26,7 @@ beforeEach(() => {
 // myOwnership.ts's own comment on why that pattern doesn't reset a module-level `let` here).
 const { createMyOwnershipCache } = require('../public/myOwnership.ts');
 const { setCurrentAccount, setAccountOverride } = require('../public/accountsStore.ts');
+const { clearAccountDataCache, fetchAccountOverview } = require('../public/accountData.ts');
 
 function makeAccount(id, overrides = {}) {
   return { id, members: [id], rawInputs: [id], ...overrides };
@@ -239,6 +241,37 @@ test('peekMyOwnershipStatus is reactive: a tracked peek re-runs once both sets l
   dispose();
 
   assert.deepEqual(seen, [null, { inLibrary: true, onWishlist: false }]);
+});
+
+test('peekMyOwnershipStatus: a ↻ elsewhere re-derives the ✓/☆ sets, keeping the old ones until it lands', async (t) => {
+  let ownedAppids = [];
+  withFetch(t, async (url) => {
+    if (url.startsWith('/api/common-games'))
+      return {
+        ok: true,
+        json: async () => ({
+          games: ownedAppids.map((appid) => ({ appid, name: `Game ${appid}` })),
+          players: [{ steamid: '1' }],
+          playtime: {},
+          lastPlayed: {},
+        }),
+      };
+    return { ok: true, json: async () => ({ items: [] }) };
+  });
+  setCurrentAccount(makeAccount('1'));
+  const { getMyOwnershipStatus, peekMyOwnershipStatus } = createMyOwnershipCache();
+  const { seen, dispose } = await track(() => peekMyOwnershipStatus(440));
+  t.after(dispose);
+  await getMyOwnershipStatus(440);
+
+  ownedAppids = [440]; // bought since
+  await fetchAccountOverview(['1'], { refresh: true }); // Home's or a list's ↻
+  assert.deepEqual(await getMyOwnershipStatus(440), { inLibrary: true, onWishlist: false });
+
+  assert.equal(seen[0], null);
+  assert.deepEqual(seen[1], { inLibrary: false, onWishlist: false });
+  assert.ok(seen.slice(1).every(Boolean), 'no blink back to "loading" while the refreshed sets land');
+  assert.deepEqual(seen.at(-1), { inLibrary: true, onWishlist: false });
 });
 
 test('trackMyOwnership: re-runs on an account switch, without starting a fetch', async (t) => {

@@ -12,9 +12,14 @@ const {
   toAccountPlayer,
   accountInfoFrom,
   fetchAccountFriends,
+  fetchAccountOwnedData,
+  accountDataVersion,
+  clearAccountDataCache,
 } = require('../public/accountData.ts');
+const { CLIENT_CACHE_MAX_AGE_MS } = require('../public/utils.ts');
 
 function withFetch(t, handler) {
+  clearAccountDataCache();
   const restore = globalThis.fetch;
   globalThis.fetch = handler;
   t.after(() => {
@@ -46,7 +51,7 @@ test('fetchAccountOverview: sends { members }, sums playtime and maxes lastPlaye
   });
 
   const { games } = await fetchAccountOverview(['1', '2']);
-  assert.deepEqual(seenBody, { members: ['1', '2'], refresh: false });
+  assert.deepEqual(seenBody, { members: ['1', '2'] });
   assert.deepEqual(games, [{ appid: 440, name: 'Team Fortress 2', playtimeMinutes: 150, lastPlayedUnix: 2000 }]);
 });
 
@@ -70,14 +75,14 @@ test('fetchAccountOverview: throws with the server error message on a non-2xx re
   await assert.rejects(() => fetchAccountOverview(['1']), /rate limited/);
 });
 
-test('fetchAccountOverview: passes refresh through', async (t) => {
-  let seenBody;
-  withFetch(t, async (url, opts) => {
-    seenBody = JSON.parse(opts.body);
+test('fetchAccountOverview: passes refresh as ?refresh=1', async (t) => {
+  let seenUrl;
+  withFetch(t, async (url) => {
+    seenUrl = url;
     return { ok: true, json: async () => ({ games: [], players: [], playtime: {}, lastPlayed: {} }) };
   });
   await fetchAccountOverview(['1'], { refresh: true });
-  assert.equal(seenBody.refresh, true);
+  assert.equal(seenUrl, '/api/common-games?refresh=1');
 });
 
 test('fetchAccountWishlist: sends { members }, returns items as-is', async (t) => {
@@ -88,7 +93,7 @@ test('fetchAccountWishlist: sends { members }, returns items as-is', async (t) =
   });
 
   const { items } = await fetchAccountWishlist(['1']);
-  assert.deepEqual(seenBody, { members: ['1'], refresh: false });
+  assert.deepEqual(seenBody, { members: ['1'] });
   assert.deepEqual(items, [{ appid: 620, priority: 1, dateAdded: '2024-01-01' }]);
 });
 
@@ -326,7 +331,7 @@ test('toAccountPlayer: a missing gameCount is null, not 0', () => {
 test('fetchAccountFriends: maps friends and passes through memberSince/countryCode/realName', async (t) => {
   withFetch(t, async (url, opts) => {
     assert.equal(url, '/api/friends');
-    assert.deepEqual(JSON.parse(opts.body), { members: ['1'], refresh: false });
+    assert.deepEqual(JSON.parse(opts.body), { members: ['1'] });
     return {
       ok: true,
       json: async () => ({
@@ -496,4 +501,157 @@ test('an API error keeps its own message', async (t) => {
 test('resolveAccountSlot: an HTML error page reads as the account failing to resolve, not as a JSON parse error', async (t) => {
   withFetch(t, async () => new Response('<html>502 Bad Gateway</html>', { status: 502 }));
   await assert.rejects(resolveAccountSlot(['alice']), { message: 'Failed to resolve account' });
+});
+
+// ── the account cache ─────────────────────────────────────────────────────────
+
+// Records each request's URL; each answers (after `state.hold`) `state.games`, or fails on `state.fail`, as when sent.
+function countingFetch(t, state) {
+  const urls = [];
+  withFetch(t, async (url) => {
+    urls.push(url);
+    const { fail, games: appids, hold } = state;
+    await hold;
+    if (fail) return { ok: false, json: async () => ({ error: 'Steam request failed' }) };
+    return {
+      ok: true,
+      json: async () => ({
+        games: appids.map((appid) => ({ appid, name: `Game ${appid}` })),
+        players: [{ steamid: '1' }, { steamid: '2' }],
+        playtime: {},
+        lastPlayed: {},
+        items: appids.map((appid) => ({ appid, priority: 1, dateAdded: null })),
+        friends: [],
+        unavailable: [],
+      }),
+    };
+  });
+  return urls;
+}
+
+test('account cache: one request per kind and account, whatever the member order', async (t) => {
+  const urls = countingFetch(t, { games: [440] });
+  await Promise.all([fetchAccountOverview(['1', '2']), fetchAccountOverview(['2', '1'])]);
+  await fetchAccountOwnedData('1+2');
+  await Promise.all([fetchAccountWishlist(['1', '2']), fetchAccountWishlistData('1+2')]);
+  await Promise.all([fetchAccountFriends(['1', '2']), fetchAccountFriends(['1', '2'])]);
+  assert.deepEqual(urls, ['/api/common-games', '/api/wishlist', '/api/friends']);
+});
+
+test('account cache: a refresh replaces an in-flight fetch rather than joining it', async (t) => {
+  let release;
+  const state = { games: [440], hold: new Promise((resolve) => (release = resolve)) };
+  const urls = countingFetch(t, state);
+  const unforced = fetchAccountOverview(['1']);
+  state.games = [440, 620];
+  const forced = fetchAccountOverview(['1'], { refresh: true });
+  release();
+  assert.equal((await unforced).games.length, 1);
+  assert.equal((await forced).games.length, 2);
+  assert.equal((await fetchAccountOverview(['1'])).games.length, 2, 'later callers get the refreshed data');
+  assert.deepEqual(urls, ['/api/common-games', '/api/common-games?refresh=1']);
+});
+
+test('account cache: a failed fetch is not kept', async (t) => {
+  const state = { games: [440], fail: true };
+  const urls = countingFetch(t, state);
+  await assert.rejects(fetchAccountOverview(['1']), /Steam request failed/);
+  state.fail = false;
+  assert.equal((await fetchAccountOverview(['1'])).games.length, 1);
+  assert.equal(urls.length, 2);
+});
+
+test('account cache: a failed refresh keeps what it would have replaced', async (t) => {
+  const state = { games: [440] };
+  const urls = countingFetch(t, state);
+  await fetchAccountOverview(['1']);
+  state.fail = true;
+  await assert.rejects(fetchAccountOverview(['1'], { refresh: true }));
+  assert.equal((await fetchAccountOverview(['1'])).games.length, 1);
+  assert.equal(urls.length, 2);
+});
+
+test('account cache: a fetch and the refresh replacing it both failing leave nothing cached', async (t) => {
+  const state = { games: [440], fail: true };
+  const urls = countingFetch(t, state);
+  const first = fetchAccountOverview(['1']);
+  const forced = fetchAccountOverview(['1'], { refresh: true });
+  await assert.rejects(first);
+  await assert.rejects(forced);
+  state.fail = false;
+  assert.equal((await fetchAccountOverview(['1'])).games.length, 1);
+  assert.equal(urls.length, 3);
+});
+
+// Two ↻ in a row, the second failing: the first one's data is the latest, so readers must re-read.
+test('account cache: a refresh that lands before the one replacing it fails is restored, moving the version', async (t) => {
+  let release;
+  const state = { games: [440] };
+  const urls = countingFetch(t, state);
+  await fetchAccountOverview(['1']);
+  const version = () => accountDataVersion('owned', ['1']);
+  const before = version();
+  Object.assign(state, { games: [440, 620], hold: new Promise((resolve) => (release = resolve)) });
+  const landing = fetchAccountOverview(['1'], { refresh: true });
+  let releaseFailure;
+  Object.assign(state, { fail: true, hold: new Promise((resolve) => (releaseFailure = resolve)) });
+  const failing = fetchAccountOverview(['1'], { refresh: true });
+  release();
+  await landing;
+  releaseFailure();
+  await assert.rejects(failing);
+  assert.equal(version(), before + 1);
+  assert.equal((await fetchAccountOverview(['1'])).games.length, 2);
+  assert.equal(urls.length, 3);
+});
+
+test('account cache: a refresh still in flight when the one replacing it fails is restored, moving the version', async (t) => {
+  let release;
+  const state = { games: [440] };
+  const urls = countingFetch(t, state);
+  await fetchAccountOverview(['1']);
+  const version = () => accountDataVersion('owned', ['1']);
+  const before = version();
+  Object.assign(state, { games: [440, 620], hold: new Promise((resolve) => (release = resolve)) });
+  const landing = fetchAccountOverview(['1'], { refresh: true });
+  Object.assign(state, { fail: true, hold: undefined });
+  await assert.rejects(fetchAccountOverview(['1'], { refresh: true }));
+  release();
+  await landing;
+  assert.equal(version(), before + 1);
+  assert.equal((await fetchAccountOverview(['1'])).games.length, 2);
+  assert.equal(urls.length, 3);
+});
+
+test('account cache: an entry past the max age is fetched again', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'] });
+  const urls = countingFetch(t, { games: [440] });
+  await fetchAccountWishlist(['1']);
+  t.mock.timers.tick(CLIENT_CACHE_MAX_AGE_MS - 1);
+  await fetchAccountWishlist(['1']);
+  assert.equal(urls.length, 1);
+  t.mock.timers.tick(1);
+  await fetchAccountWishlist(['1']);
+  assert.equal(urls.length, 2);
+});
+
+test("account cache: resolveAccountSlot's response serves the owned games that follow", async (t) => {
+  const urls = countingFetch(t, { games: [440, 620] });
+  const slot = await resolveAccountSlot(['bob', 'alice']);
+  assert.equal((await fetchAccountOverview(slot.members)).games.length, 2);
+  assert.deepEqual(urls, ['/api/common-games']);
+});
+
+test('account cache: the version moves when a refresh lands, not on the first fetch or a failure', async (t) => {
+  const state = { games: [440] };
+  countingFetch(t, state);
+  const version = () => accountDataVersion('owned', ['1']);
+  const before = version();
+  await fetchAccountOverview(['1']);
+  assert.equal(version(), before);
+  await fetchAccountOverview(['1'], { refresh: true });
+  assert.equal(version(), before + 1);
+  state.fail = true;
+  await assert.rejects(fetchAccountOverview(['1'], { refresh: true }));
+  assert.equal(version(), before + 1);
 });

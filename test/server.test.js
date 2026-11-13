@@ -14,6 +14,7 @@ process.env.DB_FILE = '';
 const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
 const { until } = require('./until');
+const { ageCache } = require('./ageCache');
 const { freshNonce } = require('./openidNonce');
 const http = require('node:http');
 const zlib = require('node:zlib');
@@ -27,13 +28,17 @@ const { db } = require('../lib/db');
 const { PREFS_MAX_BYTES, SYNCED_PREF_KEYS, getUserPrefs, setUserPref } = require('../lib/auth');
 const { _resetAuth, getHLTB } = require('../lib/hltb');
 const { _resetTagNameMap } = require('../lib/steam');
+const { _resetPickAndMix } = require('../lib/fanatical');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
-const { SESSION_TTL_MS, MISS_CACHE_TTL_MS } = require('../lib/config');
+const { SESSION_TTL_MS, MISS_CACHE_TTL_MS, RATING_CACHE_TTL_MS, EMPTY_CACHE_TTL_MS } = require('../lib/config');
 const { getMetrics } = require('../lib/metrics');
 const { getUpstreamStats } = require('../lib/upstream');
 
-// The tag-name map's failure hold-off outlives _reset(), which only empties the cache.
-beforeEach(_resetTagNameMap);
+// The tag-name map's and Fanatical's in-memory state outlive _reset(), which only empties the cache.
+beforeEach(() => {
+  _resetTagNameMap();
+  _resetPickAndMix();
+});
 
 const api = supertest(app);
 
@@ -227,7 +232,7 @@ test('GET / and /lists/owned: the app shell carries Open Graph tags with an abso
 
 test('GET /game/:appid/ and /Game/:appid: a trailing slash or other letter case gets the same preview', async () => {
   _reset();
-  setCache('meta:620', { name: 'Portal 2', header_image: null, short_description: null });
+  setCache('appdetails:620', { name: 'Portal 2', header_image: null, short_description: null });
   for (const route of ['/game/620/', '/Game/620', '/lists/OWNED/?game=620']) {
     const res = await api.get(route);
     assert.match(res.text, /<meta property="og:title" content="Portal 2" \/>/, route);
@@ -237,7 +242,7 @@ test('GET /game/:appid/ and /Game/:appid: a trailing slash or other letter case 
 test('GET /game/:appid: the preview names and describes a cached game and shows its header image, without fetching', async (t) => {
   _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
-  setCache('meta:620', {
+  setCache('appdetails:620', {
     name: 'Portal <2> & "co"',
     header_image: 'https://cdn.example/620/header.jpg',
     short_description: 'Think with &quot;portals&quot; &amp; &#8220;cake&#x201D; &amp;lt; &#9999999;',
@@ -250,7 +255,7 @@ test('GET /game/:appid: the preview names and describes a cached game and shows 
   assert.ok(res.text.includes(`<meta property="og:description" content="${description}" />`));
   assert.ok(res.text.includes(`<meta name="description" content="${description}" />`));
 
-  setCache('meta:622', { name: null, header_image: null, short_description: null });
+  setCache('appdetails:622', { name: null, header_image: null, short_description: null });
   const nulls = await api.get('/game/622');
   assert.equal(nulls.status, 200);
   assert.match(nulls.text, /<meta property="og:title" content="Playshelf" \/>/);
@@ -324,7 +329,11 @@ test("GET /lists/bundle/:id: a pick-and-mix bundle's preview takes Fanatical's e
 test('GET /lists/*?game=: a list opened on a cached game previews that game, before the list itself', async (t) => {
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
   _reset();
-  setCache('meta:620', { name: 'Portal 2', header_image: 'https://cdn.example/620.jpg', short_description: 'Think' });
+  setCache('appdetails:620', {
+    name: 'Portal 2',
+    header_image: 'https://cdn.example/620.jpg',
+    short_description: 'Think',
+  });
   for (const route of ['/lists/owned?u=76561197960287930&game=620', '/lists/bundle/42?game=620&game=1']) {
     const res = await api.get(route);
     assert.match(res.text, /<meta property="og:title" content="Portal 2" \/>/, route);
@@ -539,7 +548,7 @@ test('GET /api/metrics: a details stream records how its list loaded', async (t)
   _resetAuth();
   setCache('rating:1001', { total_reviews: 10, total_positive: 9, review_score_desc: 'Positive' });
   setCache('hltb:1001', []);
-  setCache('meta:1001', { name: 'Cached' });
+  setCache('appdetails:1001', { name: 'Cached' });
   setCache('browse:1001', { tagids: TAG_IDS });
   setCache('protondb:1001', null);
   setCache('tagnames:all', TAG_NAME_MAP);
@@ -1037,7 +1046,7 @@ test('GET /api/game-details/:appid: 200 from cache without fetching', async (t) 
   _reset();
   setCache('rating:400', { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' });
   setCache('hltb:400', [{ game_id: 42, game_name: 'Portal', comp_main: 36000, comp_plus: 54000 }]);
-  setCache('meta:400', {
+  setCache('appdetails:400', {
     name: 'Portal',
     genres: [{ id: '1', description: 'Action' }],
     categories: [{ id: '9', description: 'Co-op' }],
@@ -1078,7 +1087,7 @@ test('GET /api/game-details/:appid: a warm request reads each cached meta-tier r
   _reset();
   for (const appid of [403, 404]) {
     setCache(`hltb:${appid}`, []);
-    setCache(`meta:${appid}`, { name: 'X' });
+    setCache(`appdetails:${appid}`, { name: 'X' });
     setCache(`browse:${appid}`, {
       name: 'X',
       type: 0,
@@ -1105,6 +1114,27 @@ test('GET /api/game-details/:appid: a warm request reads each cached meta-tier r
   assert.equal(metaHits() - before, 4);
 });
 
+// A browse row cached before basics were requested takes them from the store page the store part reads anyway (C315).
+test('GET /api/game-details/:appid: a browse row without basics reads the store page once', async (t) => {
+  _reset();
+  setCache('hltb:405', []);
+  setCache('appdetails:405', { name: 'X', type: 'game' });
+  setCache('browse:405', { tagids: TAG_IDS });
+  setCache('protondb:405', null);
+  setCache('rating:405', { total_reviews: 1, total_positive: 1 });
+  setCache('tagnames:all', TAG_NAME_MAP);
+  t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('should not fetch');
+  });
+
+  const metaHits = () => getMetrics().sinceRestart.cache.meta.hits;
+  const before = metaHits();
+  const res = await api.get('/api/game-details/405');
+  assert.equal(res.body.basics.name, 'X');
+  // hltb, meta, browse, protondb and the tag-name map's first read
+  assert.equal(metaHits() - before, 5);
+});
+
 test('GET /api/game-details/:appid: dates each source separately, and fetchedAt is the oldest of them', async (t) => {
   _reset();
   // Deliberately staggered: the panel's ↻ shows one figure for five sources cached under tiers
@@ -1112,14 +1142,14 @@ test('GET /api/game-details/:appid: dates each source separately, and fetchedAt 
   // per-source breakdown behind it is what makes that figure interpretable.
   setCache('rating:402', { total_reviews: 10, total_positive: 9, review_score_desc: 'Positive' });
   setCache('hltb:402', [{ game_id: 1, game_name: 'X', comp_main: 3600 }]);
-  setCache('meta:402', { name: 'X' });
+  setCache('appdetails:402', { name: 'X' });
   setCache('browse:402', { tagids: TAG_IDS });
   setCache('tagnames:all', TAG_NAME_MAP);
   setCache('protondb:402', { tier: 'gold' });
   const now = Date.now();
   // Backdated in place — the only way to get entries of genuinely different ages in one test
-  // (setCache always stamps now). `meta:` lives in cache_meta, `rating:` in its own table.
-  db.prepare('UPDATE cache_meta SET ts = ? WHERE key = ?').run(now - 5 * 86400000, 'meta:402');
+  // (setCache always stamps now). `appdetails:` lives in cache_meta, `rating:` in its own table.
+  db.prepare('UPDATE cache_meta SET ts = ? WHERE key = ?').run(now - 5 * 86400000, 'appdetails:402');
   db.prepare('UPDATE cache_rating SET ts = ? WHERE key = ?').run(now - 86400000, 'rating:402');
 
   t.mock.method(globalThis, 'fetch', async () => {
@@ -1192,6 +1222,9 @@ test('GET /api/game-news/:appid: ?refresh=1 re-fetches despite the cache', async
   await api.get('/api/game-news/409').expect(200);
   await api.get('/api/game-news/409').expect(200);
   assert.equal(fetchMock.mock.callCount(), 1);
+  await api.get('/api/game-news/409?refresh=1').expect(200);
+  assert.equal(fetchMock.mock.callCount(), 1, 'news fetched under FORCE_MIN_AGE_MINUTES ago is answered from cache');
+  ageCache();
   const res = await api.get('/api/game-news/409?refresh=1').expect(200);
   assert.equal(fetchMock.mock.callCount(), 2);
   assert.equal(res.body.news.length, 1);
@@ -1307,7 +1340,7 @@ test('GET /api/game-details/:appid: only fetches sources not already cached', as
   _reset();
   _resetAuth();
   setCache('rating:405', { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' });
-  setCache('meta:405', {
+  setCache('appdetails:405', {
     name: 'Portal',
     genres: [{ id: '1', description: 'Action' }],
     categories: [{ id: '9', description: 'Co-op' }],
@@ -1464,10 +1497,12 @@ test('GET /api/game-details/:appid: ?refresh=1 alongside a normal request shares
 
   const hits = dedupHits('steam');
   const both = Promise.all([api.get('/api/game-details/503'), api.get('/api/game-details/503?refresh=1')]);
-  // A lone request makes no 'steam' dedup hit; the forced one joins all five of its upstream calls.
-  await until(() => dedupHits('steam') === hits + 5, 'the forced calls joining the normal ones');
+  // A lone request makes no 'steam' dedup hit; the forced one joins its four started calls, then ProtonDB's,
+  // which waits for the browse item.
+  await until(() => dedupHits('steam') === hits + 4, 'the forced calls joining the normal ones');
   release();
   const [normal, forced] = await both;
+  assert.equal(dedupHits('steam'), hits + 5);
   assert.equal(normal.status, 200);
   assert.equal(forced.status, 200);
   assert.equal(forced.body.rating.score, normal.body.rating.score);
@@ -1483,6 +1518,9 @@ test('GET /api/game-details/:appid: ?refresh=1 re-fetches every source despite t
 
   await api.get('/api/game-details/502').expect(200);
   await api.get('/api/game-details/502?refresh=1').expect(200);
+  assert.deepEqual([counts.rating, counts.hltb, counts.meta], [1, 1, 1], 'sources under FORCE_MIN_AGE_MINUTES old');
+  ageCache();
+  await api.get('/api/game-details/502?refresh=1').expect(200);
   assert.equal(counts.rating, 2);
   assert.equal(counts.hltb, 2);
   assert.equal(counts.meta, 2);
@@ -1491,8 +1529,9 @@ test('GET /api/game-details/:appid: ?refresh=1 re-fetches every source despite t
 
 // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times: those misses, and its
 // store page, are only true until release, so they expire like other misses instead of in a year.
+// A released game's fill in rarely: they expire in EMPTY_CACHE_TTL_MS, its store page keeps the tier.
 for (const comingSoon of [true, false]) {
-  test(`GET /api/game-details/:appid: ${comingSoon ? "an unreleased game's" : "a released game's"} empty sources ${comingSoon ? 'expire within a day' : 'keep the long tier'}`, async (t) => {
+  test(`GET /api/game-details/:appid: ${comingSoon ? "an unreleased game's" : "a released game's"} empty sources ${comingSoon ? 'expire within a day' : 'expire in 90 days'}`, async (t) => {
     _reset();
     _resetAuth();
     t.mock.method(globalThis, 'fetch', async (url) => {
@@ -1520,15 +1559,300 @@ for (const comingSoon of [true, false]) {
     });
     await api.get('/api/game-details/777').expect(200);
 
-    const later = Date.now() + MISS_CACHE_TTL_MS + 1000;
-    t.mock.method(Date, 'now', () => later);
+    const start = Date.now();
+    let now = start + MISS_CACHE_TTL_MS + 1000;
+    t.mock.method(Date, 'now', () => now);
     for (const source of ['rating', 'protondb', 'hltb', 'meta']) {
       const cachedAt = getCachedAt(`${source}:777`);
       assert.equal(cachedAt === undefined, comingSoon, source);
     }
     assert.notEqual(getCachedAt('browse:777'), undefined, 'tags are not a miss');
+    if (comingSoon) return;
+    now = start + EMPTY_CACHE_TTL_MS + 1000;
+    for (const source of ['rating', 'protondb', 'hltb']) assert.equal(getCachedAt(`${source}:777`), undefined, source);
+    assert.notEqual(getCachedAt('meta:777'), undefined, 'the store page is not empty');
   });
 }
+
+// A young game's reviews, ProtonDB reports and HLTB times settle over weeks: they live half its age at the fetch.
+test("GET /api/game-details/:appid: a 10-day-old game's sources expire in 5 days, an empty one too", async (t) => {
+  _reset();
+  _resetAuth();
+  const day = 24 * 60 * 60 * 1000;
+  const start = Date.now();
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('appdetails'))
+      return { ok: true, json: async () => ({ 790: { success: true, data: { name: 'New', type: 'game' } } }) };
+    if (url.includes('GetAppReviews'))
+      return {
+        ok: true,
+        json: async () => ({ response: { query_summary: { total_reviews: 230, total_positive: 150 } } }),
+      };
+    if (url.includes('protondb.com')) return { ok: false, status: 404 };
+    if (url.includes('search/site/init'))
+      return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+    if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+    if (url.includes('IStoreBrowseService'))
+      return {
+        ok: true,
+        json: async () => ({
+          response: {
+            store_items: [
+              {
+                success: 1,
+                tagids: [],
+                type: 0,
+                name: 'New',
+                basic_info: {},
+                assets: {},
+                release: { is_coming_soon: false, steam_release_date: Math.round((start - 10 * day) / 1000) },
+              },
+            ],
+          },
+        }),
+      };
+    if (url.includes('ajaxgetstoretags'))
+      return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  await api.get('/api/game-details/790').expect(200);
+  // The basics' date is a day (noon Pacific): its half-age is within 6 hours of the item's.
+  let now = start + 5 * day - 7 * 60 * 60 * 1000;
+  t.mock.method(Date, 'now', () => now);
+  for (const key of ['rating:790', 'protondb:790', 'hltb:790', 'browse:790'])
+    assert.notEqual(getCachedAt(key), undefined, key);
+  now = start + 5 * day + 7 * 60 * 60 * 1000;
+  for (const key of ['rating:790', 'protondb:790', 'hltb:790', 'browse:790'])
+    assert.equal(getCachedAt(key), undefined, key);
+});
+
+// An unreleased game's empty results, or one whose release phase is unknown (a browse item cached before basics were
+// requested, no store page), can't take the long tier; a delisted game's (no browse item, no store page) last 90 days.
+for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
+  'a game whose release phase is unknown': { items: [{ success: 1, tagids: [] }], capped: true },
+  'an unreleased game whose reviews call failed': {
+    items: [
+      { success: 1, tagids: [], type: 0, name: 'G', basic_info: {}, assets: {}, release: { is_coming_soon: true } },
+    ],
+    reviewsFail: true,
+    capped: true,
+  },
+  'a delisted game': { items: [], capped: false },
+})) {
+  test(`GET /api/game-details/:appid: ${label} has its empty ProtonDB result ${capped ? 'expire within a day' : 'outlive a day'}`, async (t) => {
+    _reset();
+    _resetAuth();
+    t.mock.method(console, 'warn', () => {});
+    t.mock.method(globalThis, 'fetch', async (url) => {
+      if (url.includes('appdetails')) return { ok: true, json: async () => ({ 780: { success: false } }) };
+      if (url.includes('GetSchemaForGame')) return { ok: true, json: async () => ({ game: {} }) };
+      if (url.includes('GetAppReviews')) {
+        if (reviewsFail) return { ok: false, status: 503 };
+        return {
+          ok: true,
+          json: async () => ({ response: { query_summary: { total_reviews: 0, total_positive: 0 } } }),
+        };
+      }
+      if (url.includes('protondb.com')) return { ok: false, status: 404 };
+      if (url.includes('search/site/init'))
+        return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+      if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+      if (url.includes('IStoreBrowseService'))
+        return { ok: true, json: async () => ({ response: { store_items: items } }) };
+      if (url.includes('ajaxgetstoretags'))
+        return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    await api.get('/api/game-details/780').expect(200);
+    assert.notEqual(getCachedAt('protondb:780'), undefined, 'asked and cached');
+
+    const later = Date.now() + MISS_CACHE_TTL_MS + 1000;
+    t.mock.method(Date, 'now', () => later);
+    assert.equal(getCachedAt('protondb:780') === undefined, capped);
+  });
+}
+
+// The fast part runs ahead of Steam's store details cap: only a cached store page stands in for missing basics.
+test("GET /api/game-details/:appid: a browse row without basics doesn't hold ProtonDB behind an uncached store page", async (t) => {
+  _reset();
+  _resetAuth();
+  setCache('browse:780', { tagids: [] });
+  setCache('tagnames:all', TAG_NAME_MAP);
+  let releasePage;
+  const pageHeld = new Promise((r) => (releasePage = r));
+  let protondbAsked = false;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('appdetails')) {
+      await pageHeld;
+      return { ok: true, json: async () => ({ 780: { success: true, data: { name: 'G', type: 'game' } } }) };
+    }
+    if (url.includes('protondb.com')) {
+      protondbAsked = true;
+      return { ok: true, status: 200, json: async () => ({ tier: 'gold', confidence: 'good', total: 3 }) };
+    }
+    if (url.includes('GetAppReviews'))
+      return { ok: true, json: async () => ({ response: { query_summary: { total_reviews: 1, total_positive: 1 } } }) };
+    if (url.includes('search/site/init'))
+      return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+    if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const response = api.get('/api/game-details/780').then((res) => res);
+  try {
+    await until(() => protondbAsked, 'ProtonDB asked while the store page is pending');
+  } finally {
+    releasePage();
+    assert.equal((await response).status, 200);
+  }
+});
+
+// A failed forced store fetch still leaves the cached page's basics.
+test('GET /api/game-details/:appid?refresh=1: a failed store refetch keeps the basics of the cached page', async (t) => {
+  _reset();
+  _resetAuth();
+  setCache('appdetails:781', { name: 'Cached', type: 'game' });
+  setCache('tagnames:all', TAG_NAME_MAP);
+  ageCache();
+  t.mock.method(console, 'warn', () => {});
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('appdetails')) return { ok: false, status: 503 };
+    if (url.includes('IStoreBrowseService'))
+      return { ok: true, json: async () => ({ response: { store_items: [{ success: 1, tagids: [] }] } }) };
+    if (url.includes('protondb.com')) return { ok: true, status: 200, json: async () => ({ tier: 'gold' }) };
+    if (url.includes('GetAppReviews'))
+      return { ok: true, json: async () => ({ response: { query_summary: { total_reviews: 1, total_positive: 1 } } }) };
+    if (url.includes('search/site/init'))
+      return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+    if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const { body } = await api.get('/api/game-details/781?refresh=1').expect(200);
+  assert.equal(body.basics?.name, 'Cached');
+});
+
+// Only a game the browse item calls coming soon waits on its reviews to tell whether it's out.
+test("GET /api/game-details/:appid: a released game's ProtonDB lookup doesn't wait for its reviews", async (t) => {
+  _reset();
+  _resetAuth();
+  let releaseReviews;
+  const reviewsHeld = new Promise((r) => (releaseReviews = r));
+  let protondbAsked = false;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('GetAppReviews')) {
+      await reviewsHeld;
+      return { ok: true, json: async () => ({ response: { query_summary: { total_reviews: 0 } } }) };
+    }
+    if (url.includes('protondb.com')) {
+      protondbAsked = true;
+      return { ok: true, status: 200, json: async () => ({ tier: 'gold', confidence: 'good', total: 3 }) };
+    }
+    if (url.includes('IStoreBrowseService')) {
+      const item = { success: 1, tagids: [], type: 0, name: 'G', basic_info: {}, assets: {}, release: {} };
+      return { ok: true, json: async () => ({ response: { store_items: [item] } }) };
+    }
+    if (url.includes('appdetails')) return { ok: true, json: async () => ({ 779: { success: false } }) };
+    if (url.includes('ajaxgetstoretags'))
+      return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+    if (url.includes('search/site/init'))
+      return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+    if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const response = api.get('/api/game-details/779').then((res) => res);
+  try {
+    await until(() => protondbAsked, 'ProtonDB asked while the reviews call is pending');
+  } finally {
+    releaseReviews();
+    assert.equal((await response).status, 200);
+  }
+});
+
+// ProtonDB has no reports, nor HLTB times, for a game not out yet: one the browse item calls coming soon and
+// Steam reviews (asked anyway) call unreviewed, since the browse item can be a year old (data.md). Nor ProtonDB for
+// a DLC or a soundtrack.
+for (const [label, { browse, reviews = 0, reviewsFail = false, asked, searched = asked }] of Object.entries({
+  'an unreleased game': { browse: { release: { is_coming_soon: true } }, asked: false },
+  'a game released since its browse item was cached': {
+    browse: { release: { is_coming_soon: true } },
+    reviews: 12,
+    asked: true,
+  },
+  'an unreleased game whose reviews call failed': {
+    browse: { release: { is_coming_soon: true } },
+    reviewsFail: true,
+    asked: true,
+  },
+  'a released game with no reviews yet': { browse: { release: { is_coming_soon: false } }, asked: true },
+  'a DLC': { browse: { type: 4 }, asked: false, searched: true },
+  'a soundtrack': { browse: { type: 11 }, asked: false },
+  'a game whose browse item failed': { browse: null, asked: true },
+})) {
+  test(`GET /api/game-details/:appid: ProtonDB is ${asked ? '' : 'not '}asked, HLTB ${searched ? '' : 'not '}searched, for ${label}`, async (t) => {
+    _reset();
+    _resetAuth();
+    const urls = [];
+    t.mock.method(console, 'warn', () => {});
+    t.mock.method(globalThis, 'fetch', async (url) => {
+      urls.push(url);
+      if (url.includes('appdetails'))
+        return {
+          ok: true,
+          json: async () => ({ 778: { success: true, data: { name: 'G', type: 'game', release_date: {} } } }),
+        };
+      if (url.includes('GetAppReviews')) {
+        if (reviewsFail) return { ok: false, status: 503 };
+        return {
+          ok: true,
+          json: async () => ({ response: { query_summary: { total_reviews: reviews, total_positive: reviews } } }),
+        };
+      }
+      if (url.includes('protondb.com'))
+        return { ok: true, status: 200, json: async () => ({ tier: 'gold', confidence: 'good', total: 3 }) };
+      if (url.includes('search/site/init'))
+        return { ok: true, json: async () => ({ token: 'tok', hpKey: 'k', hpVal: 'v' }) };
+      if (url.includes('search/site')) return { ok: true, json: async () => ({ data: [] }) };
+      if (url.includes('IStoreBrowseService')) {
+        if (!browse) throw new TypeError('fetch failed');
+        const item = { success: 1, tagids: [], type: 0, name: 'G', basic_info: {}, assets: {}, ...browse };
+        return { ok: true, json: async () => ({ response: { store_items: [item] } }) };
+      }
+      if (url.includes('ajaxgetstoretags'))
+        return { ok: true, json: async () => ({ tags: [{ tagid: 1, name: 'Action' }] }) };
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const { body } = await api.get('/api/game-details/778').expect(200);
+    assert.equal(
+      urls.some((u) => u.includes('protondb.com')),
+      asked,
+      'ProtonDB',
+    );
+    assert.equal(
+      urls.some((u) => u.includes('search/site') && !u.includes('init')),
+      searched,
+      'HLTB',
+    );
+    assert.deepEqual(body.protondb, asked ? { tier: 'gold', confidence: 'good', total: 3 } : null);
+    assert.ok(!body.failed?.includes('protondb'));
+    assert.notEqual(getCachedAt('protondb:778'), undefined, 'the source has an age');
+  });
+}
+
+// A skip never hides what a source already answered: a DLC's ProtonDB summary cached before the rule stays shown.
+test('GET /api/game-details/:appid: a skipped source still serves a summary it has cached', async (t) => {
+  _reset();
+  _resetAuth();
+  setCache('protondb:779', { tier: 'silver', confidence: 'low', total: 2 });
+  setCache('browse:779', { success: 1, type: 4, name: 'A DLC', basic_info: {}, assets: {}, tagids: [] });
+  const urls = [];
+  const detailsFetch = makeDetailsFetch();
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(url);
+    return detailsFetch(url);
+  });
+  const { body } = await api.get('/api/game-details/779').expect(200);
+  assert.deepEqual(body.protondb, { tier: 'silver', confidence: 'low', total: 2 });
+  assert.ok(!urls.some((u) => u.includes('protondb.com')));
+});
 
 // ── GET /api/game-meta/:appid ─────────────────────────────────────────────────
 
@@ -1663,6 +1987,36 @@ test('GET /api/game-details/:appid: failed fetch is not cached, held off, then r
   assert.equal(hltbCalls, 2, 'HLTB should be retried — failed fetch must not be cached');
 });
 
+test('GET /api/game-details/:appid: a rating whose refetch fails is served from its expired row, with its age', async (t) => {
+  _reset();
+  _resetAuth();
+  t.mock.method(console, 'warn', () => {});
+  let reviewsOk = true;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('GetAppReviews'))
+      return reviewsOk
+        ? {
+            ok: true,
+            json: async () => ({
+              response: {
+                query_summary: { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' },
+              },
+            }),
+          }
+        : { ok: false, status: 503 };
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+  const first = (await api.get('/api/game-details/407')).body.rating;
+  assert.ok(first);
+  ageCache(RATING_CACHE_TTL_MS + 1000);
+  const cachedAt = getCachedAt('rating:407', { expired: true });
+  reviewsOk = false;
+  const res = await api.get('/api/game-details/407');
+  assert.deepEqual(res.body.rating, first);
+  assert.ok(!res.body.failed?.includes('rating'));
+  assert.equal(res.body.fetchedAts.rating, cachedAt);
+});
+
 // ── POST /api/game-details/stream ────────────────────────────────────────────
 
 function parseSseEvents(body) {
@@ -1795,6 +2149,35 @@ test(
   },
 );
 
+test('POST /api/game-details/stream: a cold list fetches its store browse items 50 per call', async (t) => {
+  _reset();
+  _resetAuth();
+  setCache('tagnames:all', TAG_NAME_MAP);
+  const details = makeDetailsFetch();
+  const browseCalls = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    if (!url.includes('IStoreBrowseService')) return details(url, init);
+    const ids = JSON.parse(new URL(url).searchParams.get('input_json')).ids.map((i) => i.appid);
+    browseCalls.push(ids.length);
+    return {
+      ok: true,
+      json: async () => ({
+        response: { store_items: ids.map((id) => ({ id, appid: id, success: 1, tagids: TAG_IDS })) },
+      }),
+    };
+  });
+  const games = Array.from({ length: 120 }, (_, i) => ({ appid: 3000 + i }));
+  const server = app.listen(0);
+  t.after(() => new Promise((r) => server.close(r)));
+  await new Promise((r) => server.once('listening', r));
+
+  const { body } = await ssePost(server.address().port, '/api/game-details/stream', { games });
+  assert.deepEqual(browseCalls, [50, 50, 20]);
+  const streamed = streamedGames(body);
+  assert.equal(streamed.size, 120);
+  assert.deepEqual(streamed.get(3119).tags, ['Action', 'Co-op']);
+});
+
 test('POST /api/game-details/stream: 400 for empty games list', async () => {
   const res = await api.post('/api/game-details/stream').send({ games: [] });
   assert.equal(res.status, 400);
@@ -1827,12 +2210,12 @@ test('POST /api/game-details/stream: streams one event per game plus a done even
   const rawProtonDb = { tier: 'gold', confidence: 'strong', total: 500 };
   setCache('rating:400', rawRating);
   setCache('hltb:400', rawHltb);
-  setCache('meta:400', rawMeta);
+  setCache('appdetails:400', rawMeta);
   setCache('browse:400', { tagids: TAG_IDS });
   setCache('protondb:400', rawProtonDb);
   setCache('rating:401', rawRating);
   setCache('hltb:401', rawHltb);
-  setCache('meta:401', rawMeta);
+  setCache('appdetails:401', rawMeta);
   setCache('browse:401', { tagids: TAG_IDS });
   setCache('protondb:401', rawProtonDb);
   setCache('tagnames:all', TAG_NAME_MAP);
@@ -2507,6 +2890,25 @@ test("GET /api/achievements/:appid: unlocked counts only the schema's achievemen
   assert.equal(res.body.unlocked, 1);
 });
 
+// The schema cached empty for a year, while the store page since lists achievements: Steam added them.
+test('GET /api/achievements/:appid: a schema cached empty before the store page listed achievements is fetched again, once', async (t) => {
+  const day = 24 * 60 * 60 * 1000;
+  _reset([
+    ['gameschema:403', { value: { name: 'G', achievements: [] }, ts: Date.now() - 2 * day }],
+    ['appdetails:403', { value: { name: 'G', achievements: { total: 2 } }, ts: Date.now() - day }],
+  ]);
+  const achievementsFetch = makeAchievementsFetch();
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls.push(url);
+    return achievementsFetch(url);
+  });
+
+  assert.equal((await api.get('/api/achievements/403').expect(200)).body.total, 2);
+  await api.get('/api/achievements/403').expect(200);
+  assert.equal(calls.filter((u) => u.includes('GetSchemaForGame')).length, 1);
+});
+
 test('GET /api/achievements/:appid: a member with a real unlock time wins over one whose time is unknown (0), in either order', async (t) => {
   for (const ids of [`${ID1},${ID2}`, `${ID2},${ID1}`]) {
     _reset();
@@ -2535,6 +2937,7 @@ test('GET /api/achievements/:appid: ?refresh=1 re-fetches the schema, rarity and
 
   await api.get(`/api/achievements/401?steamids=${ID1}`).expect(200);
   await api.get(`/api/achievements/401?steamids=${ID1}`).expect(200);
+  ageCache();
   await api.get(`/api/achievements/401?steamids=${ID1}&refresh=1`).expect(200);
   for (const part of ['GetSchemaForGame', 'GetGlobalAchievementPercentagesForApp', 'GetPlayerAchievements']) {
     assert.equal(count(part), 2, part);
@@ -2935,6 +3338,90 @@ test("GET /api/bundles: a Fanatical pick-and-mix ITAD expired early is appended 
   const calls = fetchMock.mock.callCount();
   await api.get('/api/bundles?limit=50');
   assert.equal(fetchMock.mock.callCount(), calls, 'every page cached');
+});
+
+// The list's age is its oldest contributor's, and ↻ refreshes every page the list came from (data.md).
+test('GET /api/bundles: the expired pages a first page walks date it, and ?refresh=1 forces them too', async (t) => {
+  process.env.ITAD_API_KEY = 'test-itad-key';
+  const now = Date.now();
+  const killer = {
+    id: 16542,
+    title: 'Build Your Own Killer Bundle',
+    page: { name: 'Fanatical' },
+    url: 'https://www.fanatical.com/en/pick-and-mix/byo-killer',
+    publish: '2026-09-07T13:00:00Z',
+    tiers: [],
+  };
+  const oldTs = now - 6 * 60 * 60 * 1000;
+  _reset([
+    ['itad-bundles:US:-publish:false:0:50', { value: [{ id: 1, title: 'Humble One' }], ts: now }],
+    ['itad-bundles:US:-publish:true:0:50', { value: [killer], ts: oldTs }],
+    [
+      'fanatical-pnm:v3',
+      {
+        value: {
+          'byo-killer': {
+            tiers: [],
+            products: [],
+            type: 'bundle',
+            validFrom: '2026-09-07T13:00:00.000Z',
+            validUntil: '2099-11-13T23:59:00.000Z',
+          },
+        },
+        ts: now,
+      },
+    ],
+  ]);
+  const urls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(String(url));
+    const expired = new URL(url).searchParams.get('expired') === 'true';
+    return { ok: true, json: async () => (expired ? [killer] : [{ id: 1, title: 'Humble One' }]) };
+  });
+
+  assert.equal((await api.get('/api/bundles?limit=50').expect(200)).body.fetchedAt, oldTs);
+  const res = await api.get('/api/bundles?limit=50&refresh=1').expect(200);
+  assert.ok(
+    urls.some((u) => u.includes('expired=true')),
+    'the expired page is forced',
+  );
+  assert.ok(res.body.fetchedAt >= now, String(res.body.fetchedAt));
+});
+
+test('GET /api/bundles?refresh=1: a forced expired page that fails falls back to its cached row', async (t) => {
+  process.env.ITAD_API_KEY = 'test-itad-key';
+  const now = Date.now();
+  const killer = {
+    id: 16542,
+    title: 'Build Your Own Killer Bundle',
+    page: { name: 'Fanatical' },
+    url: 'https://www.fanatical.com/en/pick-and-mix/byo-killer',
+    publish: '2026-09-07T13:00:00Z',
+    tiers: [],
+  };
+  const oldTs = now - 6 * 60 * 60 * 1000;
+  _reset([
+    ['itad-bundles:US:-publish:false:0:50', { value: [{ id: 1, title: 'Humble One' }], ts: oldTs }],
+    ['itad-bundles:US:-publish:true:0:50', { value: [killer], ts: oldTs }],
+    [
+      'fanatical-pnm:v3',
+      {
+        value: { 'byo-killer': { tiers: [], products: [], type: 'bundle', validUntil: '2099-11-13T23:59:00.000Z' } },
+        ts: now,
+      },
+    ],
+  ]);
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (new URL(url).searchParams.get('expired') === 'true') return { ok: false, status: 503, json: async () => ({}) };
+    return { ok: true, json: async () => [{ id: 1, title: 'Humble One' }] };
+  });
+
+  const res = await api.get('/api/bundles?limit=50&refresh=1').expect(200);
+  assert.deepEqual(
+    res.body.bundles.map((b) => b.id),
+    [1, 16542],
+  );
+  assert.equal(res.body.fetchedAt, oldTs);
 });
 
 test('GET /api/game-bundles/:appid: a bundle ITAD expired early is added from the cached list pages', async (t) => {
@@ -3540,18 +4027,20 @@ test('POST /api/game-details/stream: fully cached games come first, ahead of unc
   for (const appid of cached) {
     setCache(`rating:${appid}`, { total_reviews: 10, total_positive: 9, review_score_desc: 'Positive' });
     setCache(`hltb:${appid}`, []);
-    setCache(`meta:${appid}`, { name: `Game ${appid}` });
+    setCache(`appdetails:${appid}`, { name: `Game ${appid}` });
     setCache(`browse:${appid}`, { tagids: TAG_IDS });
     setCache(`protondb:${appid}`, null);
   }
   setCache('tagnames:all', TAG_NAME_MAP);
-  // Uncached games' reviews hang until released, holding the workers that took them.
+  // Uncached games' reviews hang until released, holding the workers that took them; their store pages too, so
+  // the store pool's answers don't race the cached games' events.
   let started = 0;
   let release;
   const gate = new Promise((r) => {
     release = r;
   });
   const fetchMock = t.mock.method(globalThis, 'fetch', async (url) => {
+    if (String(url).includes('appdetails')) await gate;
     if (!String(url).includes('GetAppReviews')) return { ok: true, json: async () => ({}) };
     started++;
     await gate;

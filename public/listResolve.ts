@@ -14,7 +14,7 @@
 // answer" principle.
 import type { GameList, ListRef, CombineOp } from './types.ts';
 import { combine, type LabeledSet, type CombineResult } from './combine.ts';
-import { fetchAccountOwnedData, fetchAccountWishlistData, type GameOwner } from './accountData.ts';
+import { fetchAccountOwnedData, fetchAccountWishlistData, type AccountPlayer, type GameOwner } from './accountData.ts';
 import { fetchBundleContents, BundleNotFoundError, type Bundle, type ResolvedGame } from './bundleData.ts';
 import { currentRegion } from './region.ts';
 import { loadRecentGames } from './recentGames.ts';
@@ -192,6 +192,7 @@ export interface DefaultFetchersOptions {
   refresh?: boolean;
   onFetchedAt?: (fetchedAt: number | null) => void;
   onOwners?: (owners: Map<number, GameOwner[]>, accountId: string) => void; // each account-owned source's members who own each game
+  onPlayers?: (accountId: string, players: AccountPlayer[]) => void; // each account-owned source's members, named
   onBundleLeftOut?: (bundleId: string, notOnSteam: number) => void; // a bundle's games with no Steam listing
   onBundleGames?: BundleGamesCallback; // a freshly fetched bundle's games, for their tier prices
   onCreatorCapped?: (role: CreatorRole, name: string, total: number) => void; // only Steam's first page
@@ -208,6 +209,7 @@ export function createDefaultFetchers({
   refresh = false,
   onFetchedAt,
   onOwners,
+  onPlayers,
   onBundleLeftOut,
   onBundleGames,
   onCreatorCapped,
@@ -215,9 +217,10 @@ export function createDefaultFetchers({
 }: DefaultFetchersOptions = {}): ListResolveFetchers {
   return {
     accountOwned: async (accountId) => {
-      const { games, owners, fetchedAt } = await fetchAccountOwnedData(accountId, { refresh });
+      const { games, owners, players, fetchedAt } = await fetchAccountOwnedData(accountId, { refresh });
       onFetchedAt?.(fetchedAt);
       onOwners?.(owners, accountId);
+      onPlayers?.(accountId, players);
       return new Set(games.keys());
     },
     accountWishlist: async (accountId) => {

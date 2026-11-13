@@ -1,11 +1,12 @@
 'use strict';
 
 // `npm run test:e2e`: builds the frontend once, then runs Playwright against it. A full passing run
-// records a hash of everything the suite can see (the build minus its sourcemaps, e2e/, the Playwright config, the
-// lockfile, Node's version); with --if-changed (the pre-commit hook), a run whose hash already
-// passed is skipped, since it would test exactly what passed. With --since=<ref> (a fix-batch lane), a
+// records, per project, a hash of everything the suite can see (the build minus its sourcemaps, e2e/, the Playwright
+// config, the lockfile, Node's version); with --if-changed (the hooks), projects already passed on that hash are
+// skipped, since they would test exactly what passed: a push after the pre-commit desktop run runs only phone. With --since=<ref> (a fix-batch lane), a
 // branch whose commits since <ref> touch nothing the suite covers (check.js's UI files) skips it.
 // A port another run holds or something listens on is skipped for the next free one, unless E2E_PORT sets it.
+// Each --if-changed run logs the projects asked for and those run (dev-metrics `e2e-runs`).
 //   node scripts/e2e.js [--if-changed] [--since=<ref>] [playwright args…]
 
 const crypto = require('node:crypto');
@@ -15,6 +16,8 @@ const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 const { touchesUi } = require('./check');
 const { portOf } = require('./ports');
+const { record } = require('./dev-metrics');
+const PROJECTS = Object.keys(require('./e2e-projects'));
 
 const ROOT = path.join(__dirname, '..');
 const CACHE = path.join(ROOT, 'node_modules/.cache');
@@ -23,7 +26,8 @@ const PASS_FILE = path.join(CACHE, 'e2e-pass');
 const MAX_PORT = 32767;
 
 // Args that run part of the suite: such a pass says nothing about the rest.
-const NARROWING = /^(-g|--grep|--grep-invert|--project|--last-failed|--only-changed|--shard)(=|$)/;
+const NARROWING = /^(-g|--grep|--grep-invert|--last-failed|--only-changed|--shard)(=|$)/;
+const PROJECT_ARG = /^--project(?:=(.*))?$/;
 
 // Names relative to `base`, so a build on another port hashes the same.
 const filesUnder = (dir, base) =>
@@ -40,7 +44,7 @@ function inputsHash(outDir) {
   const files = [
     ...filesUnder(outDir, path.dirname(outDir)),
     ...filesUnder(path.join(ROOT, 'e2e'), ROOT),
-    ...['playwright.config.ts', 'package-lock.json'].map((f) => [f, path.join(ROOT, f)]),
+    ...['playwright.config.ts', 'scripts/e2e-projects.js', 'package-lock.json'].map((f) => [f, path.join(ROOT, f)]),
   ];
   for (const [name, f] of files) hash.update(name).update('\0').update(fs.readFileSync(f)).update('\0');
   return hash.digest('hex');
@@ -88,16 +92,40 @@ async function claimPort(start, { fixed = false, lockDir = CACHE, isBusy = liste
   throw new Error(fixed ? `port ${start} (E2E_PORT) is in use` : `no free port from ${start} to ${MAX_PORT}`);
 }
 
-const readPass = () => {
+// The projects already passed on `hash`.
+const passedOn = (hash) => {
   try {
-    return fs.readFileSync(PASS_FILE, 'utf8').trim();
+    const [passed, ...projects] = fs.readFileSync(PASS_FILE, 'utf8').trim().split('\n');
+    return new Set(passed === hash ? projects : []);
   } catch {
-    return null;
+    return new Set();
   }
 };
 
-// Whether a run with these Playwright args covers the whole suite, so its pass can be recorded.
-const isFullRun = (pwArgs) => !pwArgs.some((a) => NARROWING.test(a) || !a.startsWith('-'));
+// Splits Playwright args into the projects they run in full (null when they run part of a project's tests,
+// so a pass says nothing about the rest) and the other args.
+function splitProjects(pwArgs) {
+  const projects = [];
+  const rest = [];
+  for (let i = 0; i < pwArgs.length; i++) {
+    const m = PROJECT_ARG.exec(pwArgs[i]);
+    if (m) projects.push(m[1] ?? pwArgs[++i]);
+    else if (NARROWING.test(pwArgs[i]) || !pwArgs[i].startsWith('-')) return { projects: null, rest: pwArgs };
+    else rest.push(pwArgs[i]);
+  }
+  return { projects: projects.length ? projects : PROJECTS, rest };
+}
+
+// What to run given the projects already `passed` on this build: `running` the projects whose pass to record (null:
+// none), `runArgs` null to skip.
+function planRun(pwArgs, passed, ifChanged) {
+  const { projects, rest } = splitProjects(pwArgs);
+  if (!ifChanged || !projects) return { running: projects, runArgs: pwArgs };
+  const running = projects.filter((p) => !passed.has(p));
+  if (!running.length) return { running, runArgs: null };
+  if (running.length === projects.length) return { running, runArgs: pwArgs };
+  return { running, runArgs: [...rest, ...running.map((p) => `--project=${p}`)] };
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -131,20 +159,30 @@ async function main() {
     stdio: 'inherit',
   });
   const hash = inputsHash(OUT_DIR);
-  if (ifChanged && readPass() === hash) {
+  const passed = passedOn(hash);
+  const { running, runArgs } = planRun(pwArgs, passed, ifChanged);
+  const log = (ok, seconds) =>
+    ifChanged && running && record('e2e-runs', { asked: splitProjects(pwArgs).projects, ran: running, ok, seconds });
+  if (!runArgs) {
+    log(true, 0);
     console.log('e2e: same build and tests as the last passing run, skipped');
     process.exit(0);
   }
+  if (runArgs !== pwArgs)
+    console.log(`e2e: ${[...passed].join(', ')} passed on this build, running ${running.join(', ')}`);
 
-  const { status } = spawnSync('npx', ['playwright', 'test', ...pwArgs], {
+  const started = Date.now();
+  const { status } = spawnSync('npx', ['playwright', 'test', ...runArgs], {
     cwd: ROOT,
     stdio: 'inherit',
     env: { ...process.env, E2E_BUILT: OUT_DIR },
   });
-  if (status === 0 && isFullRun(pwArgs)) fs.writeFileSync(PASS_FILE, `${hash}\n`);
+  log(status === 0, Math.round((Date.now() - started) / 1000));
+  if (status === 0 && running)
+    fs.writeFileSync(PASS_FILE, `${[hash, ...new Set([...passed, ...running])].join('\n')}\n`);
   process.exit(status ?? 1);
 }
 
 if (require.main === module) main();
 
-module.exports = { claimPort, isFullRun, listening };
+module.exports = { claimPort, listening, planRun };

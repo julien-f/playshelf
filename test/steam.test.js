@@ -9,6 +9,7 @@ process.env.DB_FILE = '';
 
 const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
+const { ageCache } = require('./ageCache');
 const { getMetrics } = require('../lib/metrics');
 const {
   peekSteamId,
@@ -20,6 +21,7 @@ const {
   getGameRating,
   getAppDetails,
   getStoreBrowseItem,
+  prefetchStoreBrowseItems,
   resolveSteamTags,
   extractDemoAppid,
   resolveSteamPackageAppids,
@@ -31,6 +33,8 @@ const {
   getGameSchema,
   getPlayerAchievements,
   getGlobalAchievementPercentages,
+  releasedAt,
+  capByAge,
   getGameNews,
   _resetTagNameMap,
   _resetPauses,
@@ -38,8 +42,9 @@ const {
 const { getUpstreamStats, createSemaphore } = require('../lib/upstream');
 const { _reset, getCachedAt, setCache } = require('../lib/cache');
 const { getCircuitBreakers, _resetCircuitBreakers } = require('../lib/circuitBreaker');
-const { db } = require('../lib/db');
-const { MISS_CACHE_TTL_MS, META_CACHE_TTL_MS } = require('../lib/config');
+const { DatabaseSync } = require('node:sqlite');
+const { db, migrate, MIGRATIONS } = require('../lib/db');
+const { MISS_CACHE_TTL_MS, META_CACHE_TTL_MS, EMPTY_CACHE_TTL_MS } = require('../lib/config');
 
 // The tag-name map's failure hold-off outlives _reset(), which only empties the cache.
 beforeEach(_resetTagNameMap);
@@ -975,6 +980,95 @@ test('getAppDetails: returns null when success is false', async (t) => {
   assert.equal(await getAppDetails(400), null);
 });
 
+test('getAppDetails: a page that is not an object is an upstream error, not cached', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, 'oops'));
+  await assert.rejects(() => getAppDetails(400), { isUpstream: true });
+  assert.equal(getCachedAt('appdetails:400'), undefined);
+});
+
+// A whole store page, every field extractAppDetails reads plus some it doesn't.
+const FULL_PAGE = {
+  name: 'Game',
+  type: 'game',
+  steam_appid: 400,
+  detailed_description: '<p>Long</p>',
+  pc_requirements: { minimum: 'A lot' },
+  short_description: 'Short',
+  genres: [{ id: '1', description: 'Action' }],
+  categories: [{ id: '2', description: 'Co-op' }],
+  developers: ['Dev'],
+  publishers: ['Pub'],
+  release_date: { coming_soon: false, date: 'Jan 1, 2020' },
+  metacritic: { score: 90, url: 'https://mc' },
+  screenshots: Array.from({ length: 12 }, (_, id) => ({ id, path_thumbnail: `t${id}`, path_full: `f${id}` })),
+  movies: Array.from({ length: 6 }, (_, id) => ({ id, name: `m${id}`, thumbnail: 't', hls_h264: 'h', webm: {} })),
+  capsule_imagev5: 'c5',
+  capsule_image: 'c',
+  header_image: 'h',
+  dlc: [401],
+  fullgame: { appid: '399', name: 'Base' },
+  website: 'https://w',
+  achievements: { total: 3, highlighted: [{ name: 'A', path: 'p' }] },
+  platforms: { windows: true, mac: false, linux: true },
+  supported_languages: 'English<strong>*</strong>, French<br><strong>*</strong>languages with full audio support',
+  is_free: false,
+  price_overview: { initial: 1999, final: 999, currency: 'USD' },
+};
+
+// The details load reads a trimmed row; the whole page stays cached beside it (C211).
+test('getAppDetails: caches the whole page and a trimmed row read back to the same details', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, FULL_PAGE));
+  const fetched = await getAppDetails(400);
+  const row = (key) => db.prepare('SELECT value, ts, expires FROM cache_meta WHERE key = ?').get(key);
+  const [whole, trimmed] = [row('meta:400'), row('appdetails:400')];
+  assert.deepEqual(JSON.parse(whole.value), FULL_PAGE);
+  assert.deepEqual([trimmed.ts, trimmed.expires], [whole.ts, whole.expires]);
+  const hot = JSON.parse(trimmed.value);
+  assert.equal('detailed_description' in hot, false);
+  assert.deepEqual([hot.screenshots.length, hot.movies[0].webm, hot.achievements], [10, undefined, { total: 3 }]);
+
+  _reset([['appdetails:400', { value: FULL_PAGE, ts: Date.now() }]]);
+  assert.deepEqual(await getAppDetails(400), fetched);
+});
+
+// Migration 13 froze a copy of trimAppDetails to fill the rows cached before it.
+test("getAppDetails: the trimmed row matches migration 13's frozen trim", async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, FULL_PAGE));
+  await getAppDetails(400);
+  const trimmedValue = (from) =>
+    JSON.parse(from.prepare("SELECT value FROM cache_meta WHERE key = 'appdetails:400'").get().value);
+
+  const migrated = new DatabaseSync(':memory:');
+  migrate(
+    migrated,
+    MIGRATIONS.filter((m) => m.version <= 12),
+  );
+  migrated
+    .prepare('INSERT INTO cache_meta (key, value, ts, expires) VALUES (?, ?, ?, ?)')
+    .run('meta:400', JSON.stringify(FULL_PAGE), 1000, null);
+  migrate(migrated, MIGRATIONS);
+  assert.deepEqual(trimmedValue(migrated), trimmedValue(db));
+});
+
+test('getAppDetails: a page miss writes both rows on the miss expiry', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, null));
+  await getAppDetails(400);
+  const rows = db.prepare("SELECT key, value, ts, expires FROM cache_meta WHERE key LIKE '%:400' ORDER BY key").all();
+  assert.deepEqual(
+    rows.map((r) => [r.key, r.value]),
+    [
+      ['appdetails:400', 'null'],
+      ['meta:400', 'null'],
+    ],
+  );
+  assert.equal(rows[0].expires, rows[0].ts + MISS_CACHE_TTL_MS);
+  assert.deepEqual([rows[1].ts, rows[1].expires], [rows[0].ts, rows[0].expires]);
+});
+
 test('getAppDetails: accepts an entry keyed under another appid when its steam_appid matches', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () =>
@@ -1615,17 +1709,38 @@ test('resolveSteamTags: re-fetches the tag name map once its row expires', async
   _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now }]]);
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'Old', weight: null }]);
 
-  _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now - META_CACHE_TTL_MS - 1 }]]);
+  t.mock.method(Date, 'now', () => now + META_CACHE_TTL_MS + 1);
   mockTagEndpoints(t, { nameMap: { 1: 'New' } });
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'New', weight: null }]);
 });
 
-test('resolveSteamTags: reads a tag name map row rewritten since the last read', async () => {
+// A row written before the month-long expiry, on the meta tier's year, follows it once read.
+test('resolveSteamTags: a tag name map row cached for a year expires within a month once read', async () => {
+  const now = Date.now();
+  _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now - 1000 }]]);
+  await resolveSteamTags(Promise.resolve({ tagids: [1] }));
+  const { expires } = db.prepare("SELECT expires FROM cache_meta WHERE key = 'tagnames:all'").get();
+  assert.ok(expires !== null && expires - Date.now() <= 30 * 24 * 60 * 60 * 1000, String(expires));
+});
+
+// Steam adds tags meanwhile: the map lives a month, not the meta tier's year.
+test('resolveSteamTags: a fetched tag name map expires within a month', async (t) => {
+  _reset();
+  mockTagEndpoints(t);
+  await resolveSteamTags(Promise.resolve({ tagids: [1] }));
+  const { expires } = db.prepare("SELECT expires FROM cache_meta WHERE key = 'tagnames:all'").get();
+  assert.ok(expires !== null && expires - Date.now() <= 30 * 24 * 60 * 60 * 1000, String(expires));
+});
+
+// A stream's games each resolve tags: the row isn't read per game while the parsed map is that young (C315).
+test('resolveSteamTags: reads the tag name map row again only a month after its write', async (t) => {
   const now = Date.now();
   _reset([['tagnames:all', { value: { 1: 'Old' }, ts: now - 1000 }]]);
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'Old', weight: null }]);
 
-  _reset([['tagnames:all', { value: { 1: 'New' }, ts: now }]]);
+  _reset([['tagnames:all', { value: { 1: 'New' }, ts: now, expires: now + 31 * 24 * 60 * 60 * 1000 }]]);
+  assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'Old', weight: null }]);
+  t.mock.method(Date, 'now', () => now + 30 * 24 * 60 * 60 * 1000);
   assert.deepEqual(await resolveSteamTags(Promise.resolve({ tagids: [1] })), [{ name: 'New', weight: null }]);
 });
 
@@ -1721,6 +1836,25 @@ test('getProtonDbStatus: returns tier, confidence and total', async (t) => {
 
   const result = await getProtonDbStatus(400);
   assert.deepEqual(result, { tier: 'gold', confidence: 'strong', total: 2009 });
+});
+
+// "Unreleased" is inferred (a coming-soon browse item and no reviews), so a forced refresh asks rather than wipe a summary.
+test('getProtonDbStatus: a forced lookup of an unreleased game asks ProtonDB instead of wiping its cached summary', async (t) => {
+  _reset();
+  _resetCircuitBreakers();
+  setCache('protondb:401', { tier: 'gold', confidence: 'good', total: 9 });
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({ tier: 'gold', confidence: 'good', total: 10 }),
+  }));
+  assert.deepEqual(await getProtonDbStatus(401, { unreleased: true }), { tier: 'gold', confidence: 'good', total: 9 });
+  assert.equal(fetchMock.mock.callCount(), 0);
+  ageCache();
+  assert.deepEqual(await getProtonDbStatus(401, { unreleased: true, force: true }), {
+    tier: 'gold',
+    confidence: 'good',
+    total: 10,
+  });
 });
 
 // A 404 means "ProtonDB has no reports for this appid" — not an upstream failure —
@@ -2083,6 +2217,50 @@ test('getGameSchema: extracts the game name and achievement fields', async (t) =
   });
 });
 
+const LEGACY_ICON = 'https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/400/abc.jpg';
+const NEW_ICON = 'https://shared.fastly.steamstatic.com/community_assets/images/apps/400/abc.jpg';
+
+test('getGameSchema: moves legacy-CDN icons to the host that has them, leaving other values alone', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({
+      game: {
+        availableGameStats: {
+          achievements: [
+            { name: 'A', icon: LEGACY_ICON, icongray: LEGACY_ICON },
+            { name: 'B', icon: 'https://example.com/b.jpg', icongray: null },
+          ],
+        },
+      },
+    }),
+  }));
+  const [a, b] = (await getGameSchema(400)).achievements;
+  assert.equal(a.icon, NEW_ICON);
+  assert.equal(a.icongray, NEW_ICON);
+  assert.equal(b.icon, 'https://example.com/b.jpg');
+  assert.equal(b.icongray, null);
+});
+
+test('getGameSchema: fixes legacy-CDN icons already in the cache without refetching', async (t) => {
+  _reset();
+  setCache('gameschema:400', {
+    name: 'X',
+    achievements: [
+      { apiname: 'A', name: 'A', icon: LEGACY_ICON, icongray: LEGACY_ICON, hidden: false },
+      { apiname: 'B', name: 'B', hidden: false },
+    ],
+  });
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('should not fetch');
+  });
+  const [a, b] = (await getGameSchema(400)).achievements;
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.equal(a.icon, NEW_ICON);
+  assert.equal(a.icongray, NEW_ICON);
+  assert.deepEqual(b, { apiname: 'B', name: 'B', hidden: false });
+});
+
 test('getGameSchema: returns no name and no achievements for an empty schema', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ game: {} }) }));
@@ -2376,8 +2554,8 @@ test('resolveSteamId: caches a failed lookup and re-throws it without a second u
 
 const browseItem = (fields) => ({ success: 1, name: 'Game', type: 0, basic_info: {}, assets: {}, ...fields });
 
-test('gameBasics: converts a browse item to appdetails shapes', () => {
-  const basics = gameBasics(
+test('gameBasics: converts a browse item to appdetails shapes', async () => {
+  const basics = await gameBasics(
     browseItem({
       basic_info: { short_description: 'Desc', developers: [{ name: 'Dev' }], publishers: [{ name: 'Pub' }] },
       release: { steam_release_date: 1303186800 },
@@ -2401,8 +2579,8 @@ test('gameBasics: converts a browse item to appdetails shapes', () => {
   });
 });
 
-test('gameBasics: an unconfirmed type and a coming-soon date short of a full one stay null', () => {
-  const basics = gameBasics(
+test('gameBasics: an unconfirmed type and a coming-soon date short of a full one stay null', async () => {
+  const basics = await gameBasics(
     browseItem({
       type: 7,
       release: { steam_release_date: 1830000000, is_coming_soon: true, coming_soon_display: 'date_quarter' },
@@ -2414,16 +2592,330 @@ test('gameBasics: an unconfirmed type and a coming-soon date short of a full one
   assert.equal(basics.comingSoon, true);
 });
 
-test('gameBasics: an item cached before basics were requested falls back to cached appdetails, never fetching', (t) => {
+test('gameBasics: an item cached before basics were requested falls back to cached appdetails, never fetching', async (t) => {
   _reset();
   t.mock.method(globalThis, 'fetch', async () => {
     throw new Error('should not fetch');
   });
-  assert.equal(gameBasics({ success: 1, tagids: [] }, 640), null);
-  setCache('meta:640', { name: 'Cached', type: 'game', release_date: { date: 'Jan 1, 2020' }, developers: ['D'] });
-  const basics = gameBasics({ success: 1, tagids: [] }, 640);
+  assert.equal(await gameBasics({ success: 1, tagids: [] }, 640), null);
+  setCache('appdetails:640', {
+    name: 'Cached',
+    type: 'game',
+    release_date: { date: 'Jan 1, 2020' },
+    developers: ['D'],
+  });
+  const basics = await gameBasics({ success: 1, tagids: [] }, 640);
   assert.equal(basics.name, 'Cached');
   assert.equal(basics.releaseDate, 'Jan 1, 2020');
   assert.deepEqual(basics.developers, ['D']);
   assert.equal('genres' in basics, false);
+});
+
+// An unreleased game's store data changes on release: rows written before that rule, on the year-long tier, too.
+test('a coming-soon store row expires within a day once read, however it was cached; a released one keeps its tier', async (t) => {
+  const now = Date.now();
+  const soon = { name: 'Soon', type: 'game', release_date: { coming_soon: true, date: 'Q4 2027' } };
+  const soonItem = { success: 1, tagids: [], release: { is_coming_soon: true } };
+  _reset([
+    ['appdetails:650', { value: soon, ts: now }],
+    ['meta:650', { value: soon, ts: now }],
+    ['appdetails:651', { value: soon, ts: now }],
+    ['browse:652', { value: soonItem, ts: now }],
+    ['appdetails:653', { value: { ...soon, release_date: { coming_soon: false } }, ts: now }],
+    ['browse:654', { value: { ...soonItem, release: { is_coming_soon: false } }, ts: now }],
+  ]);
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({ response: { store_items: [{ ...soonItem, appid: 655 }] } }),
+  }));
+  await getAppDetails(650);
+  await gameBasics({ success: 1, tagids: [] }, 651);
+  await getStoreBrowseItem(652);
+  await getAppDetails(653);
+  await getStoreBrowseItem(654);
+  await getStoreBrowseItem(655);
+
+  const later = now + MISS_CACHE_TTL_MS + 1000;
+  t.mock.method(Date, 'now', () => later);
+  for (const key of ['appdetails:650', 'meta:650', 'appdetails:651', 'browse:652', 'browse:655'])
+    assert.equal(getCachedAt(key), undefined, key);
+  for (const key of ['appdetails:653', 'browse:654']) assert.notEqual(getCachedAt(key), undefined, key);
+});
+
+// A 200 of another shape is not an answer: cached at the year-long tier it would read as "no data" all that time.
+for (const [label, call, body] of [
+  ['getGameRating, a reply without `response`', () => getGameRating(660), {}],
+  ['getProtonDbStatus, a reply without a tier', () => getProtonDbStatus(661), {}],
+  ['getGameSchema, a reply without `game`', () => getGameSchema(662), {}],
+  [
+    'getGlobalAchievementPercentages, a reply without `achievementpercentages`',
+    () => getGlobalAchievementPercentages(663),
+    {},
+  ],
+  ['getStoreBrowseItem, a reply without `response`', () => getStoreBrowseItem(664), {}],
+]) {
+  test(`${label} fails and caches nothing`, async (t) => {
+    _reset();
+    t.mock.method(globalThis, 'fetch', async () => ({ ok: true, status: 200, json: async () => body }));
+    await assert.rejects(call(), (err) => err.isUpstream);
+    for (const table of ['cache_meta', 'cache_rating'])
+      assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0, table);
+  });
+}
+
+// Steam's answers for an unknown or delisted app, which stay cached misses.
+test('an empty reviews `response`, a browse item without success and an empty GetItems `response` stay cached misses', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async (url) => ({
+    ok: true,
+    json: async () =>
+      url.includes('GetAppReviews') ? { response: {} } : { response: { store_items: [{ appid: 666, success: 2 }] } },
+  }));
+  assert.equal(await getGameRating(665), null);
+  assert.equal(await getStoreBrowseItem(666), null);
+  assert.notEqual(getCachedAt('rating:665'), undefined);
+  assert.notEqual(getCachedAt('browse:666'), undefined);
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ response: {} }) }));
+  assert.equal(await getStoreBrowseItem(667), null);
+  assert.notEqual(getCachedAt('browse:667'), undefined);
+});
+
+// ── batched store browse items (C249) ────────────────────────────────────────
+
+const browseIds = (url) =>
+  JSON.parse(decodeURIComponent(new URL(url).searchParams.get('input_json'))).ids.map((i) => i.appid);
+// GetItems' answer as probed: an unknown app's item has `appid` 0 and `success` 15, keyed by `id`.
+const batchItem = (appid, { unknown = false } = {}) =>
+  unknown ? { id: appid, appid: 0, success: 15 } : { id: appid, appid, success: 1, tagids: [appid] };
+
+function mockBatchedBrowse(t, reply = (ids) => ids.map((id) => batchItem(id))) {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    const ids = browseIds(url);
+    calls.push(ids);
+    return { ok: true, json: async () => ({ response: { store_items: reply(ids) } }) };
+  });
+  return calls;
+}
+
+test('prefetchStoreBrowseItems: sends uncached ids 50 per call, in order, and caches one row each', async (t) => {
+  _reset();
+  setCache('browse:1005', { tagids: [] });
+  const calls = mockBatchedBrowse(t);
+  const appids = Array.from({ length: 120 }, (_, i) => 1000 + i);
+  await prefetchStoreBrowseItems(appids);
+  assert.deepEqual(
+    calls.map((ids) => ids.length),
+    [50, 50, 19],
+  );
+  assert.ok(!calls.flat().includes(1005), 'a cached id is not sent');
+  assert.deepEqual(
+    calls.flat(),
+    appids.filter((id) => id !== 1005),
+  );
+  assert.deepEqual(await getStoreBrowseItem(1119), batchItem(1119));
+  assert.equal(calls.length, 3, 'a prefetched row answers the game without a call');
+});
+
+test('prefetchStoreBrowseItems: an unknown app is a cached miss, an id left out of the reply stays uncached', async (t) => {
+  _reset();
+  const calls = mockBatchedBrowse(t, (ids) =>
+    ids.filter((id) => id !== 2002).map((id) => batchItem(id, { unknown: id === 2001 })),
+  );
+  await prefetchStoreBrowseItems([2000, 2001, 2002]);
+  assert.notEqual(getCachedAt('browse:2001'), undefined);
+  assert.equal(await getStoreBrowseItem(2001), null);
+  assert.equal(getCachedAt('browse:2002'), undefined);
+  await getStoreBrowseItem(2002);
+  assert.deepEqual(calls.at(-1), [2002], 'its game fetches it alone');
+});
+
+test('prefetchStoreBrowseItems: a reply without store_items caches nothing', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ response: {} }) }));
+  await prefetchStoreBrowseItems([2100, 2101]);
+  assert.equal(getCachedAt('browse:2100'), undefined);
+  assert.equal(getCachedAt('browse:2101'), undefined);
+});
+
+test('prefetchStoreBrowseItems: a failed chunk starts no further chunk and leaves its ids to their games', async (t) => {
+  _reset();
+  const warn = t.mock.method(console, 'warn', () => {});
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => (++calls, { ok: false, status: 503 }));
+  await prefetchStoreBrowseItems(Array.from({ length: 200 }, (_, i) => 2200 + i));
+  assert.equal(calls, 2, 'the two first chunks only');
+  assert.equal(getCachedAt('browse:2200'), undefined);
+  assert.match(warn.mock.calls[0].arguments[0], /^\[browse\] prefetch of 50 items failed/);
+});
+
+test('prefetchStoreBrowseItems: shouldStop() starts no further chunk', async (t) => {
+  _reset();
+  const calls = mockBatchedBrowse(t);
+  await prefetchStoreBrowseItems(
+    Array.from({ length: 200 }, (_, i) => 2400 + i),
+    { shouldStop: () => true },
+  );
+  assert.equal(calls.length, 2);
+});
+
+test('getStoreBrowseItem: an unforced read joins a started chunk; a forced one, or one after a failed chunk, calls alone', async (t) => {
+  _reset();
+  const warn = t.mock.method(console, 'warn', () => {});
+  const calls = [];
+  let release;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    const ids = browseIds(url);
+    calls.push(ids);
+    if (ids.length > 1) await new Promise((r) => (release = r));
+    return { ok: true, json: async () => ({ response: { store_items: ids.map((id) => batchItem(id)) } }) };
+  });
+  const prefetch = prefetchStoreBrowseItems([2500, 2501, 2502]);
+  const joined = getStoreBrowseItem(2500);
+  const forced = getStoreBrowseItem(2501, { force: true });
+  await forced;
+  assert.deepEqual(calls, [[2500, 2501, 2502], [2501]]);
+  release();
+  assert.deepEqual(await joined, batchItem(2500));
+  await prefetch;
+  assert.equal(calls.length, 2, 'the joined read made no call');
+
+  // A chunk refused (here a 503; a spent client share alike) never rejects its waiters: they call alone.
+  _reset();
+  calls.length = 0;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    const ids = browseIds(url);
+    calls.push(ids);
+    if (ids.length > 1) return { ok: false, status: 503 };
+    return { ok: true, json: async () => ({ response: { store_items: [batchItem(ids[0])] } }) };
+  });
+  const failing = prefetchStoreBrowseItems([2600, 2601]);
+  assert.deepEqual(await getStoreBrowseItem(2600), batchItem(2600));
+  await failing;
+  assert.deepEqual(calls, [[2600, 2601], [2600]]);
+  assert.equal(warn.mock.callCount(), 1);
+});
+
+test('searchStoreGames still drops demos from a batched GetItems reply', async (t) => {
+  _reset();
+  t.mock.method(globalThis, 'fetch', async (url) => ({
+    ok: true,
+    json: async () =>
+      url.includes('storesearch')
+        ? {
+            items: [
+              { id: 2700, name: 'Game', type: 'app' },
+              { id: 2701, name: 'Game Demo', type: 'app' },
+              { id: 2702, name: 'Gone', type: 'app' },
+            ],
+          }
+        : {
+            response: {
+              store_items: [
+                { ...batchItem(2700), type: 0 },
+                { ...batchItem(2701), type: 1 },
+                batchItem(2702, { unknown: true }),
+              ],
+            },
+          },
+  }));
+  assert.deepEqual(
+    (await searchStoreGames('game')).map((r) => r.appid),
+    [2700, 2702],
+  );
+});
+
+// ── age-based expiry (C317) ──────────────────────────────────────────────────
+
+const DAY = 24 * 60 * 60 * 1000;
+
+test('releasedAt: a full date at noon Pacific; a partial date, coming soon or none is unknown', () => {
+  assert.equal(releasedAt('Oct 21, 2026', false), Date.parse('2026-10-21T20:00:00Z'));
+  for (const date of ['2026', 'Oct 2026', 'October 2026', 'Fall 2026', 'Q4 2026', 'Coming soon', '', undefined])
+    assert.equal(releasedAt(date, false), null, String(date));
+  assert.equal(releasedAt('Oct 21, 2026', true), null);
+});
+
+// Each case: a row written at `ts` of a game released at `released`; when it expires.
+for (const [label, { age, released = 'known', empty = false, expiresIn }] of Object.entries({
+  'a 10-day-old game lives 5 days': { age: 10 * DAY, expiresIn: 5 * DAY },
+  'a game fetched before its release lives a day': { age: -3 * DAY, expiresIn: DAY },
+  'a game fetched on release day lives a day': { age: 0, expiresIn: DAY },
+  'a 3-year-old game keeps its tier': { age: 3 * 365 * DAY, expiresIn: META_CACHE_TTL_MS },
+  'an empty result of a 3-year-old game lives 90 days': {
+    age: 3 * 365 * DAY,
+    empty: true,
+    expiresIn: EMPTY_CACHE_TTL_MS,
+  },
+  'an unknown release keeps the tier': { age: 10 * DAY, released: null, expiresIn: META_CACHE_TTL_MS },
+  "an unknown release's empty result lives 90 days": {
+    age: 10 * DAY,
+    released: null,
+    empty: true,
+    expiresIn: EMPTY_CACHE_TTL_MS,
+  },
+})) {
+  test(`capByAge: ${label}`, (t) => {
+    const ts = Date.now();
+    _reset([['hltb:1', { value: [], ts }]]);
+    capByAge('hltb:1', released === null ? null : ts - age, { empty });
+    let now = ts + expiresIn - 1000;
+    t.mock.method(Date, 'now', () => now);
+    assert.notEqual(getCachedAt('hltb:1'), undefined, 'live just before');
+    now = ts + expiresIn + 1000;
+    assert.equal(getCachedAt('hltb:1'), undefined, 'expired just after');
+  });
+}
+
+test('capByAge: a cap already past moves to within a week, spread by appid, and stays put on the next read', (t) => {
+  const now = Date.now();
+  const ts = now - 20 * DAY;
+  _reset([
+    ['rating:0', { value: {}, ts }],
+    ['rating:30', { value: {}, ts }],
+  ]);
+  const writes = () => db.prepare('SELECT total_changes() AS n').get().n;
+  for (const key of ['rating:0', 'rating:30']) capByAge(key, ts - 10 * DAY); // cap at ts + 5 days: past
+  const before = writes();
+  capByAge('rating:30', ts - 10 * DAY);
+  assert.equal(writes(), before, 'no second write');
+  t.mock.method(Date, 'now', () => now + 1000);
+  assert.equal(getCachedAt('rating:0'), undefined, 'appid 0: now');
+  assert.equal(getCachedAt('rating:30', { expired: true }), ts);
+  t.mock.method(Date, 'now', () => now + 30 * 60 * 60 * 1000 - 1000);
+  assert.notEqual(getCachedAt('rating:30'), undefined, 'appid 30: 30 hours from now');
+});
+
+test('a store page, its browse item and its rarity expire by the age of the game; the page rows together', async (t) => {
+  const now = Date.now();
+  const released = now - 10 * DAY;
+  const date = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'America/Los_Angeles',
+  }).format(released);
+  const page = { name: 'New', type: 'game', release_date: { coming_soon: false, date } };
+  const item = { success: 1, tagids: [], release: { is_coming_soon: false, steam_release_date: released / 1000 } };
+  _reset([
+    ['appdetails:660', { value: page, ts: now }],
+    ['meta:660', { value: page, ts: now }],
+    ['browse:660', { value: item, ts: now }],
+  ]);
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => ({ achievementpercentages: { achievements: [{ name: 'A', percent: '50.0' }] } }),
+  }));
+  await getAppDetails(660);
+  await getStoreBrowseItem(660);
+  await getGlobalAchievementPercentages(660);
+
+  // The page's date is a day (noon Pacific), so its half-age is within 6 hours of the item's.
+  let at = now + 5 * DAY - 7 * 60 * 60 * 1000;
+  t.mock.method(Date, 'now', () => at);
+  for (const key of ['appdetails:660', 'meta:660', 'browse:660', 'achrarity:660'])
+    assert.notEqual(getCachedAt(key), undefined, key);
+  at = now + 5 * DAY + 7 * 60 * 60 * 1000;
+  for (const key of ['appdetails:660', 'meta:660', 'browse:660', 'achrarity:660'])
+    assert.equal(getCachedAt(key), undefined, key);
 });

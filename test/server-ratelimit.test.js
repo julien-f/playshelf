@@ -19,6 +19,7 @@ const supertest = require('supertest');
 const { app } = require('../server');
 const { _reset, setCache } = require('../lib/cache');
 const { _resetAuth } = require('../lib/hltb');
+const { ageCache } = require('./ageCache');
 const { _reset: _resetMetrics } = require('../lib/metrics');
 
 const api = supertest(app);
@@ -76,7 +77,7 @@ test('details limiter: counts cache misses but never counts cache hits', async (
   // Pre-cache appid 800 fully — this one should always be served.
   setCache('rating:800', { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' });
   setCache('hltb:800', [{ game_id: 42, game_name: 'Portal', comp_main: 36000, comp_plus: 54000 }]);
-  setCache('meta:800', { name: 'Portal', genres: [], categories: [], developers: [], publishers: [] });
+  setCache('appdetails:800', { name: 'Portal', genres: [], categories: [], developers: [], publishers: [] });
   setCache('browse:800', { tagids: [1001] });
   setCache('tagnames:all', { 1001: 'Action' });
   setCache('protondb:800', { tier: 'gold', confidence: 'strong', total: 500 });
@@ -90,6 +91,10 @@ test('details limiter: counts cache misses but never counts cache hits', async (
   // A fourth cache miss is over budget → 429.
   const over = await api.get('/api/game-details/804');
   assert.equal(over.status, 429, 'a cache miss past the budget should be rate limited');
+  const fresh = await api.get('/api/game-details/800?refresh=1');
+  assert.equal(fresh.status, 200, 'a forced refresh of sources under FORCE_MIN_AGE_MINUTES old is answered from cache');
+  assert.ok(!fetchedAppids.has('800'), 'nor fetched upstream');
+  ageCache();
   const refresh = await api.get('/api/game-details/800?refresh=1');
   assert.equal(refresh.status, 429, 'a forced refresh of a cached key past the budget should be rate limited');
 
@@ -189,7 +194,7 @@ test('search limiter: counts cache misses but never counts cache hits (common-ga
   // A third uncached search, on either route, is over budget → 429.
   const over = await api.post('/api/common-games').send({ members: ['76561198000000003'] });
   assert.equal(over.status, 429, 'a cache miss past the budget should be rate limited');
-  const refresh = await api.post('/api/wishlist').send({ members: [CACHED_WISHLIST], refresh: true });
+  const refresh = await api.post('/api/wishlist?refresh=1').send({ members: [CACHED_WISHLIST] });
   assert.equal(refresh.status, 429, 'a forced refresh of a cached key past the budget should be rate limited');
 
   // The fully-cached accounts are still served even though the budget is exhausted, and make no

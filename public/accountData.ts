@@ -5,7 +5,8 @@
 // functions (row-building, table wiring, URL/history updates, accounts-bar rendering) — none of
 // that belongs here; ListRoute.tsx owns the equivalent orchestration generically, for any list
 // kind, not just account-scoped ones.
-import { steamVanity, fmtLastPlayed, postJson, safeHref } from './utils.ts';
+import { createSignal, type Signal } from 'solid-js';
+import { isClientCacheFresh, steamVanity, fmtLastPlayed, postJson, safeHref } from './utils.ts';
 import { accountIdFor } from './accountsStore.ts';
 import type { AccountSlot } from './types.ts';
 
@@ -174,19 +175,82 @@ export interface AccountWishlist {
   fetchedAt: number | null;
 }
 
-// Fetches one account's owned games (its members' libraries unioned, same Family-simulation
-// /api/common-games already does server-side for a single slot) with per-game playtime/last-
-// played summed/maxed across members, plus its member accounts' display data.
-export async function fetchAccountOverview(
-  members: string[],
-  { refresh = false }: { refresh?: boolean } = {},
-): Promise<AccountOverview> {
-  const data = await postJson<CommonGamesResponse>(
-    '/api/common-games',
-    { members, refresh },
-    'Failed to fetch owned games',
-  );
+const refreshQuery = (refresh: boolean) => (refresh ? '?refresh=1' : '');
 
+type AccountDataKind = 'owned' | 'wishlist' | 'friends';
+interface CacheEntry {
+  promise: Promise<unknown>;
+  at: number;
+  failed?: boolean;
+  // Landed while replaced: no reader was told, so restoring it moves the version.
+  unannounced?: boolean;
+}
+// One fetch per kind and account, shared by every caller (Home, a list, the panel's ✓/☆).
+const accountCache = new Map<string, CacheEntry>();
+const versions = new Map<string, Signal<number>>();
+
+const cacheKey = (kind: AccountDataKind, members: string[]) => `${kind}:${accountIdFor(members)}`;
+const isFresh = (entry: CacheEntry | undefined): entry is CacheEntry =>
+  entry !== undefined && isClientCacheFresh(entry.at);
+
+function versionSignal(key: string): Signal<number> {
+  let signal = versions.get(key);
+  if (!signal) {
+    const [version, setVersion] = createSignal(0);
+    versions.set(key, (signal = [version, setVersion]));
+  }
+  return signal;
+}
+
+// Tracked; bumped when new data replaces a key's earlier data (a ↻, or a refetch past the max age).
+export function accountDataVersion(kind: AccountDataKind, members: string[]): number {
+  return versionSignal(cacheKey(kind, members))[0]();
+}
+
+function storeEntry<T>(key: string, promise: Promise<T>): Promise<T> {
+  const replaced = accountCache.get(key);
+  const entry: CacheEntry = { promise, at: Date.now() };
+  accountCache.set(key, entry);
+  const bump = () => versions.get(key)?.[1]((v) => v + 1);
+  promise.then(
+    () => {
+      if (accountCache.get(key) !== entry) entry.unannounced = true;
+      else if (replaced) bump();
+    },
+    () => {
+      entry.failed = true;
+      if (accountCache.get(key) !== entry) return;
+      // A failed refresh keeps what it replaced unless that failed too; else the next caller asks again.
+      if (!replaced || replaced.failed) return void accountCache.delete(key);
+      accountCache.set(key, replaced);
+      if (replaced.unannounced) {
+        replaced.unannounced = false;
+        bump();
+      }
+    },
+  );
+  return promise;
+}
+
+// A refresh never joins an in-flight fetch: it replaces it, so later callers get the fresh data.
+function cachedFetch<T>(
+  kind: AccountDataKind,
+  members: string[],
+  refresh: boolean,
+  load: () => Promise<T>,
+): Promise<T> {
+  const key = cacheKey(kind, members);
+  const entry = accountCache.get(key);
+  if (!refresh && isFresh(entry)) return entry.promise as Promise<T>;
+  return storeEntry(key, load());
+}
+
+// Tests start from an empty cache.
+export function clearAccountDataCache(): void {
+  accountCache.clear();
+}
+
+function toAccountOverview(data: CommonGamesResponse): AccountOverview {
   const slotSteamIds = data.players.map((p) => p.steamid);
   const games = data.games.map((game) => {
     const pt = data.playtime?.[game.appid] ?? {};
@@ -220,14 +284,38 @@ export async function fetchAccountOverview(
   return { games, players: data.players.map(toAccountPlayer), owners, fetchedAt: data.fetchedAt ?? null };
 }
 
+// Fetches one account's owned games (its members' libraries unioned, same Family-simulation
+// /api/common-games already does server-side for a single slot) with per-game playtime/last-
+// played summed/maxed across members, plus its member accounts' display data.
+export function fetchAccountOverview(
+  members: string[],
+  { refresh = false }: { refresh?: boolean } = {},
+): Promise<AccountOverview> {
+  return cachedFetch('owned', members, refresh, async () =>
+    toAccountOverview(
+      await postJson<CommonGamesResponse>(
+        `/api/common-games${refreshQuery(refresh)}`,
+        { members },
+        'Failed to fetch owned games',
+      ),
+    ),
+  );
+}
+
 // Fetches one account's wishlist (its members' wishlists unioned, same as /api/wishlist does
 // server-side).
-export async function fetchAccountWishlist(
+export function fetchAccountWishlist(
   members: string[],
   { refresh = false }: { refresh?: boolean } = {},
 ): Promise<AccountWishlist> {
-  const data = await postJson<WishlistResponse>('/api/wishlist', { members, refresh }, 'Failed to fetch wishlist');
-  return { items: data.items, fetchedAt: data.fetchedAt ?? null };
+  return cachedFetch('wishlist', members, refresh, async () => {
+    const data = await postJson<WishlistResponse>(
+      `/api/wishlist${refreshQuery(refresh)}`,
+      { members },
+      'Failed to fetch wishlist',
+    );
+    return { items: data.items, fetchedAt: data.fetchedAt ?? null };
+  });
 }
 
 // Both halves of what myOwnership.ts keeps per account — the owned games (with their playtime)
@@ -238,9 +326,14 @@ export async function fetchAccountWishlist(
 export async function fetchAccountOwnedData(
   accountId: string,
   opts: { refresh?: boolean } = {},
-): Promise<{ games: Map<number, AccountLibraryGame>; owners: Map<number, GameOwner[]>; fetchedAt: number | null }> {
-  const { games, owners, fetchedAt } = await fetchAccountOverview(membersFromAccountId(accountId), opts);
-  return { games: new Map(games.map((g) => [g.appid, g])), owners, fetchedAt };
+): Promise<{
+  games: Map<number, AccountLibraryGame>;
+  owners: Map<number, GameOwner[]>;
+  players: AccountPlayer[];
+  fetchedAt: number | null;
+}> {
+  const { games, owners, players, fetchedAt } = await fetchAccountOverview(membersFromAccountId(accountId), opts);
+  return { games: new Map(games.map((g) => [g.appid, g])), owners, players, fetchedAt };
 }
 
 export interface AccountFriend {
@@ -278,38 +371,47 @@ export interface AccountFriends {
 // fetchAccountWishlist uses). A member whose friends list is private shows up in `unavailable`
 // rather than being silently indistinguishable from "no friends" — see docs/dev/integrations.md's
 // Friends section.
-export async function fetchAccountFriends(
+export function fetchAccountFriends(
   members: string[],
   { refresh = false }: { refresh?: boolean } = {},
 ): Promise<AccountFriends> {
-  const data = await postJson<FriendsResponse>('/api/friends', { members, refresh }, 'Failed to fetch friends');
-  return {
-    friends: data.friends.map((f) => ({
-      steamid: f.steamid,
-      name: f.personaname || f.steamid,
-      avatarUrl: f.avatar || '',
-      profileUrl: safeHref(f.profileurl),
-      memberSince: fmtLastPlayed(f.timecreated),
-      countryCode: f.loccountrycode || '',
-      realName: f.realname || '',
-    })),
-    unavailable: data.unavailable,
-    fetchedAt: data.fetchedAt ?? null,
-  };
+  return cachedFetch('friends', members, refresh, async () => {
+    const data = await postJson<FriendsResponse>(
+      `/api/friends${refreshQuery(refresh)}`,
+      { members },
+      'Failed to fetch friends',
+    );
+    return {
+      friends: data.friends.map((f) => ({
+        steamid: f.steamid,
+        name: f.personaname || f.steamid,
+        avatarUrl: f.avatar || '',
+        profileUrl: safeHref(f.profileurl),
+        memberSince: fmtLastPlayed(f.timecreated),
+        countryCode: f.loccountrycode || '',
+        realName: f.realname || '',
+      })),
+      unavailable: data.unavailable,
+      fetchedAt: data.fetchedAt ?? null,
+    };
+  });
 }
 
 // Home's "pick an account" resolve step — there's no standalone "just resolve an identifier"
 // endpoint (see docs/dev/architecture.md's Request flow section), so this is the one place a raw typed
 // identifier (vanity name/URL/steamid) actually becomes a resolved AccountSlot, via the same
-// /api/common-games call every owned-games fetch already makes. The account card's counts are
-// fetched by HomeRoute itself, not here.
+// /api/common-games call every owned-games fetch already makes. Its library seeds the cache, so
+// the account card or list that follows doesn't download it again.
 export async function resolveAccountSlot(rawInputs: string[]): Promise<AccountSlot> {
-  const { players } = await postJson<CommonGamesResponse>(
+  const data = await postJson<CommonGamesResponse>(
     '/api/common-games',
     { members: rawInputs },
     'Failed to resolve account',
   );
-  return accountSlotFrom(players.map(toAccountPlayer), rawInputs);
+  const slot = accountSlotFrom(data.players.map(toAccountPlayer), rawInputs);
+  const key = cacheKey('owned', slot.members);
+  if (!isFresh(accountCache.get(key))) void storeEntry(key, Promise.resolve(toAccountOverview(data)));
+  return slot;
 }
 
 // The wishlist counterpart of fetchAccountOwnedData — appids plus the age of the server's copy,

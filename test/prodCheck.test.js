@@ -74,3 +74,15 @@ test("expectedStatuses: reads each call's declared statuses from lib/", () => {
   assert.deepEqual(e.getPlayerAchievements, ['400', '403']);
   assert.equal(Object.keys(e).length, 7, 'one per `expected: [` in lib/: a new one must be found too');
 });
+
+test('prodCheck (all): ignores the last run and reports the whole daily window', () => {
+  const m = healthy();
+  m.daily['2026-10-20'] = { hltb: { search: { 429: 3 } } };
+  m.sinceRestart.eventLoop = { maxDelayMs: 26827, maxDelayAt: '2026-11-04T21:01:16.334Z' };
+  const last = { at: '2026-11-05T15:00:00Z', seen: {} };
+  assert.deepEqual(run(m, { last }).lines, []);
+  assert.deepEqual(run(m, { last, all: true }).lines, [
+    'prod eventLoop: blocked 26827 ms at 2026-11-04T21:01:16.334Z',
+    'prod hltb.search 429: 3 on 2026-10-20',
+  ]);
+});

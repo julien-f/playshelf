@@ -13,7 +13,14 @@ const { execFileSync } = require('node:child_process');
 const zlib = require('node:zlib');
 const rateLimit = require('express-rate-limit');
 
-const { getCached, getCachedAt, isCached, capExpiry, getCacheEntryCounts } = require('./lib/cache');
+const {
+  getCached,
+  getCachedAt,
+  isCached,
+  isAnsweredFromCache,
+  capExpiry,
+  getCacheEntryCounts,
+} = require('./lib/cache');
 const { createDedup } = require('./lib/dedup');
 const {
   getMetrics,
@@ -36,9 +43,12 @@ const {
   getGameRating,
   getAppDetails,
   getStoreBrowseItem,
+  prefetchStoreBrowseItems,
   resolveSteamTags,
   extractDemoAppid,
   gameBasics,
+  releasedAt,
+  capByAge,
   searchStoreGames,
   searchCreatorGames,
   getProtonDbStatus,
@@ -140,7 +150,7 @@ const rateLimitBypassed = () => process.env.NODE_ENV === 'test' && process.env.R
 // One client as the limiters key it: an IPv4 address, or an IPv6 client's /56.
 const clientKey = (req) => rateLimit.ipKeyGenerator(req.ip);
 
-const isForceRefresh = (req) => req.query.refresh === '1' || req.query.refresh === 'true';
+const isForceRefresh = (req) => req.query.refresh === '1';
 
 // /api/bundles' query, shared with bundlesListLimit's skip so both compute the same cache key.
 const MAX_BUNDLES_OFFSET = 10_000; // 200 "Load more" pages: past it, an empty page ends the list
@@ -393,7 +403,6 @@ function parseMembers(req, res) {
   }
   return members;
 }
-const isBodyRefresh = (req) => req.body.refresh === true;
 const resolveSteamIds = async (raw) => [...new Set(await Promise.all(raw.map(resolveSteamId)))];
 
 // Stricter limit for searches — each uncached user triggers Steam API calls. Shared by
@@ -407,9 +416,8 @@ const searchLimit = namedRateLimit('search', {
   max: SEARCH_RATE_LIMIT_MAX,
   message: { error: 'Too many searches. Please wait a minute and try again.' },
   skip: (req) => {
-    // A full refresh always re-fetches every account, so it must always count — same rule
-    // isForceRefresh gets elsewhere in this file.
-    if (isBodyRefresh(req)) return false;
+    // A full refresh always re-fetches every account, so it must always count.
+    if (isForceRefresh(req)) return false;
 
     const ids = cachedSteamIds(req.body.members);
     if (!ids) return false;
@@ -427,7 +435,7 @@ const friendsLimit = namedRateLimit('friends', {
   max: FRIENDS_RATE_LIMIT_MAX,
   message: { error: 'Too many friends lookups. Please wait a minute and try again.' },
   skip: (req) => {
-    if (isBodyRefresh(req)) return false;
+    if (isForceRefresh(req)) return false;
     const ids = cachedSteamIds(req.body.members);
     return !!ids && [...ids].every((id) => isCached(friendsCacheKey(id)));
   },
@@ -442,21 +450,22 @@ const FAST_SOURCES = {
 };
 const STORE_SOURCES = { meta: appDetailsCacheKey };
 const DETAILS_SOURCES = { ...FAST_SOURCES, ...STORE_SOURCES };
-const sourcesCached = (sources, appid) => Object.values(sources).every((cacheKey) => isCached(cacheKey(appid)));
+const sourcesCached = (sources, appid, force = false) =>
+  Object.values(sources).every((cacheKey) => isAnsweredFromCache(cacheKey(appid), { force }));
 
 // The details limit exists to throttle upstream Steam/HLTB calls. Cache hits make
 // no upstream calls, so they must not count — otherwise a refresh of an already
-// loaded comparison (all cache hits) burns the budget and 429s itself.
+// loaded comparison (all cache hits) burns the budget and 429s itself. A forced one
+// counts unless every source was fetched too recently to refetch (FORCE_MIN_AGE_MINUTES).
 
-const allDetailsCached = (appid) => sourcesCached(DETAILS_SOURCES, appid);
+const allDetailsCached = (appid, force = false) => sourcesCached(DETAILS_SOURCES, appid, force);
 
 const detailsLimit = namedRateLimit('details', {
   max: DETAILS_RATE_LIMIT_MAX,
   skip: (req) => {
-    if (isForceRefresh(req)) return false; // force-refresh always re-fetches, so it must always count
     const { appid } = req;
     if (appid === undefined) return false; // POST /api/game-details/stream has no :appid
-    return allDetailsCached(appid);
+    return allDetailsCached(appid, isForceRefresh(req));
   },
 });
 
@@ -479,8 +488,7 @@ const metaLimit = namedRateLimit('meta', {
 const newsLimit = namedRateLimit('news', {
   max: DETAILS_RATE_LIMIT_MAX,
   skip: (req) => {
-    if (isForceRefresh(req)) return false;
-    return isCached(newsCacheKey(req.appid));
+    return isAnsweredFromCache(newsCacheKey(req.appid), { force: isForceRefresh(req) });
   },
 });
 
@@ -534,17 +542,18 @@ const parseSteamIdsQuery = (req) =>
 const achievementsLimit = namedRateLimit('achievements', {
   max: ACHIEVEMENTS_RATE_LIMIT_MAX,
   skip: (req) => {
-    if (isForceRefresh(req)) return false;
     const { appid } = req;
-    if (!isCached(schemaCacheKey(appid))) return false;
-    if (!isCached(achievementRarityCacheKey(appid))) return false;
+    // A forced player's progress always refetches (the library tier), so it counts.
+    const cached = (key) => isAnsweredFromCache(key, { force: isForceRefresh(req) });
+    if (!cached(schemaCacheKey(appid))) return false;
+    if (!cached(achievementRarityCacheKey(appid))) return false;
     const ids = parseSteamIdsQuery(req);
     // No steamids at all (a standalone lookup with no player loaded) only ever needed
     // schema+rarity above, both already confirmed cached — nothing left to check.
     if (!ids.length) return true;
     return ids.every((raw) => {
       const id = peekSteamId(raw);
-      return id && isCached(playerAchievementsCacheKey(id, appid));
+      return id && cached(playerAchievementsCacheKey(id, appid));
     });
   },
 });
@@ -686,7 +695,7 @@ app.post('/api/common-games', searchLimit, async (req, res) => {
   // Explicit refresh (a user-clicked "↻ Refresh", not a normal search) bypasses the
   // library-tier cache (owned games + player summaries) so a just-bought game or a
   // changed display name shows up immediately, without waiting out the TTL.
-  const refresh = isBodyRefresh(req);
+  const refresh = isForceRefresh(req);
 
   try {
     const ids = await resolveSteamIds(members);
@@ -767,7 +776,7 @@ app.post('/api/wishlist', searchLimit, async (req, res) => {
   const members = parseMembers(req, res);
   if (!members) return;
 
-  const refresh = isBodyRefresh(req);
+  const refresh = isForceRefresh(req);
 
   try {
     const ids = await resolveSteamIds(members);
@@ -811,7 +820,7 @@ app.post('/api/friends', friendsLimit, async (req, res) => {
   const members = parseMembers(req, res);
   if (!members) return;
 
-  const refresh = isBodyRefresh(req);
+  const refresh = isForceRefresh(req);
 
   try {
     const ids = await resolveSteamIds(members);
@@ -852,21 +861,31 @@ function settleSources(appid, sources, results) {
   const failed = Object.keys(results).filter((source) => results[source].status === 'rejected');
   // A source refused because this client spent its share: the stream says so once, not per game.
   const refused = Object.values(results).find((r) => r.status === 'rejected' && r.reason?.isClientBudgetExhausted);
-  // Each source's own age: one untouched store page mustn't date the rating fetched yesterday.
+  // Each source's own age: one untouched store page mustn't date the rating fetched yesterday. An expired row's
+  // is the age of a value served after a failed refetch.
   const fetchedAts = Object.fromEntries(
-    Object.entries(sources).map(([source, cacheKey]) => [source, getCachedAt(cacheKey(appid)) ?? null]),
+    Object.entries(sources).map(([source, cacheKey]) => [
+      source,
+      getCachedAt(cacheKey(appid), { expired: true }) ?? null,
+    ]),
   );
   return { fetchedAts, ...(failed.length && { failed }), ...(refused && { limited: refused.reason.message }) };
 }
 
 const value = (res) => (res.status === 'fulfilled' ? res.value : null);
 
+// Not out yet: the store data says so and Steam reviews (sanctioned, asked anyway) agree with none, since the browse
+// item can be a year old.
+const isUnreleased = (basics, rating) => !!basics?.comingSoon && rating === null;
+
 // Everything but appdetails: these upstreams keep a faster pace than Steam's store details cap, so a list's rows fill ahead
-// of it. Force-refresh gets its own lane, never handed a normal request's possibly cached result.
-function fetchFastDetails(appid, { force = false } = {}) {
+// of it. Force-refresh gets its own lane, never handed a normal request's result (its own reads may still be cached: FORCE_MIN_AGE_MINUTES). `priority`: one
+// game looked up, its HLTB search ahead of a list's backlog (a game already queued by a list joins its place).
+// `storeDetails`: the store part's appdetails when it runs alongside, so a browse item without basics doesn't read them again.
+function fetchFastDetails(appid, { force = false, priority = false, storeDetails } = {}) {
   return dedupDetails(`details:fast:${force ? 'force:' : ''}${appid}`, () => {
     const browsePromise = getStoreBrowseItem(appid, { force });
-    const basicsPromise = browsePromise.then((item) => gameBasics(item, appid));
+    const basicsPromise = browsePromise.then((item) => gameBasics(item, appid, storeDetails));
     // The game's name, which HLTB searches: always from store data resolved from the appid, never from the
     // client (no ownership check here). Without a confirmed name and type from the browse item, it waits for
     // appdetails', unforced: a forced one would refetch what the store part just refreshed, and only the name
@@ -877,19 +896,32 @@ function fetchFastDetails(appid, { force = false } = {}) {
       .then(async (store) =>
         store ? store : { name: (await getGameSchema(appid, { force })).name ?? null, type: null },
       );
+    const ratingPromise = getGameRating(appid, { force });
+    // A failed browse item or reviews call asks ProtonDB and HLTB as usual.
+    // Only a game the store data calls coming soon waits for its reviews.
+    const unreleasedPromise = basicsPromise
+      .then((basics) => basics?.comingSoon && ratingPromise.then((rating) => isUnreleased(basics, rating)))
+      .then(Boolean)
+      .catch(() => false);
     // A meta failure fails HLTB too, so it reads as failed, not as "no data".
-    const hltbPromise = namedPromise.then(({ name, type }) => getHLTB(appid, name, { type, force }));
+    const hltbPromise = Promise.all([namedPromise, unreleasedPromise]).then(([{ name, type }, unreleased]) =>
+      getHLTB(appid, name, { type, force, priority, unreleased }),
+    );
+    const protondbPromise = Promise.all([basicsPromise.catch(() => null), unreleasedPromise]).then(
+      ([basics, unreleased]) => getProtonDbStatus(appid, { force, type: basics?.type, unreleased }),
+    );
     const tagsPromise = resolveSteamTags(browsePromise);
     const demoPromise = browsePromise.then(extractDemoAppid);
     return Promise.allSettled([
-      getGameRating(appid, { force }),
+      ratingPromise,
       hltbPromise,
       tagsPromise,
       demoPromise,
-      getProtonDbStatus(appid, { force }),
+      protondbPromise,
       basicsPromise,
       namedPromise,
-    ]).then(([ratingRes, hltbRes, tagsRes, demoRes, protondbRes, basicsRes, namedRes]) => {
+      browsePromise,
+    ]).then(async ([ratingRes, hltbRes, tagsRes, demoRes, protondbRes, basicsRes, namedRes, browseRes]) => {
       if (ratingRes.status === 'rejected') logDetailsError(appid, 'rating', ratingRes.reason);
       if (hltbRes.status === 'rejected') logDetailsError(appid, 'hltb', hltbRes.reason);
       if (tagsRes.status === 'rejected') logDetailsError(appid, 'tags', tagsRes.reason);
@@ -897,16 +929,22 @@ function fetchFastDetails(appid, { force = false } = {}) {
         logDetailsError(appid, 'demo', demoRes.reason);
       if (protondbRes.status === 'rejected') logDetailsError(appid, 'protondb', protondbRes.reason);
       const basics = value(basicsRes);
-      // A game that isn't out yet has no reviews, ProtonDB reports or HLTB times; those misses
-      // expire like any other miss, so they fill in after release instead of a year later.
-      if (basics?.comingSoon) {
-        for (const [cacheKey, res] of [
-          [ratingCacheKey, ratingRes],
-          [protonDbCacheKey, protondbRes],
-          [hltbCacheKey, hltbRes],
-        ]) {
-          if (res.status === 'fulfilled' && res.value == null) capExpiry(cacheKey(appid), MISS_CACHE_TTL_MS);
-        }
+      // An unreleased game's empty sources expire like misses, to fill in after release; so do they when its phase is
+      // unknown (a browse item without basics, no store page cached). A released or delisted (no item) game's are
+      // aged (capByAge): empty ones fill in rarely, the others settle as the game ages.
+      const item = value(browseRes);
+      const phase = basics ?? (item && (await gameBasics(item, appid)));
+      const unsure = (item && !phase) || isUnreleased(phase, value(ratingRes));
+      const released = releasedAt(phase?.releaseDate, phase?.comingSoon);
+      for (const [cacheKey, res] of [
+        [ratingCacheKey, ratingRes],
+        [protonDbCacheKey, protondbRes],
+        [hltbCacheKey, hltbRes],
+      ]) {
+        if (res.status !== 'fulfilled') continue;
+        const empty = res.value == null;
+        if (!unsure) capByAge(cacheKey(appid), released, { empty });
+        else if (empty) capExpiry(cacheKey(appid), () => Date.now() + MISS_CACHE_TTL_MS);
       }
       const tags = value(tagsRes);
       return {
@@ -941,7 +979,11 @@ function fetchStoreDetails(appid, { force = false } = {}) {
 
 // Both parts as one reply: GET /api/game-details and a stream's fully cached games.
 async function fetchGameDetails(appid, options) {
-  const [fast, store] = await Promise.all([fetchFastDetails(appid, options), fetchStoreDetails(appid, options)]);
+  // Only a store page answered from the cache: one being fetched would hold the fast part behind Steam's store cap.
+  const storeCached = isAnsweredFromCache(appDetailsCacheKey(appid), { force: !!options?.force });
+  const storePromise = fetchStoreDetails(appid, options);
+  const storeDetails = storeCached ? () => storePromise.then(({ meta }) => meta) : undefined;
+  const [fast, store] = await Promise.all([fetchFastDetails(appid, { ...options, storeDetails }), storePromise]);
   const fetchedAts = { ...fast.fetchedAts, ...store.fetchedAts };
   const failed = [...(fast.failed ?? []), ...(store.failed ?? [])];
   const limited = fast.limited ?? store.limited;
@@ -990,22 +1032,33 @@ app.get('/api/bundles', bundlesListLimit, requireItad, async (req, res) => {
   try {
     // ?refresh=1 backs the browse page's own "↻ Refresh" — a bundle can go live or expire at any
     // time, so "the list I'm looking at is out of date" needs an answer that isn't "wait out the
-    // TTL". Only this page of the list is forced; GET /api/bundles/:id deliberately has no
+    // TTL". Only the pages this list comes from are forced; GET /api/bundles/:id deliberately has no
     // equivalent (findBundleById walks up to BUNDLE_SEARCH_MAX_PAGES pages, so forcing it would
     // cost several upstream calls to answer one deep link).
-    let bundles = await getBundles({ country, offset, limit, sort, expired, force: isForceRefresh(req) });
+    const force = isForceRefresh(req);
+    const pageKeys = [bundlesCacheKey({ country, offset, limit, sort, expired })];
+    let bundles = await getBundles({ country, offset, limit, sort, expired, force });
     // Only on a first page that holds the whole active list: the client stops paging there, so no
-    // later page repeats them. Its revival pages aren't forced by ?refresh=1: one call stays one call.
-    if (!expired && offset === 0 && bundles.length < limit)
-      bundles = [...bundles, ...(await findEarlyExpired(bundles, (params) => getBundles({ country, ...params })))];
-    // Age of this page of the list, for the "Updated <when>" beside the browse page's own ↻ —
+    // later page repeats them. Its revival pages (usually 1–2) are forced along with it.
+    if (!expired && offset === 0 && bundles.length < limit) {
+      const revived = await findEarlyExpired(bundles, (params) => {
+        pageKeys.push(bundlesCacheKey({ country, ...params }));
+        // A forced revival page that fails keeps its cached row: the ↻ shouldn't lose the whole list over it.
+        return getBundles({ country, ...params, force }).catch((err) => {
+          if (!force) throw err;
+          return getBundles({ country, ...params });
+        });
+      });
+      bundles = [...bundles, ...revived];
+    }
+    // Age of the pages this list came from, for the "Updated <when>" beside the browse page's own ↻ —
     // a bundle going live or expiring is exactly what that button is for, and that question is
-    // unanswerable without knowing how old the list on screen is.
+    // unanswerable without knowing how old the list on screen is. Fanatical's map has its own refetch rule.
     res.json({
       bundles: await withPickAndMix(withChoiceEnd(bundles)),
       offset,
       limit,
-      fetchedAt: getCachedAt(bundlesCacheKey({ country, offset, limit, sort, expired })) ?? null,
+      fetchedAt: oldestCachedAt(pageKeys),
     });
   } catch (err) {
     sendRouteError(res, 'bundles', err);
@@ -1158,7 +1211,7 @@ app.get('/api/game-bundles/:appid', gameBundlesLimit, requireItad, async (req, r
 
 app.get('/api/game-details/:appid', detailsLimit, async (req, res) => {
   const { appid } = req;
-  res.json(await fetchGameDetails(appid, { force: isForceRefresh(req) }));
+  res.json(await fetchGameDetails(appid, { force: isForceRefresh(req), priority: true }));
 });
 
 app.get('/api/game-meta/:appid', metaLimit, async (req, res) => {
@@ -1226,7 +1279,14 @@ app.get('/api/achievements/:appid', achievementsLimit, async (req, res) => {
     // Sequenced rather than batched with the calls below: even when appdetails didn't confirm
     // zero (meta missing/failed, or achievementCount unknown), don't fire rarity/per-player
     // calls until schema itself confirms there's something to annotate.
-    const schema = (await getGameSchema(appid, { force })).achievements;
+    let schema = (await getGameSchema(appid, { force })).achievements;
+    // Cached empty before the store page listed achievements: Steam added them since. Asked once, being newer after.
+    if (
+      schema.length === 0 &&
+      meta?.achievementCount > 0 &&
+      getCachedAt(schemaCacheKey(appid)) < getCachedAt(appDetailsCacheKey(appid))
+    )
+      schema = (await getGameSchema(appid, { force: true })).achievements;
     if (schema.length === 0) {
       return res.json(none);
     }
@@ -1381,9 +1441,14 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
   // queues that every other user's requests then wait behind.
   // A game cached throughout goes out as one event; any other as a fast part, ahead, and a store part, behind,
   // since appdetails runs under Steam's store details cap (lib/steam.js). Cached games lead each pool.
-  const whole = new Set(validated.filter(allDetailsCached));
-  const cachedFirst = (appids, sources) => {
-    const groups = Map.groupBy(appids, (appid) => sourcesCached(sources, appid));
+  // Each game's cachedness, read once: every row's timestamp costs a lookup.
+  const cached = {
+    fast: new Set(validated.filter((appid) => sourcesCached(FAST_SOURCES, appid))),
+    store: new Set(validated.filter((appid) => sourcesCached(STORE_SOURCES, appid))),
+  };
+  const whole = cached.fast.intersection(cached.store);
+  const cachedFirst = (appids, part) => {
+    const groups = Map.groupBy(appids, (appid) => cached[part].has(appid));
     return [...(groups.get(true) ?? []), ...(groups.get(false) ?? [])];
   };
   // Said once per stream; the workers go on, since cached games still fill in.
@@ -1425,12 +1490,18 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
   const loadStart = Date.now();
   const concurrent = ++streamsOpen;
   let listedMs;
-  const fastUncached = validated.filter((appid) => !sourcesCached(FAST_SOURCES, appid)).length;
-  const storeUncached = validated.filter((appid) => !sourcesCached(STORE_SOURCES, appid)).length;
+  const fastUncached = validated.filter((appid) => !cached.fast.has(appid)).length;
+  const storeUncached = validated.filter((appid) => !cached.store.has(appid)).length;
+  const fastOrder = cachedFirst(validated, 'fast').sort((a, b) => whole.has(b) - whole.has(a));
+  // Before the pools start, so their first games join its first chunks; never rejects.
+  prefetchStoreBrowseItems(
+    fastOrder.filter((appid) => !cached.fast.has(appid)),
+    { shouldStop: () => closed },
+  );
   try {
     await Promise.all([
       pool(
-        cachedFirst(validated, FAST_SOURCES).sort((a, b) => whole.has(b) - whole.has(a)),
+        fastOrder,
         STREAM_CONCURRENCY,
         (appid) =>
           whole.has(appid)
@@ -1444,7 +1515,7 @@ app.post('/api/game-details/stream', detailsLimit, async (req, res) => {
       pool(
         cachedFirst(
           validated.filter((appid) => !whole.has(appid)),
-          STORE_SOURCES,
+          'store',
         ),
         STREAM_STORE_CONCURRENCY,
         (appid) => fetchStoreDetails(appid).then((store) => ({ part: 'store', ...store })),

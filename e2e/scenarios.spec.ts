@@ -49,6 +49,22 @@ test('A1: first visit — resolve my account, then open my library', async ({ pa
   await expect(rows(page)).toHaveCount(6);
 });
 
+test('A1 edge: Home, then Owned, then a game download the library and wishlist once', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const asked: string[] = [];
+  page.on('request', (req) => {
+    const path = new URL(req.url()).pathname;
+    if (path === '/api/common-games' || path === '/api/wishlist') asked.push(path);
+  });
+  await page.goto('/');
+  await expect(page.locator('.account-counts')).toContainText('Owned: 6');
+  await page.getByRole('main').getByRole('link', { name: 'Owned', exact: true }).click();
+  await expect(rows(page)).toHaveCount(6);
+  await row(page, 'Hades').getByText('Hades').click();
+  await expect(page.locator('.panel-ownership-badge.owned')).toBeVisible();
+  expect(asked.sort()).toEqual(['/api/common-games', '/api/wishlist']);
+});
+
 test('A1 edge: a first visit says what the app does, and the account field looks it up', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.home-intro')).toContainText('ratings, completion times and prices');
@@ -378,10 +394,10 @@ test('A2 edge: an account picked mid-refresh does not read "Refreshing…" while
   await asPlayer(page, ALICE);
   await page.goto('/');
   await expect(page.locator('.account-counts')).toContainText('Owned: 6');
-  // Holds Alice's refresh and Bob's load (not the resolve, sent by name), so both are in flight.
+  // Holds Alice's refresh and Bob's wishlist (his library comes with his resolve), so both are in flight.
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/common-games', async (route) => {
+  await page.route(/\/api\/(common-games\?refresh=1|wishlist)$/, async (route) => {
     const body = route.request().postData() ?? '';
     if (body.includes(ALICE.steamid) || body.includes(BOB.steamid)) await held;
     await route.fallback();
@@ -400,18 +416,18 @@ test('A2 edge: an account picked mid-refresh does not read "Refreshing…" while
 
 test("A2 edge: a picked account whose library fails doesn't show the previous one's age", async ({ page }) => {
   await mockApi(page, { states: ['stale'] });
-  await asPlayer(page, ALICE);
+  // A stored account, so no resolve brings its library along.
+  await asPlayer(page, ALICE, { otherAccounts: ['Bob'] });
   await page.goto('/');
   const updated = page.locator('.account-updated-btn');
   await expect(updated).toContainText('12 days ago');
   await page.route('**/api/common-games', (route) =>
-    route.request().postData()?.includes(BOB.steamid)
+    route.request().postData()?.includes('9000') // otherAccounts' id
       ? route.fulfill({ status: 502, json: { error: 'Steam request failed' } })
       : route.fallback(),
   );
 
-  await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('bob');
-  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await page.locator('.account-tiles .account-tile').filter({ hasText: 'Bob' }).click();
   await expect(page.locator('.account-counts')).toContainText("Owned: couldn't load");
   await expect(updated).not.toContainText('12 days ago');
 });
@@ -884,7 +900,7 @@ test('A5 edge: a profile too thin for an archetype or story tile shows neither, 
 test('A5 edge: the profile stays on screen through a refresh that keeps every game', async ({ page }) => {
   await asPlayer(page, ALICE);
   // 10 h on each game: enough for Plays mostly.
-  await page.route('**/api/common-games', (route) => {
+  await page.route(/\/api\/common-games(\?refresh=1)?$/, (route) => {
     const req = route.request();
     const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
     for (const perPlayer of Object.values(body.playtime) as Record<string, number>[])
@@ -910,7 +926,7 @@ test('A5 edge: the profile stays on screen while a refresh streams in a new game
   await asPlayer(page, ALICE);
   let refreshed = false;
   // 10 h on each game: enough for Plays mostly; the refresh adds Don't Starve Together (322330).
-  await page.route('**/api/common-games', (route) => {
+  await page.route(/\/api\/common-games(\?refresh=1)?$/, (route) => {
     const req = route.request();
     const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
     if (refreshed) {
@@ -963,13 +979,13 @@ test('A5.4: the barely-played count opens Play next, best Taste Fit first, on a 
   await asPlayer(page, DAVE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(DAVE.owned.length);
-  const backlog = page.getByRole('button', { name: 'Play next: 4 games played 2 h or less' }); // a preorder included
+  const backlog = page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' });
   await backlog.click();
   await expect(page).toHaveURL(/view=/);
   await expect(
     page.getByRole('navigation', { name: 'Views' }).getByRole('link', { name: 'Play next' }),
   ).toHaveAttribute('aria-current', 'page');
-  await expect(rows(page)).toHaveCount(4);
+  await expect(rows(page)).toHaveCount(3);
   await expect(backlog).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('columnheader', { name: /Taste Fit/ })).toBeVisible();
   // Scored against the taste this visit just learned: nothing was stored before it.
@@ -1003,14 +1019,38 @@ test('A5 edge: Why these? lists the story games with their hours against the mai
   await expect(page.locator('#panel-title')).toHaveText('Hogwarts Legacy');
 });
 
-test('A5 edge: what to play next counts a preorder, which its Released date shows as upcoming', async ({ page }) => {
+test('A5 edge: what to play next leaves a preorder out, count included', async ({ page }) => {
   await asPlayer(page, DAVE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(DAVE.owned.length);
-  await page.getByRole('button', { name: 'Play next: 4 games played 2 h or less' }).click();
-  await expect(rows(page)).toHaveCount(4); // a saved view can't hold "released by today"
-  await expect(row(page, 'Someday Saga')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' }).click();
+  await expect(rows(page)).toHaveCount(3);
+  await expect(row(page, 'Someday Saga')).toHaveCount(0);
   await expect(row(page, 'Counter-Strike 2')).toHaveCount(1); // free, but playable now
+});
+
+// Play next as stored before unreleased games were left out of it.
+const STATUS_ERA_PLAY_NEXT = {
+  id: 'pn',
+  name: 'Play next',
+  template: 'play-next',
+  tableView: {
+    rangeFilters: { playtime: { min: '', max: '2' } },
+    excludeFilters: { status: ['Finished', 'Abandoned'] },
+    sorts: [{ key: 'tasteFit', dir: 'desc' }],
+    visibleCols: ['capsule', 'name', 'tasteFit', 'steamdbRating', 'hltbAll', 'playtime', 'genres', 'status'],
+    columnOrder: ['capsule', 'name', 'tasteFit', 'steamdbRating', 'hltbAll', 'playtime', 'genres', 'status'],
+  },
+};
+
+test('A5 edge: a Play next view saved before leaves the preorder out too', async ({ page }) => {
+  await asPlayer(page, DAVE, { listViews: { owned: [STATUS_ERA_PLAY_NEXT] } });
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(DAVE.owned.length);
+  await page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' }).click();
+  await expect(page).toHaveURL(/view=pn/);
+  await expect(rows(page)).toHaveCount(3);
+  await expect(row(page, 'Someday Saga')).toHaveCount(0);
 });
 
 test('F3 edge: a game marked Finished in its panel leaves Play next and its count, and stays marked', async ({
@@ -1019,17 +1059,17 @@ test('F3 edge: a game marked Finished in its panel leaves Play next and its coun
   await asPlayer(page, DAVE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(DAVE.owned.length);
-  await page.getByRole('button', { name: 'Play next: 4 games played 2 h or less' }).click();
-  await expect(rows(page)).toHaveCount(4);
+  await page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' }).click();
+  await expect(rows(page)).toHaveCount(3);
   await row(page, 'Counter-Strike 2').getByText('Counter-Strike 2').click();
   const status = page.locator('.game-panel').getByRole('combobox', { name: 'Status' });
   await status.selectOption('Finished');
-  await expect(rows(page)).toHaveCount(3);
-  await expect(page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' })).toBeVisible();
+  await expect(rows(page)).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Play next: 2 games played 2 h or less' })).toBeVisible();
   await page.reload();
-  await expect(rows(page)).toHaveCount(3);
+  await expect(rows(page)).toHaveCount(2);
   await page.keyboard.press('Escape'); // the reload reopened the panel, over the page on a phone
-  await page.getByRole('button', { name: 'Play next: 3 games played 2 h or less' }).click(); // back to All games
+  await page.getByRole('button', { name: 'Play next: 2 games played 2 h or less' }).click(); // back to All games
   await expect(row(page, 'Counter-Strike 2').getByRole('cell', { name: 'Finished' })).toHaveCount(0); // Status is hidden
   await row(page, 'Counter-Strike 2').getByText('Counter-Strike 2').click();
   await expect(status).toHaveValue('finished');
@@ -2830,6 +2870,39 @@ test('C3 edge: a saved comparison keeps the name its page had', async ({ page })
   await expect(page.getByRole('heading', { name: 'Alice vs. Bob' })).toBeVisible();
 });
 
+test('C3 edge: a saved comparison names its players, not their Steam IDs, without adding them to recents', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=bob');
+  await expect(groupRows(page)).toHaveCount(3);
+  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Save behind More actions
+  if (await more.isVisible()) await more.click();
+  await page.getByRole('button', { name: 'Save as a list' }).click();
+  await expect(page).toHaveURL(/\/lists\/[0-9a-f-]{36}$/);
+  await page.reload();
+  await expect(page.locator('.list-formula')).toContainText('Bob — Owned');
+  await expect(groupRows(page).filter({ hasText: 'Bob' }).first()).toBeVisible();
+  await expect(page.getByText(new RegExp(BOB.steamid))).toHaveCount(0);
+  await page.goto('/');
+  await expect(page.locator('.account-tiles')).toBeVisible();
+  await expect(page.locator('.account-tiles li').filter({ hasText: 'Bob' })).toHaveCount(0);
+});
+
+test('L2 edge: a saved list over an account stored nowhere names it once opened', async ({ page }) => {
+  const sources = [ALICE, BOB].map((p) => ({ kind: 'account-owned', accountId: p.steamid }));
+  const lists = [
+    { id: 'both', parentId: null, order: 0, createdAt: 0, updatedAt: 0, kind: 'dynamic', op: 'union', sources },
+  ];
+  await asPlayer(page, ALICE, { lists });
+  await page.goto('/lists/both');
+  const formula = 'Alice — Owned ∪ Bob — Owned';
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(formula);
+  await expect(page).toHaveTitle(new RegExp(formula));
+  await page.goto('/');
+  await expect(page.locator('.list-tree').getByRole('link', { name: formula })).toBeVisible();
+});
+
 test('C3 edge: a saved comparison offers Share list only, not a Share layout that only opens here', async ({
   page,
 }) => {
@@ -3540,7 +3613,13 @@ test('L5.1-3: a suggested view opens as its own tab, and is suggested once', asy
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(6);
   let menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Recently played', 'Play next', 'Short games', 'Save as view']);
+  await expect(menu.getByRole('button')).toHaveText([
+    'Recently played',
+    'Play next',
+    'Short games',
+    'Runs on Linux (ProtonDB)',
+    'Save as view',
+  ]);
   await menu.getByRole('button', { name: 'Play next' }).click();
 
   await expect(page).toHaveURL(/view=/);
@@ -3552,21 +3631,63 @@ test('L5.1-3: a suggested view opens as its own tab, and is suggested once', asy
   await expect(page.getByRole('button', { name: 'New view' })).toBeFocused();
 
   menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Recently played', 'Short games', 'Save as view']);
+  await expect(menu.getByRole('button')).toHaveText([
+    'Recently played',
+    'Short games',
+    'Runs on Linux (ProtonDB)',
+    'Save as view',
+  ]);
   await page.reload();
   await expect(rows(page)).toHaveCount(4);
+});
+
+test('L5 edge: with too few games played for Taste Fit, Play next lists best rated first and says so', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE); // 3 played: no taste profile
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(6);
+  const menu = await newView(page);
+  await menu.getByRole('button', { name: 'Play next' }).click();
+  await expect(page).toHaveURL(/view=/);
+  await expect(rows(page)).toHaveCount(4);
+  const names = () =>
+    rows(page)
+      .getByRole('checkbox')
+      .evaluateAll((boxes) => boxes.map((b) => b.getAttribute('aria-label')!.replace('Select row ', '')));
+  await expect.poll(names).toEqual(['Stardew Valley', 'Hades', 'Hollow Knight', 'Valheim']);
+  await expect(page.getByText('Taste Fit: Alice has too few games played, so best rated first')).toBeVisible();
 });
 
 test('L5 edge: Short games keeps barely played games with a short main story, known', async ({ page }) => {
   await asPlayer(page, CAROL);
   await page.goto('/lists/owned');
   const menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Recently played', 'Play next', 'Short games', 'Save as view']);
+  await expect(menu.getByRole('button')).toHaveText([
+    'Recently played',
+    'Play next',
+    'Short games',
+    'Runs on Linux (ProtonDB)',
+    'Save as view',
+  ]);
   await menu.getByRole('button', { name: 'Short games' }).click();
   await expect(page).toHaveURL(/view=/);
   await expect(rows(page)).toHaveCount(1); // not Portal 2 (6.3 h main), nor Counter-Strike 2 (no HLTB entry)
   await expect(rows(page).first()).toContainText('Quiet Little Game');
   await expect(page.locator('.pref-unsaved-banner')).toBeHidden(); // a fresh view has nothing to save
+});
+
+test('L5 edge: Runs on Linux keeps ProtonDB Gold or better', async ({ page }) => {
+  await asPlayer(page, CAROL);
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(CAROL.owned.length);
+  const menu = await newView(page);
+  await menu.getByRole('button', { name: 'Runs on Linux (ProtonDB)' }).click();
+  await expect(page).toHaveURL(/view=/);
+  await expect(rows(page)).toHaveCount(3);
+  await expect(row(page, 'It Takes Two')).toHaveCount(0); // Silver
+  await expect(row(page, 'Quiet Little Game')).toHaveCount(0); // no ProtonDB report
+  await expect(page.getByRole('columnheader', { name: /ProtonDB/ })).toBeVisible();
 });
 
 test('L5.2: the table as it is saves as a named view', async ({ page }) => {
@@ -4855,7 +4976,7 @@ test('D1 edge: the Updated tile keeps the rows and the selection while it refres
   // Holds the library refresh, so the table can be checked mid-way.
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/common-games', async (route) => {
+  await page.route(/\/api\/common-games\?refresh=1$/, async (route) => {
     await held;
     await route.fallback();
   });
@@ -4875,7 +4996,7 @@ test('D1 edge: the Updated tile keeps focus while it refreshes', async ({ page }
   await expect(rows(page)).toHaveCount(6);
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/common-games', async (route) => {
+  await page.route(/\/api\/common-games\?refresh=1$/, async (route) => {
     await held;
     await route.fallback();
   });
@@ -4892,7 +5013,7 @@ test('D1 edge: a failed Updated refresh leaves the tile there to try again', asy
   await asPlayer(page, ALICE);
   await page.goto('/lists/compare?u=alice&u=bob');
   await expect(groupRows(page)).toHaveCount(3);
-  await page.route('**/api/common-games', (route) =>
+  await page.route(/\/api\/common-games\?refresh=1$/, (route) =>
     route.fulfill({ status: 502, json: { error: 'Steam request failed' } }),
   );
   const updated = page.locator('.list-stat', { hasText: 'Updated' });
@@ -4902,9 +5023,59 @@ test('D1 edge: a failed Updated refresh leaves the tile there to try again', asy
   await expect(updated).not.toContainText('Refreshing');
   await expect(page.locator('.list-formula')).toBeVisible();
 
-  await page.unroute('**/api/common-games');
+  await page.unroute(/\/api\/common-games\?refresh=1$/);
   await updatedBtn.click();
   await expect(page.getByRole('main')).not.toContainText('Steam request failed');
+});
+
+test("D1 edge: Home's ↻ updates the ✓ marks shown elsewhere", async ({ page }) => {
+  await asPlayer(page, ALICE, { recentGames: [728880] }); // Overcooked! 2: Bob's, not Alice's
+  await page.goto('/');
+  await expect(page.locator('.account-counts')).toContainText('Owned: 6');
+  const box = page.getByPlaceholder('Look up any game…');
+  const option = page.getByRole('option', { name: /Overcooked! 2/ });
+  await box.focus();
+  await expect(option).toBeVisible();
+  await expect(option.locator('.game-search-badge.owned')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // Bought since: the refreshed library has it.
+  await page.route(/\/api\/common-games\?refresh=1$/, (route) => {
+    const req = route.request();
+    const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
+    body.games.push({ appid: 728880, name: 'Overcooked! 2' });
+    body.playtime[728880] = { [ALICE.steamid]: 0 };
+    return route.fulfill({ json: body });
+  });
+  await page.locator('.account-updated-btn').click();
+  await expect(page.locator('.account-counts')).toContainText('Owned: 7');
+  await box.focus();
+  await expect(option.locator('.game-search-badge.owned')).toBeVisible();
+});
+
+test("D1 edge: an open panel's In library badge follows a ↻ of the account", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'phone', 'the open panel covers the Updated tile on a phone');
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=bob');
+  await expect(groupRows(page)).toHaveCount(3);
+  await row(page, 'Overcooked! 2').getByText('Overcooked! 2').click(); // Bob's, not Alice's
+  await expect(page.locator('.game-panel')).toContainText('Overcooked! 2');
+  const badge = page.locator('.panel-ownership-badge.owned');
+  await expect(badge).toHaveCount(0);
+
+  // Bought since: Alice's refreshed library has it.
+  await page.route(/\/api\/common-games\?refresh=1$/, (route) => {
+    const req = route.request();
+    const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
+    if (req.postData()?.includes(ALICE.steamid)) {
+      body.games.push({ appid: 728880, name: 'Overcooked! 2' });
+      body.playtime[728880] = { [ALICE.steamid]: 0 };
+    }
+    return route.fulfill({ json: body });
+  });
+  await page.getByRole('button', { name: /^Updated\b/ }).click();
+  await expect(page.locator('.list-stat', { hasText: 'Updated' })).not.toContainText('Refreshing');
+  await expect(badge).toBeVisible();
 });
 
 test('D1 edge: an Owned list that failed to load still offers the Updated tile', async ({ page }) => {
@@ -5732,7 +5903,10 @@ test('F1 edge: stepping onto a preloaded screenshot shows it at once, not its th
   await mockApi(page, { states: ['slow-media'] }); // a screenshot's thumbnail and full image apart
   await page.goto('/game/1145360?shot=s1');
   const next = page.locator('.lb-preload[data-src*="Screenshot%202.svg?full"]');
-  await expect.poll(() => next.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+  // Its fetch starts once shot 1 has loaded, so two slow-media delays queue behind the page load.
+  await expect
+    .poll(() => next.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0), { timeout: 15_000 })
+    .toBe(true);
   await page.locator('#screenshot-lightbox .lb-img').evaluate((img: HTMLImageElement) => {
     const w = window as Window & { srcs?: string[] };
     w.srcs = [];
@@ -8064,16 +8238,22 @@ test.describe('with motion on', () => {
       await page.goto('/lists/owned');
       await expect(rows(page)).toHaveCount(6);
       await expect(row(page, 'Hades').locator('.game-thumb')).toHaveJSProperty('complete', true);
+      // The hero's name as the new view is captured: its image loading within the wait (as a cached
+      // one does) once cleared the hero's whole style attribute, name included, so nothing morphed.
       const started = page.evaluate(
         () =>
-          new Promise<boolean>((resolve) => {
+          new Promise<string | false>((resolve) => {
             const start = document.startViewTransition?.bind(document);
             if (!start) return resolve(false);
-            document.startViewTransition = (cb) => (resolve(true), start(cb));
+            document.startViewTransition = (cb) =>
+              start(async () => {
+                await (cb as () => Promise<void>)();
+                resolve(document.querySelector<HTMLElement>('#panel-hero .panel-hero-main')!.style.viewTransitionName);
+              });
           }),
       );
       await row(page, 'Hades').getByText('Hades').click();
-      expect(await started).toBe(viewTransitions);
+      expect(await started).toBe(viewTransitions && 'game-art');
       await expect(page.locator('#panel-title')).toHaveText('Hades');
       await expect(page.locator('.panel-hero-open')).toBeFocused();
       await expect(page.locator('.panel-hero-img')).toHaveCSS('opacity', '1');

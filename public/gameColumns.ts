@@ -913,6 +913,9 @@ function priceColumn(key: string, label: string, render = renderPrice): ColumnDe
   };
 }
 
+export const COMING_SOON = 'Coming soon';
+export const availabilityOf = (row: { comingSoon?: boolean }): string => (row.comingSoon ? COMING_SOON : 'Released');
+
 export const CORE_COLUMNS: ColumnDef<Row>[] = markFailedSources([
   // ── Identity ────────────────────────────────────────────────────────────────
   {
@@ -1023,6 +1026,15 @@ export const CORE_COLUMNS: ColumnDef<Row>[] = markFailedSources([
     defaultValueSort: { by: 'alpha', dir: 'desc' },
     ...datePartGroup('year', endOfReleasePeriod, '—'),
     keepVisibleWhenGrouped: true,
+    category: 'Play Time & Dates',
+  },
+  // Steam's own flag, so a template can exclude unreleased games: one can't hold "released by today".
+  {
+    key: 'availability',
+    label: 'Availability',
+    groupable: true,
+    value: availabilityOf,
+    format: fmt.str,
     category: 'Play Time & Dates',
   },
 

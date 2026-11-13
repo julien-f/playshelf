@@ -83,7 +83,7 @@ module.exports = defineConfig({
     // fallback: this machine runs several Vite apps at once, and a plain fallback means the
     // same app can land on a different port between runs — a different origin as far as the
     // browser's concerned, so localStorage/cookies/auth silently reset each time.
-    port: 58991,
+    port: Number(process.env.DEV_PORT) || 58991, // DEV_PORT: a worktree's own (scripts/dev-server.js)
     strictPort: true,
     proxy: mock
       ? undefined

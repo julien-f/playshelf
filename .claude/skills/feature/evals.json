@@ -1,0 +1,20 @@
+{
+  "routing": [
+    {
+      "prompt": "J'aimerais que les utilisateurs puissent facilement annoter des jeux, fais un brainstorm avec des agents spécialisés et avec moi, et dis moi ce que tu recommandes",
+      "expect": "feature"
+    },
+    {
+      "prompt": "I'd like this app to support games from other platforms (PlayStation, Switch). What approach do you suggest?",
+      "expect": "feature"
+    },
+    {
+      "prompt": "In the bundles list, I want to quickly see and filter the bundles that have games on my wishlist; make proposals",
+      "expect": "feature"
+    },
+    {
+      "prompt": "implement U167",
+      "expect": "ux-fix"
+    }
+  ]
+}

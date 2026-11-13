@@ -427,14 +427,14 @@ export default function BundlesBrowseRoute() {
     setFetchedAt((prev) => oldestFetchedAt(prev, at));
   }
 
-  async function fetchPage(force = false): Promise<BundleListItem[]> {
+  async function fetchPage(refresh = false): Promise<BundleListItem[]> {
     const { bundles, fetchedAt: at } = await fetchBundlePage({
       country: currentRegion(),
       sort: FETCH_SORT,
       expired: includeExpired(),
       offset,
       limit: PAGE_SIZE,
-      force,
+      refresh,
     });
     noteFetchedAt(at);
     return bundles;

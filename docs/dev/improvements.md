@@ -34,19 +34,17 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 ## Lists and selection
 
+- **U245 · minor · P1, F3** — the **Runs on Linux (ProtonDB)** suggested view is on Owned only, though "will it run here" is above all a pre-purchase check (P1). Offer it on Wishlist too.
 - **U161 · minor · C1, F3** — excluding a Steam tag drops every game carrying it, even as its 18th tag on a few votes (a "Horror" exclusion loses games with a passing horror level). The table filters raw column values, so: a **Main tags** column (tags ≥ ~30% of the top tag, threshold to measure first), filterable and groupable — excluding there is the soft exclusion, grouping there groups by dominant genre. Alternative: a per-column `filterValues(row)` in `@vates/data-table-core`.
 - **U168 · minor · F3, F4** — no way to explore the store by Steam tag ("the best roguelikes I don't own"). `IStoreQueryService/Query` lists appids by `tagids_must_match`, key-less ([integrations.md](integrations.md#a-developers-or-publishers-games--store-search-results)); needs its own volume review like F4's.
 - **U198 · minor · F3, D3** — no sign that a game got better or worse since release (Steam's "Recent Reviews"). A **Recent rating** from `GetAppReviews`' date range (last 30 days) — one more review call per uncached game, and a shorter TTL than the rating's ([integrations.md](integrations.md)).
 - **U199 · minor · F3, R2** — the rating mixes first impressions with long-term verdicts. A **Rating (10 h+)** from `GetAppReviews`' `playtime_min_hours`; one more review call per uncached game, threshold to measure first.
-- **U214 · minor · F3, L5** — Play next ranks an owned game that isn't out yet ("Coming soon", e.g. a pre-order) at the top, though it can't be played tonight. Leave unreleased games out of Play next and Short games.
-- **U216 · minor · F3, L5** — no view answers "runs on my Linux PC or Steam Deck": filtering on ProtonDB Gold or better (or native Linux) is several clicks each time. A suggested view on Owned, and on Wishlist if it proves useful; rated the most useful missing view in a persona review.
 - **U260 · minor · L5, F3** — filter chips don't say what they filter: Play next's status filter reads "Status:" with nothing after it (it keeps rows not marked Finished or Abandoned), a tier filter reads "Tier Price: ≤ 12.00" without its currency, and every chip's × is named "Clear filter" (a sort's says "Remove sort: Weighted Rating"). "Status: not Finished, Abandoned", values formatted as their column, "Clear filter: Status".
 - **U236 · polish · L1** — Home's folder/list tree deletes through a plain `window.confirm`, moves only through each row's "Move to…" select (no drag-and-drop), and soft-deleted lists have no trash or restore.
 
 ## Taste profile
 
 - **U204 · minor · F3, B1** — idled games (card farming, left running) skew Plays mostly, Taste Fit and Group Fit, and nothing tells them apart from real play. An "exclude from my profile" toggle per game.
-- **U215 · minor · F3, L5** — with too few played games, Taste Fit is "—" on every row, so Play next (sorted by it) shows its games in no useful order; only a line above the table says why. Fall back to the rating, or say in the view that it sorts by rating until Taste Fit can be computed.
 - **U230 · minor · R1, C7, F3** — a ranking stays inside its own list: Owned and Compare can't show or use it, and Taste Fit learns from hours, not from what the player said they prefer. A **My rank** column on Owned, and the ranking as a taste signal where one exists. From the Backloggd study (2026-10-30).
 - **U231 · polish · A5** — no look back over a year of play (Backloggd's stats pages). Steam gives only the last launch date per game, no history: at best "played this year" with total hours, not per-year hours or first launches. From the Backloggd study (2026-10-30).
 
@@ -57,12 +55,12 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U261 · minor · C1** — filtering a comparison by tag adds **Tag Match** as the last column, past Genres, off-screen at 1440 px (the table scrolls sideways), so the host doesn't see why the rows reordered. Insert it next to Name, as the lead sort it becomes.
 - **U213 · polish · C7, C1** — **Players** is open by default on desktop and costs ~210 px every visit (the table starts at 638 of 900 px). Remember the viewer's open/closed choice (a per-viewer convenience).
 - **U207 · minor · C1, C5, C6** — a comparison's Players section says where tastes meet, not what everyone can run or play together. Add the group's hard constraints: worst ProtonDB tier, co-op modes, controller support.
-- **U170 · major · C3, L2** — saving a comparison names a player who isn't a stored account by steam64 id: the formula reads "Alice — Owned ∪ 76561198000000002 — Owned", and so do its group labels and Home's tree, though the comparison's own title said "Alice vs. Bob" and a reload doesn't fix it. Store or resolve each source account's name when the list is saved.
+- **U247 · polish · C3, L2** — an account a saved list uses only through a Wishlist source, and that isn't stored, is named by its steam64 id: the wishlist fetch carries no profile, so opening the list can't store its name as it does for an Owned source (`keepAccountForLists`). Fetch the profile, or have the wishlist route return it.
 - **U196 · minor · C5, F1** — a Deck player has only ProtonDB's crowd tier to go on. A **Deck rating** from `GetAppReviews`' `primarily_steam_deck` (Steam reviews by mostly-Deck players), beside ProtonDB; one more review call per uncached game, and many games will have too few reviews — measure how many of a typical library get one first.
 - **U197 · minor · C5, F1** — same for desktop Linux: a **Linux rating** from `GetAppReviews`' `hardware_os`, with U196's cost and sparsity caveats.
 - **U139 · polish · C4** — panel Owned by reads "never played · not played". One phrase.
 - **U237 · minor · C3** — a saved dynamic list grouped by membership shows only the current account's playtime: no Played column per player and no per-player hours in the panel's "Owned by", which the live comparison has (`createDefaultFetchers`' `onOwners`).
-- **U247 · minor · C2** — a comparison's group missing one player has no price columns, so pricing what that player should buy means opening each panel. Price columns on comparisons, sortable (U244's totals then apply).
+- **U271 · minor · C2** — a comparison's group missing one player has no price columns, so pricing what that player should buy means opening each panel. Price columns on comparisons, sortable (U244's totals then apply).
 - **U248 · minor · C4** — the panel's Owned by covers the account's own members or a comparison's players, never the friends who own the game. Needs one library fetch per friend: blocked on a volume review against [integrations.md](integrations.md)'s trust tiers, before any design.
 
 ## Bundles and prices
@@ -82,12 +80,13 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 ## Accounts and first visit
 
 - **U181 · minor · A3, I3** — with **Add Steam Family account**, both lookup fields are named "Steam name, profile URL, or 64-bit ID", so a screen reader can't tell them apart. Number them ("Family member 2").
-- **U245 · polish · A1, A4** — the first account resolved doesn't become the ★ account: only a Steam sign-in stars one (`authStore.ts`), so a first visitor stars it by hand or never — and until then a friend's friends list marks no Mutual friends (A4.4). Star the first resolved account while none is starred.
+- **U270 · polish · A1, A4** — the first account resolved doesn't become the ★ account: only a Steam sign-in stars one (`authStore.ts`), so a first visitor stars it by hand or never — and until then a friend's friends list marks no Mutual friends (A4.4). Star the first resolved account while none is starred.
 - **U269 · polish · A1, S3** — `/lists/owned?u=frank` (a private profile) shows the named private-library message in the status line ("Couldn't resolve frank from this link: Frank's games aren't public…") without the **Steam privacy settings ↗** link Home, Compare and the friends list give it (`SteamPrivacyLink.tsx`); the status line is a string. Give it the link when the error carries `accounts`.
 - **U251 · minor · D3** — Home says nothing about what changed since the last visit: wishlist games now at a record low, new bundles holding wishlist games, owned games not yet in a ranking. Each item links to its list; "last visit" lives in localStorage (and Sync), nothing server-side.
 
 ## Consistency and polish
 
+- **U246 · polish · S1, L1** — on someone else's library (`?u=`), a Status filter pill reads just "Status:": statuses show only on the viewer's own account (`showingMyAccount()`), so the Play next view's exclusion has no value to name there. Hide the pill, or name the excluded values, where the column has none.
 - **U39 · polish · A4** — the search box shifts sideways as the account chip's label changes length ("Alice" vs. "Alice + Bob + Carol"); missing thumbnails have no placeholder, nor does a friend without an avatar on Home's friends list (Carol; Compare's Players draws her initial); wishlisted/owned name colours have no legend (still true in Recently Looked Up).
 - **U263 · polish · A1, L5** — Owned's h1 and tab title read "Alice's Library", the word the [glossary](glossary.md) avoids for Owned, under a nav link and Home card named Owned. "Alice's Owned games", or "Owned · Alice".
 - **U265 · polish · B1, C1** — ☆ means two things: wishlisted after a game's name (title "On wishlist", in tables and Compare) and near a record low after a price (the [glossary](glossary.md)'s only meaning), side by side in a bundle's rows ("It Takes Two ☆ · €7.00 ★"). A distinct wishlist mark (the heart Home's Wishlist card uses).

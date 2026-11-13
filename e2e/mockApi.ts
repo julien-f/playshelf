@@ -187,7 +187,7 @@ function details(appid: number, states: ReadonlySet<string>) {
       // So the panel's More links menu has an entry.
       website: appid === MEDIA_APPID ? 'https://example.com/' : null,
       achievementCount: appid === MEDIA_APPID ? ACHIEVEMENTS.length : 0,
-      platforms: { windows: true, mac: false, linux: false },
+      platforms: ['Windows'], // lib/steam.js's shape
       languages: big?.languages ?? [],
       isFree: g.free ?? false,
       priceInitial: null,
@@ -361,7 +361,11 @@ export function respond(
 
   // A refresh is fetched now; otherwise as of server start, or 12 days before it under `stale`.
   const accountFetchedAt = () =>
-    body.refresh ? Date.now() : states.has('stale') ? Date.now() - 12 * 86400_000 : Date.now();
+    url.searchParams.get('refresh') === '1'
+      ? Date.now()
+      : states.has('stale')
+        ? Date.now() - 12 * 86400_000
+        : Date.now();
 
   if (path === '/api/common-games') {
     const identifiers: string[] = body.members ?? [];
