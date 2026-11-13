@@ -28,7 +28,7 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 
 - **Symptom**: the page says a source "didn't answer"; `curl localhost:3000/api/<route>` returns Express's `Cannot GET /api/<route>` HTML; the `backend` log says `Error: cannot listen on <host>:3000: listen EADDRINUSE`.
 - **Cause**: another worktree's dev server already holds port 3000, so this checkout's backend never binds and Vite proxies `/api` to the other one, which runs older code.
-- **Fix**: `ss -ltnp 'sport = :3000'` names the process holding the port (`node scripts/session-end.js` lists only servers started through `mock-server.js`/`dev-server.js`); start this one on a free port with `PORT=3001 npm run dev` (Vite's proxy reads the same `PORT`), or stop the other.
+- **Fix**: `ss -ltnp 'sport = :3000'` names the process holding the port (`node scripts/session-end.js` lists only servers started through `mock-server.js`/`dev-server.js`); start this checkout's with `node scripts/dev-server.js up`, which gives a worktree its own ports, or stop the other.
 
 ## Tests
 
@@ -55,9 +55,9 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 
 - Agents in worktrees are fix-batch lanes: their own rules (branch from local `main`, per-lane message files, one command per call) live in [BATCH.md](../../.claude/skills/code-fix/BATCH.md)'s lane template.
 
-### `node_modules is behind package-lock.json` on a merge in the main checkout
+### `node_modules is behind package-lock.json` on a commit in the main checkout
 
-- **Symptom**: `scripts/check.js` (the hooks, `npm run check`) stops with `✗ node_modules is behind package-lock.json: <package> (…). Run npm ci.`, though the branch passed.
+- **Symptom**: `scripts/check.js` (the hooks, `npm run check`) stops with `✗ node_modules is behind package-lock.json: <package> (…). Run npm ci.`, though the branch passed (typically a merge that brings a lockfile change).
 - **Cause**: worktrees run their own `npm ci`; the main checkout's `node_modules` stays at whatever it last installed.
 - **Fix**: `npm ci` in the main checkout, then commit the merge again (it stays staged).
 
@@ -71,7 +71,7 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 
 - **Symptom**: `git log --graph` shows someone else's commit with a branch as second parent, but its tree lacks that branch's changes, which are still staged.
 - **Cause**: a merge left pending in the main checkout (`--no-commit`, conflicts, or a hook that blocked the merge commit) keeps `MERGE_HEAD`; the next `git commit` there, by any agent, becomes the merge and takes only what that agent staged. Another session may instead abort it (`reset: moving to HEAD` in the reflog, the merge's new files left untracked), even while its own commit runs the hook.
-- **Fix**: merge where nobody else commits, as CLAUDE.md's Git workflow says (a temp branch in the worktree, then `--ff-only`); `git merge --abort` one left pending. Once absorbed, commit the staged changes on top, naming the absorbing commit in the message.
+- **Fix**: merge in the branch's worktree with `node scripts/merge.js start|finish`, as CLAUDE.md's Git workflow says; `git merge --abort` one left pending. Once absorbed, commit the staged changes on top, naming the absorbing commit in the message.
 
 ### `fatal: this operation must be run in a work tree` after a commit
 

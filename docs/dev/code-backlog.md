@@ -97,15 +97,6 @@ Last audited: simplify 2026-10-11 · correctness 2026-10-11 · security 2026-10-
 
 ## Docs
 
-- **C323 · minor · S** — statements the code contradicts:
-  - `lists-and-accounts.md` Sync: "`PUT /api/me/prefs/:key` allows 20/min" (it's `PREFS_RATE_LIMIT_MAX`, 300; 20 is the `auth` limiter);
-  - `lists-and-accounts.md` Focus and order: "Rank N selected" exists nowhere (`Rank N game(s)`, "Rank N shown" is Continue's label); its rankable kinds omit developer/publisher and Recently Looked Up (`rankSourceRef`);
-  - `observability.md` inbound key example `GET /api/game/:appid` (no such route: `/api/game-details/:appid`);
-  - `frontend.md` "Nesting is uncapped" (`listShare.ts`'s `MAX_DEPTH = 50`); `AccountTiles.tsx`'s Remove focus also falls back to the previous tile;
-  - `journeys.md` B1 edges cite "frontend.md, Known gaps" (no such section: U238) and write "(★)" by hand;
-  - `integrations.md` demo banner's "🎮" (a `Gamepad2` icon) and `MISS_CACHE_TTL_MS` (the setting is `MISS_CACHE_TTL_MINUTES`); `testing.md` CI triggers omit `workflow_dispatch`;
-  - `lib/steam.js` comment cites `newsHtml, public/panel.js`, neither of which exists.
-- **C324 · minor · S** — process docs contradict the tooling or themselves: `pitfalls.md`'s merge fix (temp branch + `--ff-only`, now `scripts/merge.js`), EADDRINUSE fix (`PORT=3001 npm run dev`, against testing.md's "never start `server.js` by hand": `scripts/dev-server.js`), and the lockfile entry's "merge in the main checkout" symptom (any commit there); `testing.md` gives the flake procedure twice with different counts (5/20 vs `--repeat=24`) and the `page.clock` popup rule twice.
 - **C326 · cleanup · M** — the taste model (`tagTaste.ts`: Taste, Taste Fit, Group Fit, Similar in library, profile card, Players) has no doc: it's spread over game-table.md, panel-and-lightbox.md, lists-and-accounts.md and decisions.md, with no index entry. A `taste.md` would own it (and give C178 a doc).
 - **C327 · cleanup · M** — `integrations.md` (48 KB) mixes upstreams with a subsystem and frontend detail: ITAD bundles, prices, currency, Fanatical, Humble Choice and Game Pass (~22 KB) are one subsystem for a `bundles-and-prices.md`; `hltbAll`, the demo banner, capsule sizes, `flattenBundleGames`, `loadPrices` and `formatMoney` belong to the frontend docs; "IsThereAnyDeal › Rate limiting" is the app's inbound limiter (architecture.md's); "Trust tiers" heads 7 bullets of which 2 are tiers (pacing wants its own heading).
 - **C328 · cleanup · M** — `panel-and-lightbox.md` carries two other topics: the presentation window (~1,300 words, its own Vite entry and message protocol, for a `presentation.md` with a message table) and the app shell's scrolling (`.app-scroll`, Back to top, `StorageFullBanner`, for frontend.md).

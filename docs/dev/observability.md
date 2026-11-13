@@ -59,7 +59,7 @@ No auth, same trust level as `GET /api/health`. In memory, reset on restart, exc
 
 ### Inbound — `inbound`
 
-- Every request, recorded at `close` by a middleware in `server.js`, keyed `<METHOD> <route pattern>` (`GET /api/game/:appid`), never the filled URL; `(static)` for static files, `(no route)` for 404s, `GET (app shell)` for the page every client route serves.
+- Every request, recorded at `close` by a middleware in `server.js`, keyed `<METHOD> <route pattern>` (`GET /api/game-details/:appid`), never the filled URL; `(static)` for static files, `(no route)` for 404s, `GET (app shell)` for the page every client route serves.
 - `statusClasses` (`2xx`, `4xx`…), `firstServerErrorAt`/`lastServerErrorAt` dating any `5xx`; `aborted`: the client left before the reply ended; one that left before any reply is in no status class. The details stream counts to its end, unlike morgan's time, which stops at the headers.
 - `avgBytes` over replies with a `Content-Length` only: the details stream is chunked (its size: [code-backlog.md](code-backlog.md#performance)'s baseline).
 
