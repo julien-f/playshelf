@@ -25,6 +25,7 @@ const {
   mediaPending,
   noStorePage,
   steamAppAsset,
+  detailsFields,
 } = require('../public/utils.ts');
 
 // ── normalizeInput ────────────────────────────────────────────────────────────
@@ -493,4 +494,10 @@ test('mediaPending: only a game whose media are loading', () => {
   assert.equal(mediaPending({ details: details({ name: 'Hades' }), mediaFailed: true }), false);
   assert.equal(mediaPending({ details: details({ name: 'Hades', screenshots: [] }) }), false);
   assert.equal(mediaPending({ details: details(null), failedSources: ['meta'] }), false);
+});
+
+test("detailsFields: the reply's limited message stays off the game's details", () => {
+  const fields = detailsFields({ name: 'Hades', rating: null, limited: 'Too many lookups' });
+  assert.equal(fields.details.name, 'Hades');
+  assert.equal('limited' in fields.details, false);
 });
