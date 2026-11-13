@@ -92,6 +92,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U192 · polish · R1** — right after **Continue**, Undo is disabled with no reason given, so the last answer before Esc can't be undone (R1's edge "Undo right after resuming"); the stack is in memory only. Keep the undo stack with the ranking, or say "Undo covers this session's answers".
 - **U223 · polish · F1** — tag and developer pills are filter buttons on list routes but inert on `/search` and the rank screen, styled the same (same border, only the cursor differs), so a click there does nothing with no hint why. Give the inert pills a plainer style.
 - **U224 · polish · F1, I2** — focus on open differs per page: list routes move it to the hero's "Open in lightbox", `/game/:appid` to Close, `/search` keeps it on the row and Enter on the current row doesn't move it into the panel. One rule (the panel's first stop) everywhere, Search's row ring aside.
+- **U252 · polish · L3, L5, S1** — wording strays from the [glossary](glossary.md): **Share view** and **Default view** act on the layout, while a view is a saved tab (L5's Share view "sends the layout, not the view"); the search dropdown says "Recently looked up"; the Taste fit, Group fit and Tag match columns are in sentence case beside Title Case ones. Rename to match.
 
 ## Review tooling
 

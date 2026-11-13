@@ -46,7 +46,9 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 
 ## Wording and numbers
 
-- User terms, not model terms: "Owned by Alice", not a formula; a list or comparison is named after what it shows.
+- User terms, not model terms: "Owned by Alice", not a formula; a list or comparison is named after what it shows. One word per thing, the [glossary](glossary.md)'s.
+- Title Case for a list's or column's name (Recently Looked Up, Best Deal); sentence case for actions and messages (Save as a list, "Keep as my layout").
+- A message says what happened, then what to do, with the button when there is one: "IsThereAnyDeal didn't answer" beside its retry, not "Error: …".
 - Numbers read as the user thinks of them: rounded, with units ("10.5 h to beat", "€5.99"), never raw floats or timestamps; filters, chips and group headers format values as their column does.
 - Dates: ISO everywhere (`YYYY-MM-DD`, plus `HH:MM` where the time matters), so one date reads the same in a table, a card and the panel; a coarse Steam release ("Q4 2026") stays as Steam wrote it.
 
