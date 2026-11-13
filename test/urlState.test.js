@@ -90,6 +90,20 @@ test('urlWithParams: yields the bare pathname rather than a lone "?" once nothin
   assert.equal(urlWithParams(new URLSearchParams(), '/'), '/');
 });
 
+test('urlWithParams: the params naming the list (f, name, view) sort ahead of game', () => {
+  for (const key of ['f', 'name', 'view']) {
+    const params = new URLSearchParams(`?game=440&${key}=x&u=alice`);
+    assert.equal(urlWithParams(params, '/lists/p'), `/lists/p?u=alice&${key}=x&game=440`);
+  }
+});
+
+test("urlWithParams: keeps a shared formula's :;(), literal, its leaves' escapes intact", () => {
+  const url = '/lists/shared?f=union:(o:alice;d:Studio%2520%2528JP%2529,x)';
+  const params = new URLSearchParams(url.split('?')[1]);
+  params.set('game', '440');
+  assert.equal(urlWithParams(params, '/lists/shared'), `${url}&game=440`);
+});
+
 // ── ?u= — the account-override param ──────────────────────────────────────────
 
 test('parseAccountParam: a single identifier is the explored account', () => {
@@ -117,6 +131,13 @@ test('accountParamValues: returns the raw values, untouched, for forwarding', ()
 test('withAccountParam: carries the u= value onto a bare path', () => {
   assert.equal(withAccountParam('/lists/owned', '?u=alice'), '/lists/owned?u=alice');
   assert.equal(withAccountParam('/lists/owned', '?u=alice,bob_family'), '/lists/owned?u=alice%2Cbob_family');
+});
+
+test("withAccountParam: keeps a shared formula's :;() literal", () => {
+  assert.equal(
+    withAccountParam('/lists/shared?f=union:(o:bob;r)', '?u=alice'),
+    '/lists/shared?u=alice&f=union:(o:bob;r)',
+  );
 });
 
 test("withAccountParam: does not carry a comparison's several slots — they are not an override", () => {

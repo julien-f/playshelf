@@ -119,6 +119,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A saved comparison names its players instead of showing their Steam IDs, and so does a list saved from a shared link or a ranking made from someone else's link.
 - Reopening a game from the table morphs its picture into the panel again, not only on its first open
 - About now lists every data source, including Fanatical, PC Game Pass and Steam sign-in, and says what signing in stores and for how long data is kept.
+- A shared list's link keeps its formula readable after opening a game, and its parameters in a stable order
 
 ### Development
 
