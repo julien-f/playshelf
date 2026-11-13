@@ -156,24 +156,19 @@ export async function syncPrefsWithServer(steamid: string, serverEntries: Record
   return adopted && !unkept;
 }
 
-// A verified Steam login already IS a resolved identity — nobody should have to retype their own
-// steamid into Home's picker right after signing in with it. Only fills in whichever of
-// myAccount/currentAccount is still unset, same "never overwrites the stored preference"
-// philosophy as the `?u=` override (see accountsStore.ts's own comment on that) — an existing
-// pick, from an earlier manual resolve or a prefs merge above, is left alone. Runs on every
-// sign-in check but is a no-op once both are set, so a failed resolve (e.g. a transient network
-// error) just retries on the next page load rather than needing its own one-time flag.
-// Exported for unit testing (see test/authStore.test.js) — same reasoning as lib/hltb.js's own
-// exported stringSimilarity/levenshtein: worth exercising directly rather than only through
-// initAuth's full fetch('/api/me') + merge + this call chain.
-export async function autoPopulateAccountFromLogin(steamid: string): Promise<void> {
-  if (getMyAccount() && getCurrentAccount()) return;
+// A sign-in stars its account, replacing any ★; a later load only fills an unset ★ or current account,
+// so a pick made since stays. False on a failed resolve, so the next load retries.
+export async function autoPopulateAccountFromLogin(steamid: string, signingIn = false): Promise<boolean> {
+  const star = !getMyAccount() || (signingIn && getMyAccount()?.id !== steamid);
+  if (!star && getCurrentAccount()) return true;
   try {
     const account = await resolveAccountSlot([steamid]);
-    if (!getMyAccount()) setMyAccount(account);
+    if (star) setMyAccount(account);
     if (!getCurrentAccount()) setCurrentAccount(account);
+    return true;
   } catch (err) {
     console.error('[auth] failed to resolve your account after Steam sign-in', err);
+    return false;
   }
 }
 
@@ -200,13 +195,15 @@ export async function initAuth(): Promise<void> {
     if (epoch !== sessionEpoch) return;
     setCurrentUser({ steamid });
     setSignedInSteamid(steamid);
-    writeSignedInAs(steamid);
     setSessionExpired(false);
     if (adopted) {
       location.reload();
       return;
     }
-    await autoPopulateAccountFromLogin(steamid);
+    // Not this browser's last sign-in: a new one (first, after Sign out, or another account). The key is
+    // written only once the account is in, so a reload or a failed resolve still stars it next load.
+    const signingIn = readSignedInAs() !== steamid;
+    if (await autoPopulateAccountFromLogin(steamid, signingIn)) writeSignedInAs(steamid);
   } catch (err) {
     console.error('[auth] failed to check sign-in status', err);
     setCurrentUser(null);

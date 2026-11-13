@@ -62,6 +62,19 @@ test('A1 edge: the first account resolved becomes my ★ account; a later one do
   await expect(page.locator('.account-tiles .account-tile').first()).toHaveText(/Alice.*\(yours\)/);
 });
 
+test('A1 edge: signing in stars the signed-in account, replacing a friend looked up first', async ({ page }) => {
+  await page.goto('/');
+  const lookup = page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…');
+  await lookup.fill('bob');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Unstar Bob' })).toBeVisible();
+
+  await page.route('**/api/me', (route) => route.fulfill({ json: { steamid: ALICE.steamid, prefs: {} } }));
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Alice (yours)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Star Bob as mine' })).toBeVisible();
+});
+
 test('A2 edge: after unstarring my account, looking up a friend does not star them', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/');
@@ -3077,6 +3090,20 @@ async function compareAfterHomeFriends(page: Page): Promise<() => number> {
   await page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link', { name: 'Compare' }).click();
   return () => friendRequests - homeRequests;
 }
+
+test('C1 edge: friends Home is still fetching show in the player boxes once they arrive', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const friends = await gate(page, '**/api/friends');
+  await page.goto('/');
+  await friends.requested;
+  await page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link', { name: 'Compare' }).click();
+  const box = page.locator('.compare-form').getByRole('combobox').nth(1);
+  await box.focus();
+  await expect(page.getByRole('option', { name: /Friend/ })).toHaveCount(0);
+  friends.release();
+  await expect(page.getByRole('option')).toHaveText([/Bob.*Friend/, /Carol.*Friend/, /Dave.*Friend/]);
+  expect(friends.count).toBe(1);
+});
 
 test('C1 edge: the player boxes suggest the friends Home fetched, below the stored accounts, without fetching them again', async ({
   page,

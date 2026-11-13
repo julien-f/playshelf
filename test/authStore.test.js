@@ -452,6 +452,31 @@ test('initAuth (signed in): with nothing to adopt, fills in the account from the
   );
 });
 
+test('initAuth (signed in): a sign-in stars the signed-in account, replacing the ★ already set', async (t) => {
+  withBrowser(t);
+  const friend = makeAccount('friend');
+  accounts().setMyAccount(friend);
+  accounts().setCurrentAccount(friend);
+  markAlreadySynced();
+  mockMeFetch(t, { steamid: STEAMID, prefs: null });
+
+  await auth().initAuth();
+
+  assert.deepEqual(accounts().getMyAccount()?.members, [STEAMID]);
+  assert.deepEqual(accounts().getCurrentAccount(), friend);
+});
+
+test('initAuth (signed in): a later load of the same sign-in keeps the ★ picked since', async (t) => {
+  withBrowser(t);
+  await signIn(t);
+  const friend = makeAccount('friend');
+  accounts().setMyAccount(friend);
+
+  await auth().initAuth();
+
+  assert.deepEqual(accounts().getMyAccount(), friend);
+});
+
 test('initAuth (signed out): no user, no reload, and edits stay local', async (t) => {
   const seen = withBrowser(t);
   await signIn(t);
