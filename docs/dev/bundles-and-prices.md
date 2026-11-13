@@ -18,7 +18,7 @@ Bundle browsing (`/bundles`, `/lists/bundle/:bundleId`) and every price column c
 - **`GET /bundles/v1`** (`getBundles`, `GET /api/bundles`): current bundles, paginated (`offset`/`limit`, max 50/page), with a `country` param driving currency and (per ITAD, presumably) regional pricing.
 - **`mature=true` is always sent**: it's ITAD's _include_ switch, not an "only mature" filter, and the app has no age gate. Defaulting to `false` once hid 33 of 35 active bundles, including ones with no game carrying ITAD's per-game `mature` flag.
 - **No single-bundle endpoint upstream**, so `GET /api/bundles/:id` (`findBundleById`) searches: active bundles first (`expired=false`), then expired, up to `BUNDLE_SEARCH_MAX_PAGES` (6) pages of 50 each per state, then 404s. Each page reuses `getBundles`' cache. `fetchBundleById` (`public/bundleData.ts`) always calls this route, never the `/bundles` picker's possibly different list.
-- **Tiers**: `tiers[]` are price-ascending, and a game can appear in several (the bundle page keeps its cheapest: [game-table.md](game-table.md#each-list-kind-in-practice)).
+- **Tiers**: `tiers[]` are price-ascending, and a game can appear in several (the bundle page keeps its cheapest: [game-table.md](game-table.md#bundle-page)).
   - Confirmed on cached data (38 bundles): each tier lists only the games it adds. Some bundles list every game under the first tier and leave pricier ones empty (e.g. 16599, TrineVerse Triple Co-op Pack: €10.55 / €14.77 / €18.99, all 5 games in the first); the last tier with games then shows a range up to the priciest empty tier (`tierPriceMax`, also from `extractGameBundles`), since which tier holds which game is unknown. An empty unpriced trailing tier is ignored.
 - **Add-on tiers** (`addon: true`) are bought apart from the base tiers: not cumulative, not in price order, never part of a base tier's range (e.g. 16689: $4 / $6 / $9 / $13 / $16 base, $2 and $4 add-ons). An empty unpriced add-on (e.g. 14804) prices nothing and is dropped.
 - **A `null` tier price is not free.** In practice it's Fanatical's "Build Your Own ⟨N⟩ Bundle": one tier, a pool of 15–30 games, priced by quantity. A free or pay-what-you-want tier would carry `{amount: 0, …}` (never observed yet).
@@ -57,12 +57,12 @@ Bundle games carry only an ITAD id (uuid), slug and title. `resolveSteamAppIds` 
 - **Discount is computed against Steam Full Price, not ITAD's `cut`.** `cut` is each shop's discount off its own regular price, inconsistent across shops; `discountPct` (`public/utils.ts`) computes `1 − bestDeal/steamRegular` against the one stable reference. No clamping needed: Best Deal includes Steam, so it's never above Steam's price. `extractPriceInfo` doesn't surface `cut` at all. `renderCut` shows 0 as "—".
 - **Cached per (gid, country)** (`itad-price:{country}:{gid}`): a price differs per region, not just its currency label.
 - **One route for bundles and wishlists**, since only the identifier differs: a bundle sends `gids`; a wishlist (or a saved or shared list built from one or from a bundle, `listHasPriceSource`) sends `appids`, which the route resolves first via `resolveItadIds` — `POST /lookup/id/shop/{shopId}/v1`, confirmed live: takes `["app/<appid>", …]`, returns `{"app/<appid>": "<uuid>"|null, …}` keyed by what was sent. Each appid is cached individually (`itad-gid:{appid}`), a confirmed miss included. Exactly one of `gids`/`appids`, else 400. No route exposes appid → gid, since nothing needs the raw gid.
-- **Chunks**: the server caps a call at `MAX_PRICE_LOOKUP_GAMES` (500); the client chunks to match ([game-table.md](game-table.md#the-game-table)).
+- **Chunks**: the server caps a call at `MAX_PRICE_LOOKUP_GAMES` (500); the client chunks to match ([game-table.md](game-table.md#prices)).
 
 ### Currency is passed through, not converted
 
 - A tier or game price is in whatever currency ITAD's upstream shop charges; most shops (Humble, GreenManGaming, most Fanatical bundles) switch per region, but some only ever price in USD (verified live: a shop ITAD lists as "Digiphile", and at least one Fanatical bundle). That's upstream behavior, noted beside the region picker, not something to convert away.
-- So a row keeps two currency fields ([game-table.md](game-table.md#the-game-table)).
+- So a row keeps two currency fields ([game-table.md](game-table.md#prices)).
 
 ## Humble Choice — end date
 
@@ -99,7 +99,7 @@ Bundle games carry only an ITAD id (uuid), slug and title. `resolveSteamAppIds` 
     - It waits for each add to show. A game already in the basket can render unselected while the basket loads, so a click removes it; it clicks again.
     - A **SOLD OUT** card keeps a working-looking Add button that adds nothing; the bookmarklet reports it instead of clicking (the feed carries no stock, so the app can't say so in advance).
     - It runs only because Fanatical sends no Content-Security-Policy. Verified live through ITAD's Awin link (10 adds 500 ms apart all held). Depends on that markup: a redesign breaks it until updated.
-- **Frontend**: [game-table.md](game-table.md#each-list-kind-in-practice) — tier chips, the per-game Tier Price, the selection's cost (`cheapestPicks`).
+- **Frontend**: [game-table.md](game-table.md#bundle-page) — tier chips, the per-game Tier Price, the selection's cost (`cheapestPicks`).
 - **Pricing rule** (confirmed by the maintainer): any number of games can be picked, each at the per-game rate of the largest tier reached — 6 games at "5 for €5.99" cost 6 × €5.99 / 5. `cheapestPicks` also considers rounding up to a larger tier when its price is lower.
 - **Assumptions** (unconfirmed against Fanatical's checkout): below the smallest tier, that tier's price is the minimum; the total is rounded to the cent, not each game's price.
 

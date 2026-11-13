@@ -4,15 +4,6 @@ A Solid.js single-page app in `public/`, TypeScript throughout, bundled by Vite.
 
 The data model it renders — accounts, lists, combines, the localStorage schema — is [lists-and-accounts.md](lists-and-accounts.md). This file is the machinery: routes, modules, reactivity, URL state. The table and each list kind are [game-table.md](game-table.md); the side panel and lightbox [panel-and-lightbox.md](panel-and-lightbox.md); the presentation window [presentation.md](presentation.md).
 
-- [Routes](#routes)
-- [Shell](#shell)
-- [Module map](#module-map)
-- [Reactivity](#reactivity)
-- [Rows, streaming, and stale loads](#rows-streaming-and-stale-loads)
-- [Global search and the account chip](#global-search-and-the-account-chip)
-- [URL & sharing](#url--sharing)
-- [Preferences](#preferences)
-
 ## Routes
 
 | Path                      | What it is                                                              |
@@ -101,7 +92,7 @@ Above 768px the shell is locked to the viewport and **`.app-scroll` is the page'
 - `combine.ts` — the pure union/intersect/subtract/group-by-membership engine over resolved sets.
 - `ranking.ts` — the pure binary-insertion engine behind ranked lists.
 - `listLabels.ts` — how an op and a source read on screen, shared by the hero, Home's combine form, and the tree.
-- `membershipColumn.ts` — the "Owned by"/"In" column a group-by-membership list is grouped by (see [game-table.md](game-table.md#each-list-kind-in-practice)).
+- `membershipColumn.ts` — the "Owned by"/"In" column a group-by-membership list is grouped by (see [game-table.md](game-table.md#other-kinds)).
 - `gameStatuses.ts` — the viewer's own Finished/Abandoned mark per game, one synced map for whoever uses the browser.
 - `tagTaste.ts` — tag-weight vectors: an account's `Taste`, Taste Fit, Group Fit, similarity and the profile figures built on them (see [taste.md](taste.md)).
 - `bundleSnapshots.ts` — the last-known title and games of each bundle a saved list uses, kept for when ITAD stops listing it.
@@ -232,7 +223,7 @@ The "look up any game" box is one nav-bar search in the shell, not one per route
 - `?u=` — **one** slot: which account to show. Parsed and resolved once for the whole app by `AppShell.tsx`, read everywhere via `getEffectiveCurrentAccount()`, forwarded across in-app navigation by `withAccountParam`. Full semantics in [lists-and-accounts.md](lists-and-accounts.md).
 - `?u=` repeated — **several** slots: a comparison, one `u=` per player, comma-joined identifiers within a slot for a Family (the old Comparison page's spelling). Not an account override, so nothing resolves it as one and `withAccountParam` doesn't forward it. `/lists/compare` is its address; `normalizeSlots`/`compareUrl` (`urlState.ts`) write it, canonicalized to server-resolved steam64 ids. `&op=` picks the combine op, omitted for the default.
 - `?game=<appid>` / `&shot=<idx>` — which game the current list has open, and which screenshot; Recently Looked Up writes the game into its path (`/game/<appid>`) instead. Rewritten with `replaceState`; the one entry pushed per open overlay is `overlayHistory.ts`'s. `/game/:appid` is the canonical address for a game; the panel's 🔗 copy-link omits `?u=`, so a shared game link doesn't send recipients into the sender's account.
-- `?tv=` — a shared table-view snapshot, consumed once on arrival (see [game-table.md](game-table.md#the-game-table)).
+- `?tv=` — a shared table-view snapshot, consumed once on arrival (see [game-table.md](game-table.md#layouts-and-saved-views)).
 - `?view=<id>` — Owned/Wishlist's saved view; not forwarded by nav links (Owned opens All games), and a deleted one falls back to the whole list with a note.
 - `?q=` — `/search`'s term. Read on mount, written back (`setSearchQueryParam`, `urlState.ts`) as the on-page box is edited, debounced like the nav-bar box. Always `replaceState`.
 - `reorderUrlParams` (`urlState.ts`) puts every URL through one canonical param order, so the same state always serializes to the same string; `urlWithParams` is the single place a `URLSearchParams` becomes a URL, returning a bare path once the last param is deleted.

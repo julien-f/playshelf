@@ -4,22 +4,11 @@ The game table every list renders through, and how each list kind uses it: colum
 
 ## The game table
 
+### Column set
+
 Every list of games renders through the same `@vates/data-table-solid` table over the shared column set (`public/gameColumns.ts`), with `ListRoute.tsx` layering per-kind columns on via `insertColumnsAfter`. The shared set's hidden **Availability** (Released / Coming soon, Steam's `comingSoon`) is what Play next and Short games exclude: a stamped template can't hold "released by today".
 
-Per kind:
-
-- **owned** — Played (h), Last Played, after the HLTB cluster, and Status (the viewer's own Finished/Abandoned mark, `gameStatuses.ts`, on their own account's games only).
-- **wishlist** — Wishlist Rank, then `PRICE_COLUMNS`, plus Added.
-- **bundle** — ownership status, Tier Price, Add-on, then `PRICE_COLUMNS`.
-- **recent** — ownership status, plus Looked up (each entry's `lookedUpAt` as a date-time, unstamped legacy entries last), its default sort, newest first; grouped by day, not filterable (the range filter's day bounds are UTC).
-- **compare** — ownership status, plus one Played (h) per player, shown by default and keyed by position (`playtime:<i>`) so a saved layout fits the next comparison, one hidden Last 2 weeks (h) per player (`recentPlaytime:<i>`), Group Fit shown by default, and the membership column when grouped by membership.
-- **creator** and **game-pass** — ownership status, `PRICE_COLUMNS`, and Taste Fit shown by default.
-- **shared** — ownership status, plus the membership column when grouped by membership. A priced source adds `PRICE_COLUMNS`, and a bundle source its Tier Price too (`bundleTierFields`, fed by `createDefaultFetchers`' `onBundleGames`; the first bundle wins a game in two), shown once a remaining row has one; a pick-and-mix rate reads "Varies", having no selection to count, and a region change re-fetches the bundle.
-- **user** — ownership status, plus Played (h)/Last Played for the **current account** (hidden by default) and Status, as on owned, stamped alongside the ✓/☆ markers from `myOwnership.ts`'s `peekMyOwnership` — the same library fetch, no extra request. A list with a priced source (`listHasPriceSource`: built from a wishlist or a bundle) adds `PRICE_COLUMNS`, and a non-ranked one a bundle source's Tier Price, as **shared** does. A **ranked** list adds Rank, its default sort.
-
 `ListRoute.tsx` renders the table, its `toolbarEnd` included, with its own `render()` call, outside the router: `useNavigate`, `useLocation` or `<A>` there throws `<A> and 'use' router primitives can be only used inside a Route.` Pass a callback from the route instead, or render the control in the route's own JSX (the hero).
-
-Default sort is Weighted Rating descending, except a bundle (grouped by tier, cheapest first, then rating: `bundleColumns` swaps in a Tier Price keyed on the exact tier, `tierGroupKey` — add-ons after the base tiers, unpriced games last; its sort and filter value too, so a pressed tier's range leaves add-ons out — headed by `tierGroupLabel` with the step over the tier below, a range "which tier isn't listed", or "every game" for one price, its cells hidden while grouped — see Tier value below; a pick & mix one grouped by `PICK_OWNERSHIP_COLUMN` — wishlisted, not owned, owned — then rating, its Per pick column hidden since every row has the same rate), recent (Looked up) and a ranked list (Rank). `/bundles` is a table of bundle rows with its own small column set, reusing `gameColumns.ts`'s bucket/compare helpers so its price/date/count columns group and sort like their game-table counterparts.
 
 `gameColumns.ts`:
 
@@ -33,14 +22,29 @@ Default sort is Weighted Rating descending, except a bundle (grouped by tier, ch
 - HLTB's default column is `hltbAll` ("HLTB (h)"), HLTB's All PlayStyles ([integrations.md](integrations.md#hltb--no-npm-package)): being one representative number, it's also the ranking card's "10.5 h to beat".
 - Prev/next ordering (`getGameList`) reads the table's `processedData()` accessor; nothing imports the unsupported `@vates/data-table-core/internal`.
 
+### Columns per kind
+
+- **owned** — Played (h), Last Played, after the HLTB cluster, and Status (the viewer's own Finished/Abandoned mark, `gameStatuses.ts`, on their own account's games only).
+- **wishlist** — Wishlist Rank, then `PRICE_COLUMNS`, plus Added.
+- **bundle** — ownership status, Tier Price, Add-on, then `PRICE_COLUMNS`.
+- **recent** — ownership status, plus Looked up (each entry's `lookedUpAt` as a date-time, unstamped legacy entries last), its default sort, newest first; grouped by day, not filterable (the range filter's day bounds are UTC).
+- **compare** — ownership status, plus one Played (h) per player, shown by default and keyed by position (`playtime:<i>`) so a saved layout fits the next comparison, one hidden Last 2 weeks (h) per player (`recentPlaytime:<i>`), Group Fit shown by default, and the membership column when grouped by membership.
+- **creator** and **game-pass** — ownership status, `PRICE_COLUMNS`, and Taste Fit shown by default.
+- **shared** — ownership status, plus the membership column when grouped by membership. A priced source adds `PRICE_COLUMNS`, and a bundle source its Tier Price too (`bundleTierFields`, fed by `createDefaultFetchers`' `onBundleGames`; the first bundle wins a game in two), shown once a remaining row has one; a pick-and-mix rate reads "Varies", having no selection to count, and a region change re-fetches the bundle.
+- **user** — ownership status, plus Played (h)/Last Played for the **current account** (hidden by default) and Status, as on owned, stamped alongside the ✓/☆ markers from `myOwnership.ts`'s `peekMyOwnership` — the same library fetch, no extra request. A list with a priced source (`listHasPriceSource`: built from a wishlist or a bundle) adds `PRICE_COLUMNS`, and a non-ranked one a bundle source's Tier Price, as **shared** does. A **ranked** list adds Rank, its default sort.
+
+### Default sort and grouping
+
+Default sort is Weighted Rating descending, except a bundle (grouped by tier, cheapest first, then rating: `bundleColumns` swaps in a Tier Price keyed on the exact tier, `tierGroupKey` — add-ons after the base tiers, unpriced games last; its sort and filter value too, so a pressed tier's range leaves add-ons out — headed by `tierGroupLabel` with the step over the tier below, a range "which tier isn't listed", or "every game" for one price, its cells hidden while grouped — see Tier value below; a pick & mix one grouped by `PICK_OWNERSHIP_COLUMN` — wishlisted, not owned, owned — then rating, its Per pick column hidden since every row has the same rate), recent (Looked up) and a ranked list (Rank). `/bundles` is a table of bundle rows with its own small column set, reusing `gameColumns.ts`'s bucket/compare helpers so its price/date/count columns group and sort like their game-table counterparts.
+
+A grouped list is always grouped and sorted by membership first (`withMembershipGrouping`, applied over the restored view — a comparison shares its view key with its flat operations); the flat operations drop it (`withoutMembershipGrouping`). Groups start expanded (`defaultGroupsCollapsed: false`).
+
+### Prices
+
 **Record-low badges** — `dealRecordTier(price, row)` (`utils.ts`) is the one source for them, over `DEAL_RECORD_TIERS`: green + bold + 🔥 all-time low, plain + ★ 1-year, amber + ☆ 3-month, rarest first. `<=`, since the current deal can be the low itself. A deal with no discount gets no tier, since ITAD's lows include full prices ([bundles-and-prices.md](bundles-and-prices.md#prices)).
 
 - `renderBestDeal` badges the price instead of putting the shop name in the cell; the shop is in the `title` tooltip (plus the tier's `tooltipLabel`, e.g. " — all-time low") and in the hidden `bestDealShop` column.
 - The panel's Price card (`PriceSection`) keeps its own render code on `dealRecordTier`: importing `renderBestDeal` would pull `@vates/data-table-solid` into the panel. Unlike the cell, it spells each badge out ("★ 1-year low", "all-time low €2.49 🔥"), having the room.
-
-**Failed sources are marked apart from no data.** `GET /api/game-details` lists rejected sources in `failed` (absent when none did), kept as `row.failedSources` by `applyDetailsEvent`. The rating, HLTB, ProtonDB, store-page (`meta`) and tag columns (`markFailedSources`) show ⚠ with a tooltip instead of "—", the status line counts them per source (`failedSummary`), and the panel's glance chips say "didn't answer" — its Refresh details retries, since failed sources aren't cached. A failed price batch sets `row.pricesFailed` (`nullMissingPriceFields`): the price columns show the same ⚠ and the Price card says IsThereAnyDeal didn't answer; the Prices tile's refresh retries.
-
-**A refusal is said once, in the server's words.** Past this client's share of the outbound budgets ([observability.md](observability.md#outbound-budgets)), the details stream sends one `{ limited }` event: the status line shows its message instead of `failedSummary`'s per-source counts. A 429 on the list's prices, or on the panel's achievements, price or bundles (`refusalMessage`, kept per key by `panelData.ts`), shows the server's message instead of "didn't answer".
 
 **Prices load apart from details** (`loadPrices`, `ListRoute.tsx`; the upstream side: [bundles-and-prices.md](bundles-and-prices.md#prices)):
 
@@ -58,16 +62,26 @@ Default sort is Weighted Rating descending, except a bundle (grouped by tier, ch
 - A currency more than 2× off USD in `currency.ts`'s rates (yen, won, rupee…) is converted to USD before bucketing, or everything lands in "100+", and its labels say so ("$5–$15"); a near one (euro, pound…) is bucketed as is, since converting would push its .99 prices across the bounds.
 - Tier Price's missing bucket reads "Varies" (`formatMissingGroup(formatPriceTier, 'Varies')`), matching `renderTierPrice`'s "Varies ≠ no data". `ListRoute.tsx`'s `TIER_PRICE_COLUMN` reuses the bucket helpers.
 
+**Price Status** (`priceStatus`, hidden by default; `PRICE_STATUS_COLUMN`, `computePriceStatus`) makes "which games are at a record low" a filter or group: `All-Time Low` / `1-Year Low` / `3-Month Low` (`DEAL_RECORD_TIERS`' `statusLabel`, via `dealRecordTier`) / `On Sale` (a real discount, not a record) / `Not Discounted` (`bestDealCut === 0`) / `—` (no data). A `value()` function, so no extra fetch or stored field.
+
+- `PRICE_STATUS_TIERS` is the single worst-to-best list behind its sort (`PRICE_STATUS_ORDER` → `comparePriceStatus`) and its look (`renderPriceStatus`); its record entries spread `color`/`icon`/`bold` from `DEAL_RECORD_TIERS`, so the column can't drift from the Best Deal badge. On Sale and Not Discounted stay plain text.
+- `defaultSortDir: 'desc'` puts All-Time Low first; `render` also drives group headers, so they show the badge.
+
+### Failed and refused sources
+
+**Failed sources are marked apart from no data.** `GET /api/game-details` lists rejected sources in `failed` (absent when none did), kept as `row.failedSources` by `applyDetailsEvent`. The rating, HLTB, ProtonDB, store-page (`meta`) and tag columns (`markFailedSources`) show ⚠ with a tooltip instead of "—", the status line counts them per source (`failedSummary`), and the panel's glance chips say "didn't answer" — its Refresh details retries, since failed sources aren't cached. A failed price batch sets `row.pricesFailed` (`nullMissingPriceFields`): the price columns show the same ⚠ and the Price card says IsThereAnyDeal didn't answer; the Prices tile's refresh retries.
+
+**A refusal is said once, in the server's words.** Past this client's share of the outbound budgets ([observability.md](observability.md#outbound-budgets)), the details stream sends one `{ limited }` event: the status line shows its message instead of `failedSummary`'s per-source counts. A 429 on the list's prices, or on the panel's achievements, price or bundles (`refusalMessage`, kept per key by `panelData.ts`), shows the server's message instead of "didn't answer".
+
+### Scores
+
 **Tag Match** (`tagMatch`, `tagMatchColumn`) scores each row against the Tags column's include filter: the mean of the filtered tags' `tagWeights` (absent: 0), or their minimum when the Tags filter is on All (`filter.modes().tags === 'and'`), in %. Its `value()` reads the filter through the `filterTable` signal, so the table's own `processData` memo re-sorts when the filter changes. A transition of that filter between empty and not (`syncLeadColumn`) shows the column and makes it the first sort, or removes both along with any Tag Match range (all its values turn `null`, so a leftover range would hide every row); it's armed only after the stored view is restored, so a saved view keeps its own sort.
 
 **Owned's profile, Taste Fit, a comparison's Players and Group Fit**: [taste.md](taste.md).
 
 **Similarity** (`similarity`, `similarityColumn`) scores rows against `ListRoute.tsx`'s `similarTo` game (set from the panel through the `similarTo`/`setSimilarTo` route handlers) with `tagTaste.ts`; the target scores 100, a tagged non-match 0. `syncLeadColumn` shows and sorts it the same way; it's reset on every table build, so a stored view never keeps it.
 
-**Price Status** (`priceStatus`, hidden by default; `PRICE_STATUS_COLUMN`, `computePriceStatus`) makes "which games are at a record low" a filter or group: `All-Time Low` / `1-Year Low` / `3-Month Low` (`DEAL_RECORD_TIERS`' `statusLabel`, via `dealRecordTier`) / `On Sale` (a real discount, not a record) / `Not Discounted` (`bestDealCut === 0`) / `—` (no data). A `value()` function, so no extra fetch or stored field.
-
-- `PRICE_STATUS_TIERS` is the single worst-to-best list behind its sort (`PRICE_STATUS_ORDER` → `comparePriceStatus`) and its look (`renderPriceStatus`); its record entries spread `color`/`icon`/`bold` from `DEAL_RECORD_TIERS`, so the column can't drift from the Best Deal badge. On Sale and Not Discounted stay plain text.
-- `defaultSortDir: 'desc'` puts All-Time Low first; `render` also drives group headers, so they show the badge.
+### Layouts and saved views
 
 **View persistence.** A table's layout (visible columns, sort, grouping, filters) changes only on **Save**; until then a change is a draft (`tableViewPrefs.ts`'s `layoutDraft`):
 
@@ -79,11 +93,25 @@ Default sort is Weighted Rating descending, except a bundle (grouped by tier, ch
 - **Drafts**: every table change goes to a draft in `sessionStorage`, per stored layout (and, on Owned/Wishlist, per account shown; on a comparison, per set of players): it survives a table rebuild, a game page and Back, and a reload in the tab; closing the tab drops it. `UnsavedChangesBanner` names what differs (signed in or not); **Save** stores the layout (page, search and the route's temporary Similarity/Tag Match columns left out), **Discard** goes back to it.
 - **The baseline** is the stored layout as this build applies it (`applyView`'s membership grouping, columns this build lacks resolved away, defaults dropped), captured right after applying it: compared raw, an untouched comparison or a Wishlist without prices would read as changed.
 - An incoming `tv` wins for that visit only: `layoutDraft`'s `restore` applies it without storing it and strips it from the URL, and the route pauses view persistence behind `SharedViewBanner` (the unsaved banner hidden) until the viewer keeps it (saved at once) or goes back to their own. Consuming it matters because a table is rebuilt far more often than on page load.
-- A **saved view** (`?view=<id>` on Owned/Wishlist, `listViews.ts`) is the table's stored layout instead of the kind's pref key. A `?view=` change re-applies the new view in place, without a reload; each view keeps its own draft. Reset layout is hidden there (Discard does it); Share layout drops `view=`. A view created from a template that still equals one of its past stamps (`PAST_STAMPS`, `listViews.ts`: literals, key order included, compared as JSON) reads as today's stamp, so a template change reaches unedited views; changing a template adds its current stamp there first.
 - Someone else's Owned/Wishlist (`?u=`): its draft stays with that account; Save there stores _my_ layout for the kind, and the banner says so.
 - A table-view key syncs like any pref, pushed when saved (see [lists-and-accounts.md](lists-and-accounts.md#sync)).
 
+#### Saved views
+
+Owned and Wishlist (`ViewKind`) have named views of the list (`listViews.ts`), stored in the `listViews` pref for whichever account is current ([lists-and-accounts.md](lists-and-accounts.md#storage-schema)). Only explicit actions write one: create, Save, rename, delete — never a table edit.
+
+- A **saved view** (`?view=<id>` on Owned/Wishlist, `listViews.ts`) is the table's stored layout instead of the kind's pref key. A `?view=` change re-applies the new view in place, without a reload; each view keeps its own draft. Reset layout is hidden there (Discard does it); Share layout drops `view=`. A view created from a template that still equals one of its past stamps (`PAST_STAMPS`, `listViews.ts`: literals, key order included, compared as JSON) reads as today's stamp, so a template change reaches unedited views; changing a template adds its current stamp there first.
+- **Tabs** (`ViewTabs`): shown once the kind has a view — All games, then each view, as links setting `?view=<id>` (`viewHref`, which drops a shared `?tv=`). The active tab carries a ⋯ to rename or delete it (deleting confirms and keeps the list). On a phone the row scrolls sideways, keeping the active tab in sight.
+- **New view** (`NewViewMenu`, in the hero beside Rank this list): the suggested views not created yet, then "Save the table as it is now" under a name.
+- **Suggested views** (`suggestedTemplates`): the kind's `VIEW_TEMPLATES` with no view created from them (by `template`, so a renamed one still counts), the `needsPrices` ones only while prices show. Creating one stamps its view and columns into a new saved view (`createFromTemplate`).
+  - Owned: Recently played (by Last Played), Play next (`PLAY_NEXT_MAX_HOURS` played or less, not finished, abandoned or coming soon; by Taste Fit, then rating), Short games (Play next's bounds plus HLTB Main ≤ 5 h; best rated first), Runs on Linux (ProtonDB) (native, platinum or gold).
+  - Wishlist: Bargains (Price Status at a 1-year low or better, by Discount).
+  - A template holds no price column without `needsPrices`, nor a sort or column set equal to the list's default: either reads back as unsaved.
+  - Owned's profile opens Play next too ([taste.md](taste.md#owneds-profile)).
+
 ## Each list kind, in practice
+
+### The hero
 
 Every route opens with a **hero** (`ListHero.tsx`, a `<header>`, a flat section rather than a card): the list's name as the page `<h1>`, an optional lead, kind/shop/account chips, the route's own actions, and the list's facts as a `<dl>` of labelled tiles — all off fetches the route already makes.
 
@@ -99,35 +127,43 @@ Every route opens with a **hero** (`ListHero.tsx`, a `<header>`, a flat section 
 - Tiles render through `<Index>`, not `<For>`: recomputes build fresh tile objects, and by-reference keying would replace the activated button and drop its focus.
 - On a phone (≤ 768 px) tiles become one swipeable row, and `hero-secondary` actions (a bundle's IsThereAnyDeal link and Rank; a comparison's Edit players and Save) fold behind a More actions toggle (`secondaryActions`), so the table starts higher. A bundle's tiles lead with Tiers and New to you, Ends after, so the price shows without a swipe.
 
-Per kind:
+### Bundle page
+
+The bundle page's hero: Ends (with a countdown), Games, the price tile, Published, Prices, plus ITAD's editorial note; previous/next step through whatever `/bundles` last showed, in its order (`bundleBrowseStore.ts`), with All bundles beside them; Get this bundle is the one primary action. Games with **no Steam listing** (courses, asset packs, shop-exclusive keys) render below the table as a collapsed "N more in this bundle, not on Steam" section, and the status line reads "3 of 13 games matched to a Steam listing", so the table never passes for the whole bundle.
+
+- `flattenBundleGames` (`public/bundleData.ts`) dedupes the bundle's games by ITAD game id, keeping the cheapest tier: a game can appear in several ([bundles-and-prices.md](bundles-and-prices.md#bundles)).
+- **Pricing model** (`bundlePricingModel`, over base tiers — an add-on tier is bought apart): `tiered` (two or more priced tiers, labelled Tiers, "each includes the cheaper ones"), `fixed` (one, labelled Price) or `pick` (Fanatical pick-and-mix, labelled Pick & mix; its rates may be unknown). Add-on tiers show as plain "… add-on" chips; `bundleTierSummary` drops an empty unpriced tier.
+- **Tier filter**: with two or more priced base tiers (`filterTiers`), each chip is a toggle (`HeroTile.chips`, rendered by `ListHero` through `<Index>` so a press keeps focus) setting Tier Price's range to `max` = its price — cumulative, since a pricier tier includes the cheaper ones'.
+  - The pressed chip is read back from the range (`activeTierPrice`); New to you then counts only those rows, add-ons left out (`atTier`, through the `activeTier` memo); the chips stay plain until the bundle's table is ready and reads "New at $X".
+  - New to you's saving is reckoned against the pressed tier, else the cheapest holding every new base game (`savingTier`; none when a range leaves it unknown).
+  - The Tier Price range is no part of the layout (`layoutDraft`'s temporary `ranges`): pressing a tier raises no unsaved-changes banner, isn't saved, and a range saved before is dropped on restore. A tier-shaped range (a max alone) matching none of the bundle's tiers is cleared when its table builds, so a 🔗 Share layout link's doesn't carry over to another bundle.
+  - A game of ambiguous tier (`tierPriceMax`) filters by its lower bound, as the column sorts it.
+- **Tier value** (`tierValues`, through the `tierValueMap` memo): once ownership is known, each tier header says what its step buys the account — its own new games (not the cheaper tiers'), their best deals summed in the tier's currency once per gid, against the step (the first tier: its price): "€12.00 tier · saves €10.00 · +€7.00 for 2 new worth €17.00".
+  - The verdict comes first: on a phone the header shows its first ~30 characters only (the label scrolls with the table).
+  - It counts every row of the tier, not the filtered ones, like New to you; a filtered group can show fewer rows than its "N new".
+  - Per step, unlike New to you's saving, which is over the whole tier price.
+  - No verdict for an add-on or a range group (which tier holds them is unknown), none while a new game is unpriced ("2 new · 1 unpriced").
+- **Fanatical pick-and-mix** (`bundle.pickAndMix`, see [bundles-and-prices.md](bundles-and-prices.md#fanatical--pick--mix-tier-prices)): one chip per quantity tier ("5 for €5.99"); Fanatical charges every pick the per-game rate of the largest tier reached.
+  - `cheapestPicks` (`bundleRows.ts`) prices one pick per ITAD gid at that rate, or at a larger tier's price when lower (spare picks free). The plan's chip gets `bundle-tier-chip--active`; the selection toolbar shows the cost (`pickPlanDetail` under it), then the saving or overpay against the same games' best deals (`savingsText`, green/red, with its estimate in the region currency like every bundle price in another currency), owned picks left out (`selectedOwnedGids`: a package only when all its rows are owned) and counted beside it.
+  - Each row's Tier Price (`tierPerGame`, "/game") is the plan's rate (`pickRate`), rewritten on every row by an effect on selection change — the same on every row, so a sort on it doesn't reorder.
+  - With `bundle.pickAndMixNames`, the toolbar adds **Buy N on Fanatical ↗** (`fanaticalBuyUrl`), the draggable **Add to Fanatical** bookmarklet (`FANATICAL_BOOKMARKLET`; clicking it here only says to drag it) and "N to pick by hand" for unmatched picks.
+- **Steam packages**: a gid resolving to several appids is one purchase. `bundlePackages` sets each row's `bundlePackage` ("package · N games" under the name, `renderNameCell`; in a pick-and-mix bundle only the lead row shows the rate, the rest "included"), the selection effect widens every tick to the whole package (`wholePackages`), and the pick count and the selection's best deals count one row per gid (`onePerGid`), while New to you counts rows (one per appid) — each package row carries the whole package's price.
+
+### Comparison
+
+A comparison is an unsaved dynamic list built from the URL: one `account-owned` source per `?u=` slot, combined with `?op=` (default `group-by-membership`), resolved and labeled through the same `listResolve.ts`/`combine.ts`/`listLabels.ts` path as a stored one, so "Save as a list" is `createList()` with the same formula.
+
+- It resolves each slot itself (`resolveAccountSlot`), never touching `recentAccounts` — comparing someone isn't picking them; the form's account chips write nothing back either.
+- It rewrites the address to the resolved steam64 ids in canonical order, and orders sources by the same rule, so one URL renders one way.
+- Sources are labeled by the player alone, not "⟨player⟩ — Owned", which would repeat in every group heading.
+
+### Other kinds
 
 - **owned / wishlist** — name the account they show (avatar, profile link, Family merge count) with Games/Updated tiles, plus Prices on the wishlist. A `?u=` link is authoritative: while it resolves, and if it fails, the stored account is not loaded in its place.
-- **bundle** — Ends (with a countdown), Games, the price tile, Published, Prices, plus ITAD's editorial note; previous/next step through whatever `/bundles` last showed, in its order (`bundleBrowseStore.ts`), with All bundles beside them; Get this bundle is the one primary action. Games with **no Steam listing** (courses, asset packs, shop-exclusive keys) render below the table as a collapsed "N more in this bundle, not on Steam" section, and the status line reads "3 of 13 games matched to a Steam listing", so the table never passes for the whole bundle.
-  - `flattenBundleGames` (`public/bundleData.ts`) dedupes the bundle's games by ITAD game id, keeping the cheapest tier: a game can appear in several ([bundles-and-prices.md](bundles-and-prices.md#bundles)).
-  - **Pricing model** (`bundlePricingModel`, over base tiers — an add-on tier is bought apart): `tiered` (two or more priced tiers, labelled Tiers, "each includes the cheaper ones"), `fixed` (one, labelled Price) or `pick` (Fanatical pick-and-mix, labelled Pick & mix; its rates may be unknown). Add-on tiers show as plain "… add-on" chips; `bundleTierSummary` drops an empty unpriced tier.
-  - **Tier filter**: with two or more priced base tiers (`filterTiers`), each chip is a toggle (`HeroTile.chips`, rendered by `ListHero` through `<Index>` so a press keeps focus) setting Tier Price's range to `max` = its price — cumulative, since a pricier tier includes the cheaper ones'.
-    - The pressed chip is read back from the range (`activeTierPrice`); New to you then counts only those rows, add-ons left out (`atTier`, through the `activeTier` memo); the chips stay plain until the bundle's table is ready and reads "New at $X".
-    - New to you's saving is reckoned against the pressed tier, else the cheapest holding every new base game (`savingTier`; none when a range leaves it unknown).
-    - The Tier Price range is no part of the layout (`layoutDraft`'s temporary `ranges`): pressing a tier raises no unsaved-changes banner, isn't saved, and a range saved before is dropped on restore. A tier-shaped range (a max alone) matching none of the bundle's tiers is cleared when its table builds, so a 🔗 Share layout link's doesn't carry over to another bundle.
-    - A game of ambiguous tier (`tierPriceMax`) filters by its lower bound, as the column sorts it.
-  - **Tier value** (`tierValues`, through the `tierValueMap` memo): once ownership is known, each tier header says what its step buys the account — its own new games (not the cheaper tiers'), their best deals summed in the tier's currency once per gid, against the step (the first tier: its price): "€12.00 tier · saves €10.00 · +€7.00 for 2 new worth €17.00".
-    - The verdict comes first: on a phone the header shows its first ~30 characters only (the label scrolls with the table).
-    - It counts every row of the tier, not the filtered ones, like New to you; a filtered group can show fewer rows than its "N new".
-    - Per step, unlike New to you's saving, which is over the whole tier price.
-    - No verdict for an add-on or a range group (which tier holds them is unknown), none while a new game is unpriced ("2 new · 1 unpriced").
-  - **Fanatical pick-and-mix** (`bundle.pickAndMix`, see [bundles-and-prices.md](bundles-and-prices.md#fanatical--pick--mix-tier-prices)): one chip per quantity tier ("5 for €5.99"); Fanatical charges every pick the per-game rate of the largest tier reached.
-    - `cheapestPicks` (`bundleRows.ts`) prices one pick per ITAD gid at that rate, or at a larger tier's price when lower (spare picks free). The plan's chip gets `bundle-tier-chip--active`; the selection toolbar shows the cost (`pickPlanDetail` under it), then the saving or overpay against the same games' best deals (`savingsText`, green/red, with its estimate in the region currency like every bundle price in another currency), owned picks left out (`selectedOwnedGids`: a package only when all its rows are owned) and counted beside it.
-    - Each row's Tier Price (`tierPerGame`, "/game") is the plan's rate (`pickRate`), rewritten on every row by an effect on selection change — the same on every row, so a sort on it doesn't reorder.
-    - With `bundle.pickAndMixNames`, the toolbar adds **Buy N on Fanatical ↗** (`fanaticalBuyUrl`), the draggable **Add to Fanatical** bookmarklet (`FANATICAL_BOOKMARKLET`; clicking it here only says to drag it) and "N to pick by hand" for unmatched picks.
-  - **Steam packages**: a gid resolving to several appids is one purchase. `bundlePackages` sets each row's `bundlePackage` ("package · N games" under the name, `renderNameCell`; in a pick-and-mix bundle only the lead row shows the rate, the rest "included"), the selection effect widens every tick to the whole package (`wholePackages`), and the pick count and the selection's best deals count one row per gid (`onePerGid`), while New to you counts rows (one per appid) — each package row carries the whole package's price.
 - **recent** — says it's local browser history; `params.appid` focuses one game without making it a different kind of view, and the open game is the path, not `?game=` (see [frontend.md](frontend.md#routes)).
 - **user** — its manual-or-op chip with Games/Folder/Sources/Edited, plus Prices with a priced source. A dynamic list states its formula in the hero: each source named (`listLabels.ts`), linked, with what it contributed (`Alice — Owned 343 ∪ Alice — Wishlist 115 = 457`); a dangling source is flagged in place. `group-by-membership` is one table grouped by an "Owned by"/"In" column (`membershipColumn.ts`: each row's `membership` key, in `combine.ts`'s most-sources-first order via the column's `compare`, headers saying who's in and who's missing); every other op flattens to one table.
-- **compare** — an unsaved dynamic list built from the URL: one `account-owned` source per `?u=` slot, combined with `?op=` (default `group-by-membership`), resolved and labeled through the same `listResolve.ts`/`combine.ts`/`listLabels.ts` path as a stored one, so "Save as a list" is `createList()` with the same formula.
-  - It resolves each slot itself (`resolveAccountSlot`), never touching `recentAccounts` — comparing someone isn't picking them; the form's account chips write nothing back either.
-  - It rewrites the address to the resolved steam64 ids in canonical order, and orders sources by the same rule, so one URL renders one way.
-  - Sources are labeled by the player alone, not "⟨player⟩ — Owned", which would repeat in every group heading.
 
-A grouped list is always grouped and sorted by membership first (`withMembershipGrouping`, applied over the restored view — a comparison shares its view key with its flat operations); the flat operations drop it (`withoutMembershipGrouping`). Groups start expanded (`defaultGroupsCollapsed: false`).
+### `/bundles`
 
 **`/bundles`** is one of these tables over bundle rows: cover, title, shop, game count, cheapest tier price, published/ends dates, plus hidden tier-count, age and urgency columns, newest first.
 

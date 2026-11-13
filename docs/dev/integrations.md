@@ -54,7 +54,7 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 - **What's searched**: the store metadata's `type` skips the types nobody launches (`NEVER_LAUNCHED_TYPES`, `lib/steam.js`), demos and ads (`NOT_PLAYED_TYPES`, `lib/hltb.js`), and an unreleased game by ProtonDB's rule below, which read as no data rather than failed. Tools are still searched: none of the types the app knows (`TYPE_LABELS`) marks them — an assumption from observed data, not Steam's docs.
 - **Times** (`pickBestMatch`): `main` (`comp_main`), `extra` (`comp_plus`), `completionist` (`comp_100`) and `all` (`comp_all`), seconds converted to hours rounded to the half hour, as HLTB's own site shows them.
   - `all` ("All PlayStyles") is **not** the average of the other three: it pools every submission regardless of category (`comp_all_count` = the sum of the three counts), so it usually lands near Main Story.
-  - Being one representative number, it's what the table, the ranking card and the panel show first ([game-table.md](game-table.md#the-game-table), [panel-and-lightbox.md](panel-and-lightbox.md#the-side-panel)).
+  - Being one representative number, it's what the table, the ranking card and the panel show first ([game-table.md](game-table.md#column-set), [panel-and-lightbox.md](panel-and-lightbox.md#the-side-panel)).
 
 ## Owned games — `GetOwnedGames`' playtime fields
 
@@ -98,7 +98,7 @@ The `howlongtobeat` npm package was removed (it pulled in a vulnerable `axios`);
 - **The reply can be keyed under another appid.** Since about 2026-09-24 many games come back as `{"<other id>": {"success": true, "data": {"steam_appid": <requested id>, …}}}`, the key often one of the game's DLCs (e.g. 1656930 → `"3290770"`, 39210 → `"4831120"`). The data is right, only the key is wrong: `getAppDetails` falls back to the entry whose `data.steam_appid` matches the request, so a different game's entry is still rejected. Seen elsewhere too: [romm#4774](https://github.com/rommapp/romm/pull/4774), [EnhancedGV#9](https://github.com/Featherwolf/EnhancedGV/pull/9).
 - **Software is typed `game` too** (RPG Maker, a launcher; checked 2026-10-23 over 1,206 cached entries: types were only `game`, `demo`, `advertising`, `mod`). Only its genres tell it apart — Utilities, Design & Illustration, Web Publishing, Game Development seen; Animation & Modeling, Video/Audio Production, Photo Editing, Software Training assumed from the store's genre list — so `tagTaste.ts`'s `isSoftware` reads those.
 - The fetch pins `cc=us`, so the launch price `computeProductionTier` reads is always USD ([decisions.md](decisions.md)).
-- **Images load browser-direct from Steam's CDN**, never through the server (a table's capsule sizes: [game-table.md](game-table.md#the-game-table)).
+- **Images load browser-direct from Steam's CDN**, never through the server (a table's capsule sizes: [game-table.md](game-table.md#column-set)).
   - The panel reads the open game's capsule once more, in CORS mode, to tint its ground (`artTint.ts`): the CDN answers `Access-Control-Allow-Origin: *` (checked 2026-10-19), so the browser cache usually serves it; without that header the canvas would be tainted and the ground stays neutral.
 
 ## Reviews — `GetAppReviews`
