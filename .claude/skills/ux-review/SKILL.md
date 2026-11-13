@@ -16,15 +16,15 @@ Judges the app against [docs/dev/journeys.md](../../../docs/dev/journeys.md) and
 
 ## Which server
 
-- **Mocked first: `npm run dev:mock` (`:58993`, a worktree's own port in one: `node scripts/ports.js mock`; `node scripts/mock-server.js up` starts or reuses it, `down` stops it)** for clarity, layout, keyboard, consistency and the empty/error states — `document.cookie = 'mock=no-itad'` (or another state from `e2e/mockApi.ts`'s header) before a load switches one on; clear it after. Its storage is separate from the real prefs, so no seed/restore — but it keeps earlier runs' lists, so start clean: `node scripts/ux-measure.js --fresh /` and run it (clears it, sets `alice`; `bob`, `carol` are in `e2e/fixtures.ts`). A state the fixtures lack is a gap in `e2e/mockApi.ts` to report, not a reason to switch servers.
-- **Real: `npm run dev` (`:58991`, a worktree's own port in one: `node scripts/ports.js dev`; `node scripts/dev-server.js up|down`)** only for what mocks can't show — loading and progress on a real library, freshness ages, real upstream failures — and for scenarios needing real data. Those visits need the demo state below.
+- **Mocked first: `npm run dev:mock` (its port: `node scripts/ports.js mock`; `node scripts/mock-server.js up` starts or reuses it, `down` stops it)** for clarity, layout, keyboard, consistency and the empty/error states — `document.cookie = 'mock=no-itad'` (or another state from `e2e/mockApi.ts`'s header) before a load switches one on; clear it after. Its storage is separate from the real prefs, so no seed/restore — but it keeps earlier runs' lists, so start clean: `node scripts/ux-measure.js --fresh /` and run it (clears it, sets `alice`; `bob`, `carol` are in `e2e/fixtures.ts`). A state the fixtures lack is a gap in `e2e/mockApi.ts` to report, not a reason to switch servers.
+- **Real: `npm run dev` (its port: `node scripts/ports.js dev`; `node scripts/dev-server.js up|down`)** only for what mocks can't show — loading and progress on a real library, freshness ages, real upstream failures — and for scenarios needing real data. Those visits need the demo state below.
 
 ## Demo state (real server only) — before the first page load
 
 Seed before opening _any_ route and restore only on the way out, as in [testing.md](../../../docs/dev/testing.md#looking-at-the-ui) (`empty` for a first visit, A1).
 
 - Only the demo account (in the script) may be typed, except accounts the user names for this review. Those: never committed, screenshots only in `.playwright-mcp/`, called Friend A/B everywhere — in the report and in improvements.md, never by their Steam name. On the real server, skip A4 while no allowed account has a public friends list; mocks have one (Alice's).
-- Stay inside [integrations.md](../../../docs/dev/integrations.md)'s trust tiers: one pass per scenario, no repeated ↻ refreshes. A large library's first load streams for minutes (uncached details are throttled) — judge the feedback, don't wait for it to finish.
+- Stay inside [integrations.md](../../../docs/dev/integrations.md#trust-tiers)'s trust tiers: one pass per scenario, no repeated ↻ refreshes. A large library's first load streams for minutes (uncached details are throttled) — judge the feedback, don't wait for it to finish.
 
 ## Walk each scenario
 

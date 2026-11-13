@@ -33,6 +33,7 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 
 ## Touch and phone
 
+- **Phone width** is 768 px and below (`max-width: 768px` in `public/styles/`); the other docs' "on a phone" means it.
 - Touch targets are at least 24×24 px (WCAG 2.5.8), 44×44 px where space allows; links in running text are exempt.
 - No information is hover-only — a `title` alone doesn't count.
 - At 390 px: no horizontal page scroll (tables scroll inside their own area), nothing clipped, popovers fit the screen, and the table starts as high as possible — secondary actions fold behind ⋯.

@@ -155,6 +155,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - The real dev server runs on a worktree's own ports with the main checkout's settings and cache
 - A feature skill for new feature requests; backlog-run takes item ids and hands over the next one
 - Hook e2e runs log which projects they ran, summarized by `setup-facts.js --cost`
+- Reorganised the developer docs: bundles and prices, the presentation window and the taste model get their own docs, each fact has one owner, and CLAUDE.md is the only doc index.
 
 ## [0.12.0] - 2026-10-30
 

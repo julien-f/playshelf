@@ -23,9 +23,9 @@ Steam has no budget or studio-size field, so "Production Tier (est.)" (hidden by
 Decision order:
 
 1. DLC (`meta.fullgame` set) and non-game types (`dlc`/`demo`/`music`/`video`/`series`/`episode`/`mod`/`hardware`/`advertising`) → `null`: a cheap DLC of a AAA game would read as Indie, and looking up the parent costs a fetch.
-2. Free-to-play → judged on review volume alone, against a high bar (200k+).
+2. Free-to-play → judged on review volume alone, against a high bar (`FREE_AAA_REVIEW_THRESHOLD`).
 3. Paid with no known price → `null`.
-4. ≥ $50 → AAA. $20–$50 → AA with 20k+ reviews or a Metacritic entry, else Indie. < $20 → Indie whatever the reviews (Vampire Survivors, Stardew Valley, Terraria stay Indie).
+4. From `AAA_PRICE_CENTS` → AAA. From `AA_PRICE_CENTS` → AA with `AA_REVIEW_THRESHOLD` reviews or a Metacritic entry, else Indie. Below it → Indie whatever the reviews (Vampire Survivors, Stardew Valley, Terraria stay Indie).
 
 It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vectors, so Similar in this list and Group Fit weigh budget, which no Steam tag says; Plays mostly never shows it.
 
@@ -38,6 +38,11 @@ It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vector
 - A raw cosine of two play profiles is high for almost any pair (common tags dominate even after IDF), so "65% similar" can mean "typical".
 - Centering it needs a typical player to subtract. The only one available is built from the compared players' own libraries, and players mostly own what they play: with two players it's their midpoint, so any pair comes out opposite (two players sharing 11 of 12 games scored −0.98).
 - A count states a fact the shared tags beside it explain, and needs no calibration. A score could come back once there are enough libraries to calibrate it against.
+
+## Young games — refetched as they age
+
+- Why [data.md](data.md#cache-tiers)'s half-age rule: on production's cache (2026-11-08), of 30 games released in the last 6 months and refetched, those cached in their first ~9 days changed review label (4 of 13), ProtonDB tier (9 of 13) or gained HLTB times (5 of 13); those cached later barely moved, except HLTB times resting on few submissions.
+- Its cost: [integrations.md](integrations.md#request-volume-and-pacing).
 
 ## Trailers — native HLS where the browser has it
 

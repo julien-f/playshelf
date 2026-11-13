@@ -228,7 +228,7 @@ export const DEAL_RECORD_TIERS: DealRecordTier[] = [
 // no need to destructure at the call site. `<=`, not `<` — the current deal genuinely can BE the
 // historical low itself (it's what set it), not only ever beat it. Returns `null` (not a tier)
 // when `price` is missing or doesn't beat any of the three windows.
-// No tier for a deal with no discount: ITAD's historyLow includes full prices (integrations.md).
+// No tier for a deal with no discount: ITAD's historyLow includes full prices (bundles-and-prices.md).
 export function dealRecordTier(
   price: number | null | undefined,
   lows?: {

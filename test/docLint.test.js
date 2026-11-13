@@ -21,12 +21,6 @@ test('proseProblems: history phrases and long paragraphs, outside quotes, code a
   ]);
 });
 
-test('unindexed: docs an index lacks a link to', () => {
-  assert.deepStrictEqual(
-    unindexed(['docs/a.md', 'docs/b.md'], {
-      'README.md': '[a](docs/a.md) [b](docs/b.md)',
-      'CLAUDE.md': '[a](docs/a.md)',
-    }),
-    ['CLAUDE.md: no link to docs/b.md'],
-  );
+test('unindexed: docs CLAUDE.md lacks a link to', () => {
+  assert.deepStrictEqual(unindexed(['docs/a.md', 'docs/b.md'], '[a](docs/a.md)'), ['CLAUDE.md: no link to docs/b.md']);
 });

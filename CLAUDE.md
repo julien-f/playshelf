@@ -17,9 +17,12 @@ Each doc, and when to read it — the section you need, not the whole file:
 - [docs/dev/architecture.md](docs/dev/architecture.md) — before adding or changing an API route, a backend module, the build or input validation
 - [docs/dev/frontend.md](docs/dev/frontend.md) — before any frontend change: the **reactivity rules**, the module map (where things live), routes, URL state
 - [docs/dev/game-table.md](docs/dev/game-table.md) — before changing a column, sorting, grouping, saved views, a list's hero or a list kind
-- [docs/dev/panel-and-lightbox.md](docs/dev/panel-and-lightbox.md) — before changing the side panel, the lightbox, trailers or the presentation window
+- [docs/dev/panel-and-lightbox.md](docs/dev/panel-and-lightbox.md) — before changing the side panel, the lightbox or trailers
+- [docs/dev/presentation.md](docs/dev/presentation.md) — before changing the presentation window or its messages
+- [docs/dev/taste.md](docs/dev/taste.md) — before changing a taste score, the profile card, Players or Similar in library
 - [docs/dev/lists-and-accounts.md](docs/dev/lists-and-accounts.md) — before changing accounts, `?u=`, lists, combine, ranking, sync or a localStorage key
-- [docs/dev/integrations.md](docs/dev/integrations.md) — before adding or changing any upstream call: trust tiers, what's undocumented, confirmed rules and assumptions
+- [docs/dev/integrations.md](docs/dev/integrations.md) — before adding an upstream or changing a Steam, HLTB or ProtonDB call: trust tiers, request volume, what's undocumented, confirmed rules and assumptions
+- [docs/dev/bundles-and-prices.md](docs/dev/bundles-and-prices.md) — before changing bundles, prices, Fanatical, Humble Choice or PC Game Pass
 - [docs/dev/data.md](docs/dev/data.md) — before changing a cache key, a TTL, a refresh path or a migration
 - [docs/dev/observability.md](docs/dev/observability.md) — before adding an outbound group, a rate limiter or a log warning
 - [docs/dev/journeys.md](docs/dev/journeys.md) — before a design review, an end-to-end test or a user-facing feature plan
@@ -27,11 +30,11 @@ Each doc, and when to read it — the section you need, not the whole file:
 - [docs/dev/glossary.md](docs/dev/glossary.md) — before naming anything a user reads: a label, a message, a list
 - [docs/dev/improvements.md](docs/dev/improvements.md) · [docs/dev/code-backlog.md](docs/dev/code-backlog.md) · [docs/dev/setup-backlog.md](docs/dev/setup-backlog.md) — open UX, code and setup work: check before proposing something (it may be filed, or declined)
 - [docs/dev/decisions.md](docs/dev/decisions.md) — before changing a computed value or a tooling choice that looks wrong
-- [docs/dev/testing.md](docs/dev/testing.md) — before writing or fixing a test, looking at the UI, or touching the hooks
+- [docs/dev/testing.md](docs/dev/testing.md) — before writing or fixing a test, looking at the UI, measuring performance, running skill evals, or touching the hooks and checks
 - [docs/dev/pitfalls.md](docs/dev/pitfalls.md) — on an unexpected error: `grep -ri '<fragment>' docs/ .claude/skills/` first
 - [docs/images/](docs/images) — the screenshots the docs embed; shooting them is the `screenshots` skill
 
-Two are load-bearing: **frontend.md's reactivity rules** (`npm run lint` enforces the no-reactive-`const` one), and **integrations.md's trust tiers** — several upstreams are undocumented and unsanctioned, so don't scale request volume without revisiting them.
+Two are load-bearing: **frontend.md's reactivity rules** (`npm run lint` enforces the no-reactive-`const` one), and **[integrations.md's trust tiers](docs/dev/integrations.md#trust-tiers)** — several upstreams are undocumented and unsanctioned, so don't scale request volume without revisiting them.
 
 ## Code conventions
 
@@ -50,7 +53,7 @@ These add to the user-level `~/.claude/CLAUDE.md` working style.
   - Doc prose (this file, `README.md`, `CHANGELOG.md`, `docs/`): short bullets over paragraphs; no preamble, no summary section, lead with the point. Docs state current behavior and its why, never how it got there (that's commits and `CHANGELOG.md`); each number lives in one place (`default.env`, or the doc that owns it) and the others link it.
 - Saying something is done includes where to see it: the route and steps for a UI change, the link to a posted comment or issue after checking it exists.
 - A user-facing feature's plan review includes one as the app's users ([journeys.md](docs/dev/journeys.md#who-uses-it)'s personas): would they use it, is it worth its place?
-- When code models an upstream's behavior (pricing, limits, matching rules) from inference rather than its docs, state the assumption in the plan and confirm it before building on it; record confirmed rules and remaining assumptions in [integrations.md](docs/dev/integrations.md).
+- When code models an upstream's behavior (pricing, limits, matching rules) from inference rather than its docs, state the assumption in the plan and confirm it before building on it; record confirmed rules and remaining assumptions in [integrations.md](docs/dev/integrations.md) or [bundles-and-prices.md](docs/dev/bundles-and-prices.md).
 
 ## Ask first
 
@@ -79,10 +82,10 @@ The user-level rules apply; here:
 
 After making changes:
 
-1. Update or add tests to cover the change: the single-file command while iterating, then `npm run format`. Before committing a UI change, run only `npm run test:e2e -- --project=phone`: the hook runs desktop e2e, pre-push both widths. Fixing a failing or flaky test: search [code-backlog.md](docs/dev/code-backlog.md) for its name first, and close the matching item in the same commit.
+1. Update or add tests to cover the change: the single-file command while iterating, then `npm run format`. Before committing a UI change, run only `npm run test:e2e -- --project=phone`: the hooks run the rest ([testing.md](docs/dev/testing.md#hooks)). Fixing a failing or flaky test: search [code-backlog.md](docs/dev/code-backlog.md) for its name first, and close the matching item in the same commit.
 2. Update any affected documentation — see Where things belong above — and `CHANGELOG.md` (see Changelog below).
 3. Record what was surprising, misleading or broken, and its fix: as a comment or test when tied to specific code, otherwise as a rule in the doc its reader is in (keeping the exact error text), or in [pitfalls.md](docs/dev/pitfalls.md) when no doc fits; machine-specific ones in Claude's memory. Symptom first (exact error text), then cause and fix. Delete entries once obsolete.
-4. Verify with `npm run check` (its steps: `steps()` in [check.js](scripts/check.js)). When committing, the `pre-commit` hook runs its relevant steps on what's staged (plus desktop e2e on UI changes; fix-batch lanes defer it with `E2E_DEFER=1` and run the suite once before reporting, [BATCH.md](.claude/skills/code-fix/BATCH.md)) and blocks on failure, so don't also run it by hand; the `pre-push` hook runs what CI runs (see [testing.md](docs/dev/testing.md#hooks)). Fix what it reports.
+4. Verify with `npm run check` (its steps: `steps()` in [check.js](scripts/check.js)). When committing, the `pre-commit` hook runs its relevant steps on what's staged (fix-batch lanes defer its e2e with `E2E_DEFER=1` and run the suite once before reporting, [BATCH.md](.claude/skills/code-fix/BATCH.md)) and blocks on failure, so don't also run it by hand; the `pre-push` hook runs what CI runs (see [testing.md](docs/dev/testing.md#hooks)). Fix what it reports.
 
 ## Changelog
 

@@ -2,15 +2,7 @@
 
 A Solid.js single-page app in `public/`, TypeScript throughout, bundled by Vite. One HTML entry for the app (`index.html` → `AppRoot.tsx`, plus `present.html` for the presentation window), `@solidjs/router` for navigation, and a persistent shell that survives every route change.
 
-The data model it renders — accounts, lists, combines, the localStorage schema — is [lists-and-accounts.md](lists-and-accounts.md). This file is the machinery: routes, modules, reactivity, URL state. The table and each list kind are [game-table.md](game-table.md); the side panel, lightbox and presentation window [panel-and-lightbox.md](panel-and-lightbox.md).
-
-- [Routes](#routes)
-- [Module map](#module-map)
-- [Reactivity](#reactivity)
-- [Rows, streaming, and stale loads](#rows-streaming-and-stale-loads)
-- [Global search and the account chip](#global-search-and-the-account-chip)
-- [URL & sharing](#url--sharing)
-- [Preferences](#preferences)
+The data model it renders — accounts, lists, combines, the localStorage schema — is [lists-and-accounts.md](lists-and-accounts.md). This file is the machinery: routes, modules, reactivity, URL state. The table and each list kind are [game-table.md](game-table.md); the side panel and lightbox [panel-and-lightbox.md](panel-and-lightbox.md); the presentation window [presentation.md](presentation.md).
 
 ## Routes
 
@@ -56,6 +48,14 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 
 - That navigation carries `{ lookup: true }` in its history state, so the panel takes that entry as its own (`overlayHistory.ts`'s `ownPage`): ×, Esc and Back all return to the page the lookup came from in one step, rather than to Recently Looked Up. A shared `/game/:appid` link has no such state and closes to `/game`.
 
+## Shell
+
+Above [phone width](ui-guidelines.md#touch-and-phone) the shell is locked to the viewport and **`.app-scroll` is the page's scroller**, avoiding two scrollbars side by side. Nav and footer sit inside it, so they still scroll away; `.app-content` takes `flex: 1` to keep the footer down on a short page.
+
+- **`AppShell` owns the page's scroll position** (`pageScrollTop`/`scrollPageToTop` — `.app-scroll` on desktop, the document on mobile, so both are read and written). It scrolls to the top on each path change, and shows the floating **Back to top** button (an up arrow) past `TO_TOP_AFTER_PX`. The button's `position: fixed` ignores the shell's gutter, so `.panel-open` offsets it by `--panel-w`; its z-index is below the panel's.
+- **A pref write storage refuses** (`prefs.ts`'s `prefsWriteFailed`) shows `StorageFullBanner` (`role="alert"`), fixed along the bottom left of the Back to top button and over the panel. Dismiss hides it until a write succeeds again, handing focus back to where it was before the banner (else `<main>`); the next failure brings it back. The failed edit isn't kept in memory: it snaps back.
+- **At phone width the lock is off** and the document scrolls: the panel is an overlay there, and a document that never scrolls is a URL bar that never collapses.
+
 ## Module map
 
 **Shell and routes**
@@ -68,7 +68,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `ListRoute.tsx` — the generic list viewer (table + docked panel) behind every `/lists/*` and `/game/*` route; owns per-kind loading, columns, price loading, and the hero's contents.
 - `RankRoute.tsx` — `/lists/:listId/rank`, a ranked list's compare screen (see [lists-and-accounts.md](lists-and-accounts.md#ranked-lists)).
 - `listShare.ts` — encode/decode for `/lists/shared?f=` (see Routes).
-- `HomeRoute.tsx` — the account card (header, lookup form, a Family's members, its Accounts tiles via `AccountTiles.tsx`, friends), the Explore cards (one stretched link each) and the folder/list tree with its combine form. Each tree row has one ⋯ popover (`bindNavPopover`) of Move, Rename and Delete; focus goes back to the row's ⋯ (`data-menu-id`, since every refresh rebuilds the rows) after Esc, a rename (the popover is hidden before the name field takes focus, as the field commits on blur), a move or a cancelled delete, and to the next row's ⋯ (else the heading) after a delete. Also forwards an old Comparison-page link (`/?u=alice&u=bob`) to `/lists/compare`.
+- `HomeRoute.tsx` — the account card (header, lookup form, a Family's members, its Accounts tiles via `AccountTiles.tsx`, friends), the Explore cards (one stretched link each) and the folder/list tree with its combine form. Each tree row has one ⋯ popover (`bindNavPopover`) of Move, Rename and Delete; focus goes back to the row's ⋯ (`data-menu-id`, since every refresh rebuilds the rows) after Esc, a rename (the popover is hidden before the name field takes focus, as the field commits on blur), a move or a cancelled delete, and to the next row's ⋯ (else the heading) after a delete. Also forwards `/?u=alice&u=bob` to `/lists/compare`.
 - `AccountFriends.tsx` — the home account card's friends list, marking friends shared with the starred "My account" (`myAccountId`), not the signed-in one.
 - `CombineForm.tsx` — the source/op picker shared by Home (create a dynamic list) and `ListRoute` (Edit sources); it only assembles `{ name, op, sources }` for its `onSubmit`.
 - `ComparePlayersForm.tsx` — the "who is being compared" form (`/lists/compare`'s empty state and "Edit players").
@@ -92,14 +92,14 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `combine.ts` — the pure union/intersect/subtract/group-by-membership engine over resolved sets.
 - `ranking.ts` — the pure binary-insertion engine behind ranked lists.
 - `listLabels.ts` — how an op and a source read on screen, shared by the hero, Home's combine form, and the tree.
-- `membershipColumn.ts` — the "Owned by"/"In" column a group-by-membership list is grouped by (see [game-table.md](game-table.md#each-list-kind-in-practice)).
+- `membershipColumn.ts` — the "Owned by"/"In" column a group-by-membership list is grouped by (see [game-table.md](game-table.md#other-kinds)).
 - `gameStatuses.ts` — the viewer's own Finished/Abandoned mark per game, one synced map for whoever uses the browser.
-- `tagTaste.ts` — tag-weight vectors: an account's `Taste`, Taste Fit, Group Fit, similarity and the profile figures built on them.
+- `tagTaste.ts` — tag-weight vectors: an account's `Taste`, Taste Fit, Group Fit, similarity and the profile figures built on them (see [taste.md](taste.md)).
 - `bundleSnapshots.ts` — the last-known title and games of each bundle a saved list uses, kept for when ITAD stops listing it.
 - `myOwnership.ts` — one cached pair of owned/wishlisted appid sets for the effective account, behind both the panel's badge and the search dropdown's markers.
 - `recentGames.ts` — the recently-looked-up list backing `/game`.
-- `PlayerProfile.tsx` — the profile cards: Owned's `OwnedProfile`, and the `ProfileBadge` and `TagBars` a comparison reuses.
-- `playerProfile.ts` — how an account plays beyond its tags: play style (`playStyle`), story games played to length (`storyGames`) and the archetype titling them (`archetypeOf`), from rows and an hours accessor so a comparison's players reuse it.
+- `PlayerProfile.tsx` — the profile cards: Owned's `OwnedProfile`, and the `ProfileBadge` and `TagBars` a comparison reuses (see [taste.md](taste.md)).
+- `playerProfile.ts` — how an account plays beyond its tags: play style (`playStyle`), story games played to length (`storyGames`) and the archetype titling them (`archetypeOf`), from rows and an hours accessor so a comparison's players reuse it (see [taste.md](taste.md)).
 - `tasteCache.ts` — each account's stored Taste, bounded, and the room a full storage makes by evicting them (`setItemMakingRoom`, which `prefs.ts` writes through).
 - `creatorData.ts` — a developer's/publisher's games (`/api/creator-games`), the list's title and path.
 - `gamePassData.ts` — the Steam games in PC Game Pass (`/api/game-pass`), the list's title and path, and an Xbox store link for the ones not on Steam.
@@ -119,8 +119,8 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `loadTiming.ts` — a list load's User Timing measures from `list:start`: `list:rows` (the table is built), `list:listed` (every row's fast part received), `list:done` (store parts too); the latest load's only. Read them in DevTools' Performance panel or with `performance.getEntriesByType('measure')`.
 - `priceLoading.ts` — the `POST /api/prices` call and the row-field mapping/fallbacks around it.
 - `panel.tsx` / `panelData.ts` / `panelNav.ts` / `panelHistory.ts` / `panelKeyboard.ts` / `ownerList.ts` — the side panel and its per-game data, prev/next nav, DLC trail rule, keyboard handler, and the pure half of the "Owned by" card (see [panel-and-lightbox.md](panel-and-lightbox.md#the-side-panel)).
-- `lightbox.tsx` / `mediaItems.ts` / `lightboxSwipe.ts` / `hlsPlayer.ts` — screenshot/video lightbox, its ordered media list, its swipe thresholds/decision, and trailer playback (shared with the presentation window) (see [panel-and-lightbox.md](panel-and-lightbox.md)).
-- `presentation.ts` / `presentationProtocol.ts` / `PresentationChip.tsx` / `PresentationView.tsx` / `presentationScreen.ts` — presenting on a second screen: the main window's side and the nav chip, their messages, the presentation window itself, and the screen it's placed on (see [panel-and-lightbox.md](panel-and-lightbox.md#the-presentation-window)).
+- `lightbox.tsx` / `mediaItems.ts` / `lightboxSwipe.ts` / `hlsPlayer.ts` — screenshot/video lightbox, its ordered media list, its swipe thresholds/decision, and trailer playback (shared with the presentation window) (see [panel-and-lightbox.md](panel-and-lightbox.md), [presentation.md](presentation.md)).
+- `presentation.ts` / `presentationProtocol.ts` / `PresentationChip.tsx` / `PresentationView.tsx` / `presentationScreen.ts` — presenting on a second screen: the main window's side and the nav chip, their messages, the presentation window itself, and the screen it's placed on (see [presentation.md](presentation.md)).
 - `overlayHistory.ts` — the history entry each open overlay pushes (see [panel-and-lightbox.md](panel-and-lightbox.md#the-side-panel)).
 - `viewTransition.ts` / `artTint.ts` — the shared-element morphs into the panel and the lightbox; the panel ground's tint from the game's art.
 - `gameSearch.ts` — the combobox/debounce UI for "look up any game" (the shell owns where results go).
@@ -152,7 +152,7 @@ How [ui-guidelines.md](ui-guidelines.md#motion)'s rules are built.
 
 - Helpers: `createCountUp` (a hero tile's count; its drawn steps `aria-hidden`), `slideRowsOnViewChange` (positions read on the pointerdown or keydown that starts a sort, filter or grouping change), `cascadeFirstRows` (first rows staggered), `fadeInOnLoad` (images); banners slide in through `@starting-style`.
 - The lightbox's seek line is `.lb-vc-scrub`; the panel sections' height slide is `CollapsibleCard`.
-- View Transitions go through `viewTransition.ts`'s `morph`: feature-detected, its `view-transition-name` set on the two elements only for the transition's length, the root cross-fade off, focus moved after `updateCallbackDone`. The lightbox's own dialog morphs, as the snapshots paint above it. Not for route changes: the router has no hook, and a lazy route would freeze the screen while its chunk loads.
+- View Transitions go through `viewTransition.ts`'s `morph`: feature-detected, the two ends named `game-art` only for the transition's length, waiting up to `MORPH_WAIT_MS` for the destination's picture, the root cross-fade off, focus moved after `updateCallbackDone`. The lightbox's own dialog morphs, as the snapshots paint above it: its `showModal()` and `close()` run inside the morph's update (`showModal()` after `canMorph()`'s `dialog[open]` check), so the snapshot at either end has the lightbox. Not for route changes: the router has no hook, and a lazy route would freeze the screen while its chunk loads.
 - Web Animations go through `motion.ts`'s `animate`, which resolves even when it skips or is cancelled, so cleanup waiting on it always runs.
 - Reduced motion: `styles/base.css` sets every transition to `0s` and every animation to a near-instant single run; that doesn't reach the Web Animations API, hence `animate` skipping under it; JS smooth scrolls go through `smoothScroll()`.
 
@@ -162,7 +162,7 @@ Everything the frontend renders is driven by Solid's own reactivity — there is
 
 Four kinds of state, four mechanisms:
 
-- **A game/row's data** lives in a Solid **store** owned by the route that loaded it (`createStore<Game[]>` in `ListRoute.tsx`, reached through `rowStore.ts`). Writes go through `rowStore.mutateRow(appid, fn)` — `produce(fn)`, so the callback gets an assignable draft — and the store notifies per field, so a streamed field patches only the cells and panel lines that read it. `standaloneRows` (a `createStore<Record<number, Game>>` in the same file) does the same for a game opened as a standalone aside (a nav-bar lookup, a DLC/base-game hop).
+- **A game/row's data** lives in a Solid **store** owned by the route that loaded it, written only through `mutateRow` ([Rows](#rows-streaming-and-stale-loads)); the store notifies per field, so a streamed field patches only the cells and panel lines that read it.
 - **The side panel's own UI state** (which game is open, hero index, expanded collapsibles, …) is plain signals in `panel.tsx`, set by its own click handlers.
 - **Everything the panel fetches for itself** (news, achievements, "Owned by", ownership status, price, bundles, DLC) is a `createResource` keyed on the open game, created in one module-level `createRoot` (the panel is a singleton whose data outlives every render). Fetching and caching (for `CLIENT_CACHE_MAX_AGE_MS`) is `panelData.ts`; the resource is only wiring, giving `.loading`, discard of superseded responses and re-rendering for free. Refresh details refetches news, achievements, price and bundles, whose fetchers read `info.refetching` as `refresh` (bypass both the session cache and the server's TTL); owners and ownership read `myOwnership.ts`'s cache, keyed on `myOwnershipVersion()` so a ↻ of the account elsewhere refetches them.
   - News, achievements, price and bundles wait `PANEL_SETTLE_MS` before an uncached, unforced fetch and drop it if the panel has moved on, so holding ↓ fetches only the game it stops on; a cached value still answers at once, a game come back to within the pause joins its pending load, and ↻ replaces that load rather than racing it.
@@ -192,10 +192,10 @@ Still deliberately imperative: the subnav scroll-spy (measures section positions
   - It counts fast parts first; once every row has one, it counts store parts ("genres, Metacritic, achievements still coming"), whose pace is Steam's store details cap.
   - `loaded` (both parts in) still gates what waits for the whole list — taste fit, group fit, the profile — so those move at the store part's pace.
 - **Two stream parts** (`detailsEvent.ts`'s `applyDetailsEvent`): an uncached game's fast part and store part arrive separately, in either order; each event changes only its own fields and sources. `pendingSources` lists what hasn't arrived: a missing value of a pending source renders "…" (`markFailedSources`), the panel's chip says "still loading", and `noStorePage`/`detailsPending` don't read a pending `meta` as final. While `meta` is pending, `metaOrBasics` fills name, art, date, platforms, developers and publishers from the browse item's `basics`; the production tier stays null (it needs the price). Opening such a game loads its appdetails at once (`loadMedia`), ahead of the stream's queue.
-- **Rows are a Solid store** (`createStore`) owned by the route; Solid's dev mode blocks a direct `row.field = x` on a store proxy, so:
+- **Rows are a Solid store** (`createStore<Game[]>` in `ListRoute.tsx`, reached through `rowStore.ts`) owned by the route; Solid's dev mode blocks a direct `row.field = x` on a store proxy, so:
   - Every mutation goes through `createRowStore`'s (`rowStore.ts`) `mutateRow(appid, fn)`, which applies `fn` via `produce(fn)`. That's why the mutate-in-place helpers (`applyDetailsEvent`, `priceLoading.ts`'s `applyPriceInfo`/`nullMissingPriceFields`) take a plain draft.
   - `@vates/data-table-solid` renders each `<td>` as a reactive insertion reading `row[column.key]`, so a field write re-renders exactly that cell — no new object reference needed.
-  - A game that isn't one of the route's rows (a DLC/base-game link, a standalone lookup) gets `undefined` from `mutateRow`; the caller writes to `standaloneRows` instead.
+  - A game that isn't one of the route's rows (a DLC/base-game link, a standalone lookup) gets `undefined` from `mutateRow`; the caller writes to `standaloneRows` instead, a `createStore<Record<number, Game>>` in the same file.
 - **A streaming/high-frequency `mutateRow` caller must batch**, or the table's live `tableData()` re-sorts/re-filters/re-paginates once per _event_ instead of once per _flush_ (measured: a ~1150-game library took ~33 s of unresponsive main thread unbatched, ~6–7 s batched). Two shapes, two fixes:
   - **Spread over time** (the SSE `/api/game-details/stream` loop, `ListRoute.tsx`'s `streamGameDetails`) — `streamBatcher.ts`'s `createStreamBatcher` queues events and applies them in one `batch()` per ~150 ms flush; its `onFlush` runs `updateStatus`. Each queued event carries its load's generation (`loadGuard`, `staleGuard.ts`) and is dropped if stale by flush time, since two overlapping loads share the queue.
   - **One synchronous burst** (a price response processed in one loop — `loadPrices`) — the loop is wrapped in a bare `batch()`.
@@ -216,14 +216,15 @@ The "look up any game" box is one nav-bar search in the shell, not one per route
 `AccountChip.tsx` says who the app is showing, following a `?u=` link that resolves after mount, with a link icon (named "from a link") when a link's account is showing.
 
 - The popover menus (this chip, Preferences, the rank menu, Home's tree rows, the view tabs' menus) are native popovers (`button[popovertarget]` + `[popover]`: the browser opens, closes and dismisses them on an outside click) sharing `navPopover.ts`: it closes them on Esc ahead of the page's own Esc handlers, and positions the panel in JS because `.site-nav`'s flex-wrap moves its triggers with viewport width (seen off-screen on a real Galaxy S10, ruling out CSS-only anchoring).
+  - A panel's `display` is set only while open (`:popover-open { display: flex }`, as `.account-chip-panel` in `styles/components.css`): any `display` in the app's CSS overrides the user-agent `display: none` that hides a closed popover, leaving it in flow under its button (`toBeHidden()` on it fails).
 - It carries **copyable Steam identifiers** (`accountsStore.ts`'s `accountIdentifiers`: the stored custom-URL name, else the steam64 id), read from the slot since the chip fetches nothing: one for the current account, one per member beside each recents row (outside its switch button, which can't nest one).
 
 ## URL & sharing
 
 - `?u=` — **one** slot: which account to show. Parsed and resolved once for the whole app by `AppShell.tsx`, read everywhere via `getEffectiveCurrentAccount()`, forwarded across in-app navigation by `withAccountParam`. Full semantics in [lists-and-accounts.md](lists-and-accounts.md).
-- `?u=` repeated — **several** slots: a comparison, one `u=` per player, comma-joined identifiers within a slot for a Family (the old Comparison page's spelling). Not an account override, so nothing resolves it as one and `withAccountParam` doesn't forward it. `/lists/compare` is its address; `normalizeSlots`/`compareUrl` (`urlState.ts`) write it, canonicalized to server-resolved steam64 ids. `&op=` picks the combine op, omitted for the default.
-- `?game=<appid>` / `&shot=<idx>` — which game the current list has open, and which screenshot; Recently Looked Up writes the game into its path (`/game/<appid>`) instead. Rewritten with `replaceState`; the one entry pushed per open overlay is `overlayHistory.ts`'s. `/game/:appid` is the canonical address for a game; the panel's 🔗 copy-link omits `?u=`, so a shared game link doesn't send recipients into the sender's account.
-- `?tv=` — a shared table-view snapshot, consumed once on arrival (see [game-table.md](game-table.md#the-game-table)).
+- `?u=` repeated — **several** slots: a comparison, one `u=` per player, comma-joined identifiers within a slot for a Family; never an override or forwarded ([lists-and-accounts.md](lists-and-accounts.md#u-url-semantics)). `/lists/compare` is its address; `normalizeSlots`/`compareUrl` (`urlState.ts`) write it, canonicalized to server-resolved steam64 ids. `&op=` picks the combine op, omitted for the default.
+- `?game=<appid>` / `&shot=<idx>` — which game the current list has open, and which screenshot; Recently Looked Up writes the game into its path (`/game/<appid>`) instead. Rewritten with `replaceState`; the one entry pushed per open overlay is `overlayHistory.ts`'s. `/game/:appid` is the canonical address for a game, which the panel's 🔗 copies without `?u=`.
+- `?tv=` — a shared table-view snapshot, consumed once on arrival (see [game-table.md](game-table.md#layouts-and-saved-views)).
 - `?view=<id>` — Owned/Wishlist's saved view; not forwarded by nav links (Owned opens All games), and a deleted one falls back to the whole list with a note.
 - `?q=` — `/search`'s term. Read on mount, written back (`setSearchQueryParam`, `urlState.ts`) as the on-page box is edited, debounced like the nav-bar box. Always `replaceState`.
 - `reorderUrlParams` (`urlState.ts`) puts every URL through one canonical param order, so the same state always serializes to the same string; `urlWithParams` is the single place a `URLSearchParams` becomes a URL, returning a bare path once the last param is deleted.

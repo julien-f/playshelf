@@ -609,7 +609,7 @@ app.get('/api/metrics', (_req, res) => {
 // tailored to that route's own cache-key shape — mirroring detailsLimit/achievementsLimit's own
 // "cache hits don't count" skip, not just a shared always-counts limiter. Without this, simply
 // reloading the Bundles page a handful of times (every reload re-requests the list, and
-// re-opens whatever bundle is deep-linked — see docs/dev/integrations.md) burns the
+// re-opens whatever bundle is deep-linked — see docs/dev/architecture.md) burns the
 // whole per-minute budget on requests that never actually hit ITAD, and once burned, real
 // upstream calls (a newly-opened bundle) start 429ing with no visible explanation.
 const bundlesListLimit = namedRateLimit('bundlesList', {
@@ -1025,7 +1025,7 @@ app.get('/api/creator-games', creatorGamesLimit, async (req, res) => {
 });
 
 // Backs the Bundles page's bundle list — a thin, cached proxy over ITAD's GET /bundles/v1.
-// See lib/itad.js and docs/dev/integrations.md and docs/dev/data.md.
+// See lib/itad.js and docs/dev/bundles-and-prices.md and docs/dev/data.md.
 app.get('/api/bundles', bundlesListLimit, requireItad, async (req, res) => {
   const { country, offset, limit, sort, expired } = parseBundlesQuery(req);
   if (offset > MAX_BUNDLES_OFFSET) return res.json({ bundles: [], offset, limit, fetchedAt: null });

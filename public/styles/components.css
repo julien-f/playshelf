@@ -201,7 +201,7 @@
   }
 
   /* Nav popovers (⚙, account chip, rank menu), placed by navPopover.ts. Rise and fade in; a panel's
-     display is set only while open, or a closed one shows (pitfalls.md). */
+     display is set only while open, or a closed one shows (docs/dev/frontend.md). */
   .site-nav-popover-panel {
     position: fixed;
     inset: auto;

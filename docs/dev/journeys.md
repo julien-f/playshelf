@@ -6,7 +6,7 @@ What users come to the app to get done: the input for design reviews (walk each 
 - **Non-goals**: buying or trading through the app; social features beyond reading Steam's friends lists; knowing which games cross-play between stores (no source says); storing anything about an account beyond its cached public data and the user's own lists.
 - **Constraints** every design works within:
   - nothing about a user is stored server-side beyond the upstream cache and opt-in [Sync](lists-and-accounts.md#sync), so state lives in the browser and in links;
-  - request volume is bounded by upstreams that are undocumented or unsanctioned ([integrations.md](integrations.md)'s trust tiers), so a feature costing one call per friend or per game needs a volume review first;
+  - request volume is bounded by upstreams that are undocumented or unsanctioned ([integrations.md](integrations.md#trust-tiers)'s trust tiers), so a feature costing one call per friend or per game needs a volume review first;
   - defaults that work over new settings ([ui-guidelines.md](ui-guidelines.md#principles)).
 - **Core journeys**, why the app exists: A1, C1, F1, F3, B1, S1, S3. A design review always walks them, and friction there outranks the same severity elsewhere.
 
@@ -31,7 +31,7 @@ Derived from the journeys below and the features built for them, not from user r
 
 Each journey: **Who / goal**, numbered **Steps** as a user would take them, **Done when** (what must be true at the end) and **Edges** worth checking. ◇ marks a step or outcome the app doesn't support yet, the target a design review pushes toward, followed by the [improvements.md](improvements.md) item that tracks it (`◇ U229`; `node scripts/journey-coverage.js --targets` lists them). `npm run check` fails on a ◇ whose item isn't open, so closing an item drops or re-points its ◇ in the same commit. Which steps `e2e/scenarios.spec.ts` locks (★) is derived, never written: `node scripts/journey-coverage.js`.
 
-Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: …` only those steps, `A1 edge: …` its edges.
+Tests map to journeys by title ([testing.md](testing.md#end-to-end-tests)).
 
 - [Accounts](#accounts)
 - [Comparing libraries](#comparing-libraries)
@@ -58,7 +58,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   4. it becomes my ★ account automatically, being the first ◇ U270
   5. open **Owned**
 - **Done when**: the account card shows avatar, name, owned/wishlist counts; the nav chip names the account; Owned streams in rows with rating/HLTB filled progressively; reloading keeps everything.
-- **Edges**: unknown identifier; private profile (looks empty — does the UI say _why_ it might be?); a very large library (thousands of games); slow upstream.
+- **Edges**: unknown identifier; private profile (named, with where Steam makes it public ◇ U269); a very large library (thousands of games); slow upstream.
 
 ### A2 Explore a friend without losing my own setup
 
@@ -306,7 +306,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   3. open one
   4. check tier price vs. best deals (each tier header says what its step adds for me and whether it beats buying apart), owned badges, ratings; click a tier to see what it gets and what of that is new
 - **Done when**: owned games are obvious; games with no Steam listing are listed below the table, not dropped.
-- **Edges**: no `ITAD_API_KEY` configured (Bundles unavailable — is that explained?); region change reprices; a Fanatical pick-and-mix bundle shows its quantity tiers, prices the selection and links to buying it; a tab left open for hours shows stale countdowns ◇ U238.
+- **Edges**: no `ITAD_API_KEY` configured (Bundles says why it's empty); region change reprices; a Fanatical Pick & mix bundle shows its quantity tiers, prices the selection and links to buying it; a tab left open for hours shows stale countdowns ◇ U238.
 
 ### B2 Is my wishlist on sale?
 
@@ -430,7 +430,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   2. go fullscreen (F, or its button)
   3. tap to show the controls; seek, mute, pause with the centre button
   4. tap again to hide them
-- **Done when**: a tap toggles the controls and never pauses by itself; targets are 44 px under a finger; a mute is kept for the next trailers; the phone turns to landscape and back after; Esc leaves fullscreen before closing.
+- **Done when**: a tap toggles the controls and never pauses by itself; targets are full-size under a finger ([ui-guidelines.md](ui-guidelines.md#touch-and-phone)); a mute is kept for the next trailers; the phone turns to landscape and back after; Esc leaves fullscreen before closing.
 - **Edges**: the browser refuses sound (muted, an Unmute button saying so); a double-tap seek, then more taps on that side; an iPhone (the native player); the trailer ends (a replay, no moving on).
 
 ## Sharing
@@ -462,7 +462,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   3. reload
   4. go Home
 - **Done when**: the page works with no local state; their changes are theirs and the link's layout is only the starting point; Home offers no ★ account until they pick one.
-- **Edges**: a `/lists/<id>` link to a list that exists only in the sender's browser (what does the dead link say?); reload with `?game=` on a route that doesn't restore it (U239); a developer's or publisher's list, which needs nothing local.
+- **Edges**: a `/lists/<id>` link to a list that exists only in the sender's browser (says lists are local, pointing to Share list); reload with `?game=` on a route that doesn't restore it (U239); a developer's or publisher's list, which needs nothing local.
 
 ## Sync
 
@@ -483,7 +483,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   1. open the app
   2. Home is empty
   3. sign in with Steam
-- **Done when**: if I had synced, everything comes back; if I hadn't, did the app ever suggest syncing before it mattered? There's no export/backup path.
+- **Done when**: if I had synced, everything comes back; if I hadn't, the app suggested syncing once I had something to lose ◇ U273. An export file is a non-goal: Sync is the backup.
 
 ### Y3 Two tabs at once
 
@@ -492,13 +492,13 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   2. add a game in one
   3. remove another in the second
   4. reload both
-- **Done when**: no silent loss of either edit; today there's no cross-tab sync (lists-and-accounts.md), so this is where one tab overwrites the other.
+- **Done when**: no silent loss of either edit ◇ U274.
 
 ## Freshness and failures
 
 ### D1 "I just bought it — why isn't it here?"
 
-- **Who / goal**: a game I bought an hour ago is missing from Owned; library data is cached for up to 30 days.
+- **Who / goal**: a game I bought an hour ago is missing from Owned; library data is cached for up to `LIBRARY_CACHE_TTL_MINUTES` ([default.env](../../default.env)).
 - **Steps**:
   1. Owned
   2. notice the **Updated** age
