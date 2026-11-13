@@ -109,7 +109,7 @@ export function AccountFriends(props: {
             <Show
               when={selected().size > 0}
               fallback={
-                <p class="account-friends-note">
+                <p class="account-friends-compare account-friends-note">
                   Select up to {MAX_COMPARED} friends to compare with {props.accountLabel}.
                 </p>
               }

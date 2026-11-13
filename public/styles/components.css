@@ -4327,11 +4327,13 @@
     margin: 0;
     accent-color: var(--accent);
   }
+  /* The hint and the Compare link take turns here: one height, so the list doesn't jump. */
   .account-friends-compare {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+    min-block-size: var(--control-h);
     margin-block: 4px 8px;
   }
   .account-friends summary {

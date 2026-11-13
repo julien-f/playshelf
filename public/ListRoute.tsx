@@ -1378,7 +1378,8 @@ export default function ListRoute() {
 
   // ── Row-selection-based add/remove-to-list (see this file's own header comment) ────────────
   const [selectedRows, setSelectedRows] = createSignal<Game[]>([]);
-  const [manualLists, setManualLists] = createSignal<GameList[]>(getLists().filter((l) => l.kind === 'manual'));
+  // getLists reads a tracked pref: a list made in the panel or synced in is offered at once.
+  const manualLists = createMemo(() => getLists().filter((l) => l.kind === 'manual'));
   const NEW_LIST_OPTION = '__new__';
   const [addTarget, setAddTarget] = createSignal('');
   const [newListName, setNewListName] = createSignal('');
@@ -1401,10 +1402,6 @@ export default function ListRoute() {
     selectionStatusTimer = setTimeout(() => setSelectionActionStatus(null), 6000);
   }
 
-  function refreshManualLists(): void {
-    setManualLists(getLists().filter((l) => l.kind === 'manual'));
-  }
-
   async function handleAddSelectedToList(): Promise<void> {
     const target = addTarget();
     const rows = selectedRows();
@@ -1413,7 +1410,6 @@ export default function ListRoute() {
     const name = newListName().trim();
     if (target === NEW_LIST_OPTION && !name) return;
     const added = addToManualList(target === NEW_LIST_OPTION ? { newName: name } : { listId: target }, appids);
-    if (target === NEW_LIST_OPTION) refreshManualLists();
     showSelectionStatus(added.message, added.listId);
     setAddTarget('');
     setNewListName('');

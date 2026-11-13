@@ -743,7 +743,10 @@ test('A4.5-7: select friends, then compare them with the current account, which 
   await asPlayer(page, ALICE);
   await openFriends(page);
   await expect(page.getByText('Select up to 5 friends to compare with Alice.')).toBeVisible();
+  const list = page.locator('.account-friends-list');
+  const listTop = (await list.boundingBox())!.y;
   await page.getByRole('checkbox', { name: 'Select Bob' }).check();
+  expect((await list.boundingBox())!.y).toBe(listTop); // the Compare link takes the hint's place, no jump
   await page.getByRole('checkbox', { name: 'Select Carol' }).check();
   await page.getByRole('link', { name: 'Compare with Alice (2)' }).click();
   await expect(page).toHaveURL(/\/lists\/compare\?/);
@@ -2998,6 +3001,19 @@ test("L1.5: from a game's panel, tick a list to add it, or make a new list with 
 
   await page.goto('/lists/picks');
   await expect(rows(page)).toHaveCount(2);
+});
+
+test("L1 edge: a list made in a game's panel is offered at once by the selection bar", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=620');
+  const panel = page.locator('#game-panel');
+  await panel.getByRole('button', { name: 'Add to list' }).click();
+  await panel.getByRole('textbox', { name: 'New list name' }).fill('Game night');
+  await page.keyboard.press('Enter');
+  await expect(panel.getByRole('checkbox', { name: 'Game night' })).toBeChecked();
+  await page.getByRole('button', { name: 'Close', exact: true }).click(); // a phone's panel covers the table
+  await row(page, 'Terraria').getByRole('checkbox').check();
+  await expect(page.locator('.selection-toolbar').getByRole('option', { name: 'Game night' })).toHaveCount(1);
 });
 
 test("L1 edge: unticking the list being viewed in a game's panel drops its row", async ({ page }) => {
