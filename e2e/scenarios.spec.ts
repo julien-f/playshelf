@@ -5285,6 +5285,36 @@ test('D2 edge: past its share, Refresh details, a lookup and the ranking say so 
   await expect(page.locator('.rank-route .list-status')).toHaveText(LIMITED);
 });
 
+test("D2 edge: a Refresh details answered past its share after stepping to another bundle doesn't mark the new one", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/bundles');
+  await page.getByRole('cell', { name: BUNDLE.title }).click();
+  await row(page, 'Hades').getByText('Hades').click();
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let hit!: () => void;
+  const requested = new Promise<void>((resolve) => (hit = resolve));
+  await page.route('**/api/game-details/1145360**', async (route) => {
+    hit();
+    await released;
+    const req = route.request();
+    const reply = respond(req.method(), new URL(req.url()), null, new Set(['client-limited']));
+    await route.fulfill({ status: reply.status, contentType: reply.contentType, body: reply.body });
+  });
+  await page.locator('.panel-refresh-btn').click();
+  await requested;
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Next bundle' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: PICK_BUNDLE.title })).toBeVisible();
+  await expect(rows(page)).not.toHaveCount(0);
+  release();
+  // The late reply still lands on the Hades row both bundles share.
+  await expect(row(page, 'Hades').getByTitle(/HowLongToBeat didn't answer/)).toHaveCount(1);
+  await expect(page.locator('.list-status')).not.toContainText(LIMITED);
+});
+
 test("D2.3: once the upstream is back, the panel's Refresh details fills in what didn't answer", async ({ page }) => {
   await mockApi(page, { states: ['upstream-down'] });
   await asPlayer(page, ALICE);
