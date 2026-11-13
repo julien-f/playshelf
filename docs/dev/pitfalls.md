@@ -42,7 +42,7 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 
 - **Symptom**: `scripts/check.js` (the hooks, `npm run check`) stops with `✗ node_modules is behind package-lock.json: <package> (…). Run npm ci.`, though the branch passed (typically a merge that brings a lockfile change).
 - **Cause**: worktrees run their own `npm ci`; the main checkout's `node_modules` stays at whatever it last installed.
-- **Fix**: `npm ci` in the main checkout, then commit the merge again (it stays staged).
+- **Fix**: the `post-merge` hook runs `npm ci` after a merge that changes the lockfile, but not on a merge left pending by a conflict or a blocking hook: `npm ci` in the main checkout, then commit the merge again (it stays staged).
 
 ### `Connection to github.com closed by remote host` during `git push`
 
