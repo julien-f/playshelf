@@ -3,7 +3,7 @@
 What users come to the app to get done: the input for design reviews (walk each one, judge the friction) and for end-to-end tests.
 
 - **Goals**: explore Steam libraries as lists of games, with ratings, completion times and prices in one table; combine lists to answer what Steam can't (what friends both own, what a bundle adds, what the family already has); share a view; run it yourself for a group of friends.
-- **Non-goals**: buying or trading through the app; social features beyond reading Steam's friends lists; storing anything about an account beyond its cached public data and the user's own lists.
+- **Non-goals**: buying or trading through the app; social features beyond reading Steam's friends lists; knowing which games cross-play between stores (no source says); storing anything about an account beyond its cached public data and the user's own lists.
 - **Core journeys**, why the app exists: A1, C1, F1, F3, B1, S1, S3. A design review always walks them, and friction there outranks the same severity elsewhere.
 
 ## Who uses it
@@ -25,7 +25,7 @@ Derived from the journeys below and the features built for them, not from user r
   - Journeys: O1.
 - Traits, not personas: a Linux or Steam Deck player, a phone, a keyboard or a screen reader can be anyone's (C5, I1–I3).
 
-Each journey: **Who / goal**, numbered **Steps** as a user would take them, **Done when** (what must be true at the end) and **Edges** worth checking. ◇ marks a step or outcome the app doesn't support yet: the target a design review pushes toward. Which steps `e2e/scenarios.spec.ts` locks (★) is derived, never written: `node scripts/journey-coverage.js`.
+Each journey: **Who / goal**, numbered **Steps** as a user would take them, **Done when** (what must be true at the end) and **Edges** worth checking. ◇ marks a step or outcome the app doesn't support yet, the target a design review pushes toward, followed by the [improvements.md](improvements.md) item that tracks it (`◇ U229`; `node scripts/journey-coverage.js --targets` lists them). `npm run check` fails on a ◇ whose item isn't open, so closing an item drops or re-points its ◇ in the same commit. Which steps `e2e/scenarios.spec.ts` locks (★) is derived, never written: `node scripts/journey-coverage.js`.
 
 Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: …` only those steps, `A1 edge: …` its edges.
 
@@ -51,7 +51,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   1. open `/`
   2. paste a profile URL, vanity name or steam64 id
   3. resolve
-  4. it becomes my ★ account automatically, being the first ◇
+  4. it becomes my ★ account automatically, being the first ◇ U245
   5. open **Owned**
 - **Done when**: the account card shows avatar, name, owned/wishlist counts; the nav chip names the account; Owned streams in rows with rating/HLTB filled progressively; reloading keeps everything.
 - **Edges**: unknown identifier; private profile (looks empty — does the UI say _why_ it might be?); a very large library (thousands of games); slow upstream.
@@ -87,7 +87,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   3. explore one
   4. back on Home, their friends list marks mutual friends
 - **Done when**: the friend becomes the current account and joins Home's Accounts, so Compare's player boxes offer them next.
-- **Or**: 5. select several friends 6. **Compare with me** ◇ 7. lands on C1's result with me plus them, my current account unchanged
+- **Or**: 5. select several friends 6. **Compare with me** ◇ U246 7. lands on C1's result with me plus them, my current account unchanged
 - **Edges**: private friends list; a Family's merged friends list; the list's refresh after adding a friend on Steam.
 
 ### A5 What kind of player is this?
@@ -109,7 +109,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
 - **Who / goal**: a group of 2–5 friends wants the games they all own, best-rated first.
 - **Steps**:
   1. **Compare**
-  2. one player box per friend (pick known accounts or type identifiers; or start from A4's **Compare with me** ◇)
+  2. one player box per friend (pick known accounts or type identifiers; or start from A4's **Compare with me** ◇ U246)
   3. submit
   4. read the "everyone" group
   5. sort by rating, filter by tag (e.g. co-op)
@@ -122,8 +122,8 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
 - **Steps**:
   1. C1
   2. read the group missing exactly one player
-  3. sort it by price ◇
-- **Done when**: group labels say clearly who is _in_ and who is _missing_; a group missing players carries price columns ◇, so no panel needs opening.
+  3. sort it by price ◇ U247
+- **Done when**: group labels say clearly who is _in_ and who is _missing_; a group missing players carries price columns ◇ U247, so no panel needs opening.
 
 ### C3 Keep a comparison
 
@@ -139,7 +139,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
 - **Steps**:
   1. F1
   2. the panel's "Owned by"
-  3. it lists my friends who own it ◇
+  3. it lists my friends who own it ◇ U248
 - **Done when**: today "Owned by" covers the current account's own members, or a comparison's players; answering this needs friends' libraries, i.e. one library fetch per friend — check integrations.md's budgets first.
 
 ### C5 Can everyone actually run it?
@@ -203,7 +203,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   2. add to a new manual list
   3. name it
   4. put it in a folder
-  5. or, while reading one game's panel, **Add to list** there ◇
+  5. or, while reading one game's panel, **Add to list** there ◇ U249
 - **Done when**: the list appears in Home's tree; adding/removing games persists across reloads.
 - **Edges**: delete then restore (soft-delete — no restore UI yet, U236); a folder's "Move to…" never offers its own subfolders; a row's ⋯ menu from the keyboard (Esc, Rename, Move and Delete each leave focus on a row's ⋯, or the heading once the tree is empty); an edit the browser can't store (storage full) says so instead of silently snapping back.
 
@@ -282,7 +282,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
 - **Who / goal**: send a friend my top 20.
 - **Steps**:
   1. ranked list
-  2. **Share view** ◇
+  2. **Share view** ◇ U229
   3. friend opens it
 - **Done when**: the friend sees the order read-only, and can save it or rank the same games themselves; ranked lists can't be shared today.
 
@@ -338,7 +338,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   2. check the catalog's region and the games not on Steam
   3. Home's combine form: my Wishlist ∩ PC Game Pass, then save
 - **Done when**: rows are the Steam games in my region's catalog; the ones not on Steam are named below the table; the list says Game Pass plays them through the Xbox app; Updated re-fetches the catalog.
-- **Edges**: no `ITAD_API_KEY` (says why); the catalog down (says so, Updated retries); a region change reloads the catalog; playing together when one friend owns it on Steam and another has it through Game Pass ◇ (the app doesn't know which games cross-play).
+- **Edges**: no `ITAD_API_KEY` (says why); the catalog down (says so, Updated retries); a region change reloads the catalog; playing together when one friend owns it on Steam and another has it through Game Pass (a non-goal: no source says which games cross-play).
 
 ## Finding a game
 
@@ -434,7 +434,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   2. **Share view** (carries my account on Owned/Wishlist)
   3. friend opens the link
 - **Done when**: the friend sees my account's list with my layout; their own account and saved views are untouched; clicking around keeps the shared account. The link previews in a chat app naming whose list it is, with their avatar.
-- **Edges**: sharing a dynamic list (`/lists/shared?f=`) → friend saves it; on a ranked or manual-sourced list the button says why it can't share, before it's clicked ◇.
+- **Edges**: sharing a dynamic list (`/lists/shared?f=`) → friend saves it; on a ranked or manual-sourced list the button says why it can't share, before it's clicked ◇ U229.
 
 ### S2 Link one game
 
@@ -495,7 +495,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   2. notice the **Updated** age
   3. click it
   4. the game appears
-- **Done when**: an age older than a few days is highlighted ◇, so the fix is suggested before I wonder; on a dynamic list or comparison, Updated re-fetches every source account.
+- **Done when**: an age older than a few days is highlighted ◇ U250, so the fix is suggested before I wonder; on a dynamic list or comparison, Updated re-fetches every source account.
 - **Edges**: a single bundle's page, where the age can't be refreshed (features.md explains why).
 
 ### D2 An upstream is down
@@ -512,7 +512,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
 - **Who / goal**: I haven't opened the app in weeks; what changed that I care about?
 - **Steps**:
   1. open Home
-  2. see what's new since my last visit ◇: wishlist games now at a record low, new bundles containing wishlist games, owned games not yet in my ranking
+  2. see what's new since my last visit ◇ U251: wishlist games now at a record low, new bundles containing wishlist games, owned games not yet in my ranking
 - **Done when**: each item links to the list that shows it; nothing is stored server-side, so "last visit" lives in localStorage (and Sync).
 
 ## Devices and input

@@ -3,7 +3,15 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 
-const { parseJourneys, parseTitle, coverage, format, testsFromReport } = require('../scripts/journey-coverage');
+const {
+  parseJourneys,
+  parseTitle,
+  coverage,
+  format,
+  targetProblems,
+  formatTargets,
+  testsFromReport,
+} = require('../scripts/journey-coverage');
 
 const MD = `### A1 First visit
 
@@ -80,4 +88,43 @@ test("testsFromReport: one entry per title across projects, failed if any projec
     { title: 'A2: y', passed: false },
     { title: 'A3: z', passed: true },
   ]);
+});
+
+const TARGETS_MD = `# Journeys
+
+◇ marks a target, named by its U-item.
+
+### A1 First visit
+
+- **Steps**:
+  1. it becomes my account ◇ U1
+- **Or**: 2. **Compare with me** ◇
+- **Done when**: an old age is highlighted ◇ U2.
+- **Edges**: a ranked list says why ◇ U3
+`;
+
+const IMPROVEMENTS_MD = `- **U1 · minor · A1** — open.
+- **U2 · polish · A1** — also open; U3 closed long ago.
+`;
+
+test('parseJourneys: a ◇ on any line of a journey is a target, with its U-item; the intro is not', () => {
+  const targets = parseJourneys(TARGETS_MD).get('A1').targets;
+  assert.deepStrictEqual(
+    targets.map((t) => t.item),
+    ['U1', null, 'U2', 'U3'],
+  );
+});
+
+test('targetProblems: a ◇ needs a U-item still open in improvements.md', () => {
+  const problems = targetProblems(parseJourneys(TARGETS_MD), IMPROVEMENTS_MD);
+  assert.strictEqual(problems.length, 2);
+  assert.match(problems[0], /A1: ◇ names no U-item/);
+  assert.match(problems[1], /A1: ◇ U3 is not open/);
+});
+
+test('formatTargets: one line per ◇, journey and item first', () => {
+  assert.strictEqual(
+    formatTargets(parseJourneys(TARGETS_MD)).split('\n')[0],
+    'A1  U1    1. it becomes my account ◇ U1',
+  );
 });

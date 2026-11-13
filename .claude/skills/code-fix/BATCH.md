@@ -15,7 +15,7 @@ One `Agent` per lane, all in one message, `isolation: "worktree"`, with the lane
 
 ## 3. Merge each lane as it reports
 
-- `node scripts/batch.js merge <branch>`: merges `--no-ff --no-commit`, keeps both sides of CHANGELOG conflicts, and replays the lane's backlog edits on `main`'s side — lines it deleted are closed, lines it rewrote are narrowed — then prints which. Commit with `E2E_DEFER=1`, plus `SKIP_CHANGELOG=1` when `merge` says the lane added no entry (`Merge lane <X>: …`, body naming the items; the lane ran e2e before reporting), then `git worktree remove` and `git branch -d`.
+- `node scripts/batch.js merge <branch>`: merges `--no-ff --no-commit`, keeps both sides of CHANGELOG conflicts, and replays the lane's backlog edits on `main`'s side — lines it deleted are closed, lines it rewrote are narrowed — then prints which. journeys.md isn't replayed: a lane that dropped a closed item's ◇ merges it as an ordinary edit, so two lanes touching one journey line conflict there. Commit with `E2E_DEFER=1`, plus `SKIP_CHANGELOG=1` when `merge` says the lane added no entry (`Merge lane <X>: …`, body naming the items; the lane ran e2e before reporting), then `git worktree remove` and `git branch -d`.
 - Then launch a background `Agent` to run `/code-review <merge>^1..<merge>` and report its findings without fixing them; it replaces code-fix's step 4 for the batch. Review the conflicts you resolved by hand yourself: a lane's review can't see where two lanes meet.
 - Record what a lane reports as new problems, once verified, as backlog items.
 

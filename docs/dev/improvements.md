@@ -30,6 +30,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U188 · minor · D2** — after a failed price batch the panel's Price card says "IsThereAnyDeal didn't answer." with no retry there, and its Refresh details retries bundles but not the price; the only retry is the hero's Prices tile, out of sight behind the panel on a phone. Offer the retry in the card (the Prices tile's refresh), or have Refresh details refetch the game's price.
 - **U195 · minor · D2, F1** — past the client share, `GET /api/game-details/:appid` still answers 200 with a `limited` message nothing reads, so Look up, Rank and the panel's Refresh details show per-source "didn't answer" notes and the ⚠ tooltip invites a retry that will be refused. Show the server's message there, as the list's status line does (or answer 429).
 - **U225 · minor · F1, L1** — a list whose games aren't cached yet shows "No rows" under "0 / 15 games loaded…", with no progress bar (`loadFraction` 0 is falsy, `ListRoute.tsx:4259`), until the first game's details land (1.9 s desktop, 5.1 s phone, measured): rows wait for details although their names are known (`isListed`, `ListRoute.tsx:1463`). Show the bar from 0 and "Loading…" instead of "No rows"; possibly named rows with placeholder cells (the sort then reshuffles as details land).
+- **U250 · minor · D1** — the **Updated** age reads the same at an hour or three weeks, so a missing recent purchase gives no hint that a refresh would fix it. Highlight an age older than a few days.
 
 ## Lists and selection
 
@@ -41,6 +42,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U214 · minor · F3, L5** — Play next ranks an owned game that isn't out yet ("Coming soon", e.g. a pre-order) at the top, though it can't be played tonight. Leave unreleased games out of Play next and Short games.
 - **U216 · minor · F3, L5** — no view answers "runs on my Linux PC or Steam Deck": filtering on ProtonDB Gold or better (or native Linux) is several clicks each time. A suggested view on Owned, and on Wishlist if it proves useful; rated the most useful missing view in a persona review.
 - **U236 · polish · L1** — Home's folder/list tree deletes through a plain `window.confirm`, moves only through each row's "Move to…" select (no drag-and-drop), and soft-deleted lists have no trash or restore.
+- **U249 · minor · L1** — a game's panel has no **Add to list**: adding the game being read means finding and selecting its row, and a looked-up game outside the list has none.
 
 ## Taste profile
 
@@ -58,6 +60,9 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U197 · minor · C5, F1** — same for desktop Linux: a **Linux rating** from `GetAppReviews`' `hardware_os`, with U196's cost and sparsity caveats.
 - **U139 · polish · C4** — panel Owned by reads "never played · not played". One phrase.
 - **U237 · minor · C3** — a saved dynamic list grouped by membership shows only the current account's playtime: no Played column per player and no per-player hours in the panel's "Owned by", which the live comparison has (`createDefaultFetchers`' `onOwners`).
+- **U246 · minor · A4, C1** — a comparison can't start from the friends list: each friend is typed or picked again in Compare's player boxes. Select friends there, **Compare with me**, landing on C1's result with the current account unchanged.
+- **U247 · minor · C2** — a comparison's group missing one player has no price columns, so pricing what that player should buy means opening each panel. Price columns on comparisons, sortable (U244's totals then apply).
+- **U248 · minor · C4** — the panel's Owned by covers the account's own members or a comparison's players, never the friends who own the game. Needs one library fetch per friend: blocked on a volume review against [integrations.md](integrations.md)'s trust tiers, before any design.
 
 ## Bundles and prices
 
@@ -75,6 +80,8 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 ## Accounts and first visit
 
 - **U181 · minor · A3, I3** — with **Add Steam Family account**, both lookup fields are named "Steam name, profile URL, or 64-bit ID", so a screen reader can't tell them apart. Number them ("Family member 2").
+- **U245 · polish · A1** — the first account resolved doesn't become the ★ account: only a Steam sign-in stars one (`authStore.ts`), so a first visitor stars it by hand or never. Star the first resolved account while none is starred.
+- **U251 · minor · D3** — Home says nothing about what changed since the last visit: wishlist games now at a record low, new bundles holding wishlist games, owned games not yet in a ranking. Each item links to its list; "last visit" lives in localStorage (and Sync), nothing server-side.
 
 ## Consistency and polish
 

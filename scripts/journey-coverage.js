@@ -3,7 +3,8 @@
 // Derives which journey steps in docs/dev/journeys.md the e2e tests lock (★), from test titles:
 // `A1: …` covers A1's built steps, `A1.1,3-4: …` those steps, `A1 edge: …` A1's edges.
 // Prints one line per journey; `--check` (run by `npm run check`) fails on a title that maps to
-// no journey or step, or to a ◇ step. `--results=<file>` (Playwright's JSON report) counts only
+// no journey or step, or to a ◇ step, and on a ◇ naming no U-item open in improvements.md.
+// `--targets` lists every ◇ instead. `--results=<file>` (Playwright's JSON report) counts only
 // passing tests.
 
 const fs = require('node:fs');
@@ -18,8 +19,10 @@ function parseJourneys(md) {
   let inSteps = false;
   for (const line of md.split('\n')) {
     const heading = /^### ([A-Z]\d+) (.+)$/.exec(line);
+    const target = journey && !heading && /◇(?: (U\d+))?/.exec(line);
+    if (target) journey.targets.push({ text: line.replace(/^[ -]*/, ''), item: target[1] ?? null });
     if (heading) {
-      journey = { id: heading[1], title: heading[2], steps: new Map() };
+      journey = { id: heading[1], title: heading[2], steps: new Map(), targets: [] };
       journeys.set(journey.id, journey);
       inSteps = false;
     } else if (journey && /^- \*\*(Steps|Or)\*\*:/.test(line)) inSteps = true;
@@ -81,6 +84,27 @@ function format(journeys, cov) {
     .join('\n');
 }
 
+const OPEN_ITEM = /^- \*\*(U\d+) ·/gm;
+
+// A ◇ names the improvements.md item that tracks it, so a closed item's ◇ can't linger.
+function targetProblems(journeys, improvementsMd) {
+  const open = new Set([...improvementsMd.matchAll(OPEN_ITEM)].map((m) => m[1]));
+  return [...journeys.values()].flatMap((j) =>
+    j.targets.flatMap(({ item }) =>
+      !item
+        ? [`${j.id}: ◇ names no U-item (write "◇ U<n>", filed in improvements.md)`]
+        : open.has(item)
+          ? []
+          : [`${j.id}: ◇ ${item} is not open in improvements.md (drop the ◇ or re-point it)`],
+    ),
+  );
+}
+
+const formatTargets = (journeys) =>
+  [...journeys.values()]
+    .flatMap((j) => j.targets.map((t) => `${j.id.padEnd(4)}${(t.item ?? '?').padEnd(6)}${t.text}`))
+    .join('\n');
+
 // Playwright's JSON report → [{ title, passed }], one per title across projects (widths); a test
 // passes when no project's last result failed it.
 function testsFromReport(report) {
@@ -106,9 +130,12 @@ function main() {
           encoding: 'utf8',
         }),
       );
-  const journeys = parseJourneys(fs.readFileSync(path.join(ROOT, 'docs/dev/journeys.md'), 'utf8'));
+  const read = (doc) => fs.readFileSync(path.join(ROOT, 'docs/dev', doc), 'utf8');
+  const journeys = parseJourneys(read('journeys.md'));
   const { journeys: cov, problems } = coverage(journeys, testsFromReport(report));
-  if (!args.includes('--check')) console.log(format(journeys, cov));
+  problems.push(...targetProblems(journeys, read('improvements.md')));
+  if (args.includes('--targets')) console.log(formatTargets(journeys));
+  else if (!args.includes('--check')) console.log(format(journeys, cov));
   if (problems.length) {
     console.error(`journey-coverage:\n  ${problems.join('\n  ')}`);
     process.exit(1);
@@ -117,4 +144,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { parseJourneys, parseTitle, coverage, format, testsFromReport };
+module.exports = { parseJourneys, parseTitle, coverage, format, targetProblems, formatTargets, testsFromReport };
