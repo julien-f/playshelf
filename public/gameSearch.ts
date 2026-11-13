@@ -1,4 +1,5 @@
-import { esc, fetchJson } from './utils.ts';
+import { esc, fetchJson, isTextEntry } from './utils.ts';
+import { focusVisible, handOffFocus, inViewport } from './focusHandoff.ts';
 import { createComponent, createEffect, untrack } from 'solid-js';
 import ArrowRight from 'lucide-solid/icons/arrow-right';
 import { peekMyOwnership, trackMyOwnership } from './myOwnership.ts';
@@ -272,6 +273,12 @@ export function initGameSearch({
     if (shouldShowRecents(inputEl.value)) showRecents();
   };
   inputEl.addEventListener('focus', openRecentsIfEmpty);
+  // Where focus came from (`/`, a click or Tab), for Esc to hand it back.
+  let cameFrom: HTMLElement | null = null;
+  inputEl.addEventListener('focus', (e) => {
+    const from = e.relatedTarget;
+    cameFrom = from instanceof HTMLElement && !isTextEntry(from) ? from : null;
+  });
   inputEl.addEventListener('click', openRecentsIfEmpty);
 
   inputEl.addEventListener('blur', () => (escClosedResults = false));
@@ -304,7 +311,8 @@ export function initGameSearch({
       }
       // Leave the box, so the page's own shortcuts work again.
       if (escClosedResults) inputEl.value = '';
-      inputEl.blur();
+      // Not one scrolled out of sight since: focusing it would jump the page there.
+      handOffFocus(() => !!cameFrom && inViewport(cameFrom) && focusVisible(cameFrom));
       return;
     }
     if (e.key === 'ArrowDown') {

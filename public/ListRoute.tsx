@@ -130,6 +130,7 @@ import {
   smoothScroll,
   refusalMessage,
 } from './utils.ts';
+import { inViewport, keepFocus, type FocusCandidate } from './focusHandoff.ts';
 import {
   shareTableView,
   resetTableView,
@@ -165,6 +166,7 @@ import {
   DEFAULT_COMPARE_OP,
 } from './urlState.ts';
 import { SharedViewBanner } from './SharedViewBanner.tsx';
+import { SteamPrivacyLink } from './SteamPrivacyLink.tsx';
 import { UnsavedChangesBanner, ViewActions } from './TableViewControls.tsx';
 import {
   PLAY_NEXT_MAX_HOURS,
@@ -1207,7 +1209,7 @@ export default function ListRoute() {
     const rows = selectedRows();
     applyRanking(rows.reduce((s, row) => exclude(s, row.appid), state));
     showSelectionStatus(`Excluded ${rows.length} game${rows.length === 1 ? '' : 's'} from the ranking.`);
-    table?.selection.clear();
+    void keepFocus(selectionBar, () => table?.selection.clear(), focusSelectedRow(rows.map((r) => r.appid)));
   }
   // ── kind === 'shared' ─────────────────────────────────────────────────────────────────────
   // /lists/shared?f=<formula> — another dynamic list's formula, decoded straight from the URL
@@ -1284,7 +1286,10 @@ export default function ListRoute() {
   const [compareAccounts, setCompareAccounts] = createSignal<AccountSlot[]>([]);
   const [editingPlayers, setEditingPlayers] = createSignal(false);
   // Players the last comparison couldn't resolve, with why — the rest still compare (U14).
-  const [compareFailures, setCompareFailures] = createSignal<{ identifiers: string[]; message: string }[]>([]);
+  // `label`: the player's name once known (a private profile), else as typed.
+  const [compareFailures, setCompareFailures] = createSignal<
+    { identifiers: string[]; label: string; message: string; isPrivate: boolean }[]
+  >([]);
   function compareOthers(): void {
     const failed = new Set(compareFailures().map((f) => f.identifiers.join(',')));
     navigate(
@@ -1413,17 +1418,25 @@ export default function ListRoute() {
     showSelectionStatus(added.message, added.listId);
     setAddTarget('');
     setNewListName('');
-    const main = document.querySelector<HTMLElement>('main');
-    // One the user can see, so focusing it doesn't scroll back to the first one added.
-    const focusTo =
-      appids.find((appid) => {
-        const rect = gameRowEl(main, appid)?.getBoundingClientRect();
-        return rect && rect.bottom > 0 && rect.top < window.innerHeight;
-      }) ?? appids[0];
-    table?.selection.clear();
-    // Clearing the selection unmounts the bar that held focus: back to a row it added, not the
-    // toast's Open list, which would hold the toast up for as long as it kept focus.
-    if (!focusGameRow(main, focusTo)) main?.focus();
+    // Back to a row it added, not the toast's Open list, which would hold the toast up while focused.
+    void keepFocus(selectionBar, () => table?.selection.clear(), focusSelectedRow(appids));
+  }
+  // The selection bar unmounts once nothing is selected: focus it held goes to a row instead.
+  let selectionBar: HTMLDivElement | undefined;
+  // One the user can see, so focusing it doesn't scroll back to the first one.
+  function focusSelectedRow(appids: number[]): FocusCandidate {
+    return () => {
+      const main = document.querySelector<HTMLElement>('main');
+      const onScreen = appids.find((appid) => {
+        const el = gameRowEl(main, appid);
+        return el && inViewport(el);
+      });
+      return focusGameRow(main, onScreen ?? appids[0]);
+    };
+  }
+  function handleClearSelection(): void {
+    const appids = selectedRows().map((r) => r.appid);
+    void keepFocus(selectionBar, () => table?.selection.clear(), focusSelectedRow(appids));
   }
 
   // Only ever called while viewing a manual list (`kind === 'user' && userList().kind ===
@@ -1442,8 +1455,20 @@ export default function ListRoute() {
     const rows = selectedRows();
     if (!list || rows.length === 0) return;
     const appids = rows.map((r) => r.appid);
-    removeAppidsFromList(list.id, appids);
-    await load();
+    // The row now where the first removed one was, so focus stays at the same place in the table.
+    const at = table?.processedData().findIndex((r) => appids.includes(r.appid)) ?? -1;
+    await keepFocus(
+      selectionBar,
+      async () => {
+        removeAppidsFromList(list.id, appids);
+        await load();
+      },
+      () => {
+        const left = table?.processedData() ?? [];
+        const next = left[Math.min(Math.max(at, 0), left.length - 1)];
+        return !!next && focusGameRow(document.querySelector<HTMLElement>('main'), next.appid);
+      },
+    );
     showSelectionStatus(`Removed ${appids.length} game${appids.length === 1 ? '' : 's'} from "${list.name}".`);
   }
   let total = 0;
@@ -2099,8 +2124,8 @@ export default function ListRoute() {
   // kept total anyway so a stray call never returns undefined.
   function viewPrefKey(): string {
     if (kind === 'wishlist') return 'wishlistListView';
-    // Shared across every comparison, like the bundle key above: a comparison has no stored list
-    // of its own to hang a view on.
+    // Saved once for every comparison, like the bundle key above: a comparison has no stored list
+    // of its own to hang a view on. Its draft is per comparison (storedLayout).
     if (kind === 'compare') return 'compareListView';
     // Shared across every /lists/shared link, not per-link — the "kind has no stored list of its
     // own to hang a view on" reasoning above applies just as much here, and a link is one-off by
@@ -2139,7 +2164,15 @@ export default function ListRoute() {
         store: { load: () => getList(id)?.tableView ?? {}, save: (view) => setListTableView(id, view) },
       };
     const key = viewPrefKey();
-    return { id: key + account, store: prefViewStore(key) };
+    // A comparison's draft stays with its players: tonight's filter shouldn't open the next group's.
+    const players =
+      kind === 'compare'
+        ? `:${untrack(compareAccounts)
+            .map((a) => a.id)
+            .sort()
+            .join('|')}`
+        : '';
+    return { id: key + account + players, store: prefViewStore(key) };
   }
   // The layout on screen as a draft over its stored one, rebound on each table build and view switch.
   let tableDefaults: TableViewState = {};
@@ -2439,14 +2472,20 @@ export default function ListRoute() {
       setStatusText('Resolving accounts…');
       const settled = await Promise.allSettled(slots.map((identifiers) => resolveAccountSlot(identifiers)));
       if (loadGuard.isStale(gen)) return;
-      const failures = settled.flatMap((r, i) =>
-        r.status === 'rejected' ? [{ identifiers: slots[i], message: (r.reason as Error).message }] : [],
-      );
+      const failures = settled.flatMap((r, i) => {
+        if (r.status === 'fulfilled') return [];
+        const accounts = r.reason instanceof ApiError ? r.reason.accounts : undefined;
+        // A Family slot keeps its typed label: the message names the member.
+        const named = slots[i].length === 1 && accounts?.length === 1 ? accounts[0].name : undefined;
+        const label = named ?? slots[i].join(' + ');
+        return [{ identifiers: slots[i], label, message: (r.reason as Error).message, isPrivate: !!accounts }];
+      });
       if (failures.length) {
         // Named as far as known: a resolved player by name, a failed one as typed.
+        const failedLabel = new Map(failures.map((f) => [f.identifiers, f.label]));
         setListTitle(
           settled
-            .map((r, i) => (r.status === 'fulfilled' ? accountDisplayLabel(r.value) : slots[i].join(' + ')))
+            .map((r, i) => (r.status === 'fulfilled' ? accountDisplayLabel(r.value) : failedLabel.get(slots[i])))
             .join(' vs. '),
         );
         setCompareFailures(failures);
@@ -4398,7 +4437,11 @@ export default function ListRoute() {
           <For each={compareFailures()}>
             {(f) => (
               <p>
-                <TriangleAlert /> <strong>{f.identifiers.join(' + ')}</strong> — {f.message}
+                <TriangleAlert /> <strong>{f.label}</strong> — {f.message}
+                <Show when={f.isPrivate}>
+                  {' '}
+                  <SteamPrivacyLink />
+                </Show>
               </p>
             )}
           </For>
@@ -4575,7 +4618,7 @@ export default function ListRoute() {
       </Show>
       {/* Last, and stuck to the bottom: appearing above the table shifted every row under the pointer. */}
       <Show when={selectedRows().length > 0}>
-        <div class="selection-toolbar">
+        <div ref={selectionBar} class="selection-toolbar">
           <span class="selection-count">{selectedRows().length} selected</span>
           <Show when={pickPlan()}>
             {(plan) => (
@@ -4697,7 +4740,7 @@ export default function ListRoute() {
               Exclude
             </button>
           </Show>
-          <button type="button" onClick={() => table?.selection.clear()}>
+          <button type="button" onClick={handleClearSelection}>
             Clear selection
           </button>
         </div>

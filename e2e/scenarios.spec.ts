@@ -72,6 +72,21 @@ test('A1 edge: Look up keeps focus while it resolves', async ({ page }) => {
   await expect(page.getByRole('main')).toContainText('Owned: 6');
 });
 
+const PRIVATE_LIBRARY =
+  "Frank's games aren't public. In Steam: Edit Profile → Privacy Settings → My profile and Game details: Public.";
+
+test('A1 edge: a private profile is named, with where Steam makes it public', async ({ page }) => {
+  await page.goto('/');
+  await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('frank');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  const error = page.locator('.error');
+  await expect(error).toContainText(PRIVATE_LIBRARY);
+  await expect(error.getByRole('link', { name: /Steam privacy settings/ })).toHaveAttribute(
+    'href',
+    'https://steamcommunity.com/my/edit/settings',
+  );
+});
+
 test('A1 edge: an Explore card opens its list from anywhere on the card', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/');
@@ -453,9 +468,11 @@ test("S3 edge: editing a shared layout warns it's lost on reload unless kept", a
   // Back to the link's own layout: nothing of the viewer's is left to lose.
   await toggle.click();
   await expect(banner).toContainText('for this visit only');
-  await banner.getByRole('button', { name: 'Keep as my layout' }).click();
+  await banner.getByRole('button', { name: 'Keep as my layout' }).focus();
+  await page.keyboard.press('Enter');
   await expect(banner).toHaveCount(0);
   await expect(page.getByText('Unsaved changes to')).toHaveCount(0); // kept is saved
+  await expect(page.getByRole('button', { name: 'Share layout' })).toBeFocused(); // not dropped to <body>
 });
 
 test("S3 edge: another browser's list link explains lists are local", async ({ page }) => {
@@ -771,6 +788,17 @@ test('A4 edge: past five friends the others are disabled, and the list says why'
   await expect(page.getByText('Up to 5 friends: a comparison is for one group.')).toBeVisible();
   await page.getByRole('checkbox', { name: 'Select Friend 1' }).uncheck();
   await expect(page.getByRole('checkbox', { name: 'Select Friend 6' })).toBeEnabled();
+});
+
+test('A4 edge: a private friends list is named by its owner, with where Steam makes it public', async ({ page }) => {
+  await asPlayer(page, DAVE);
+  await page.goto('/');
+  await page.getByText('Friends (private)').click();
+  const note = page.locator('.account-friends-note').first();
+  await expect(note).toHaveText(
+    "Dave's friends list isn't public. In Steam: Edit Profile → Privacy Settings → Friends List: Public. Steam privacy settings ↗",
+  );
+  await expect(note.getByRole('link', { name: /Steam privacy settings/ })).toBeVisible();
 });
 
 test("A4 edge: the account's own members, in its friends list, can't be picked", async ({ page }) => {
@@ -2668,6 +2696,22 @@ test('C1.4: compare three players — one table grouped from "all" to "only one"
   );
 });
 
+test("C1 edge: an unsaved change stays with its comparison, not the next group's", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=bob&u=carol');
+  await expect(groupRows(page).first()).toBeVisible();
+  await page.locator('.dt-th[data-col-key="name"] .dt-th-sort').click();
+  const banner = page.locator('.pref-unsaved-banner');
+  await expect(banner).toContainText('Unsaved changes to your comparison layout (Sort)');
+
+  await page.goto('/lists/compare?u=alice&u=bob&u=dave');
+  await expect(groupRows(page).first()).toBeVisible();
+  await expect(banner).toHaveCount(0);
+
+  await page.goto('/lists/compare?u=alice&u=bob&u=carol');
+  await expect(banner).toContainText('Unsaved changes to your comparison layout (Sort)');
+});
+
 test("C1 edge: the account's ungrouped comparison layout keeps the comparison grouped, unchanged", async ({ page }) => {
   await mockApi(page, { states: ['signed-in'] });
   // The account's saved comparison layout, with the grouping removed: adopted, then reloaded.
@@ -2705,6 +2749,25 @@ test('L3 edge: a table change waits for Save, survives a reload in the tab, and 
   expect(await stored()).toContain('releaseDate');
 });
 
+test("L3 edge: Save and Discard hand focus to Share layout as the banner goes, not the page's top", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  const sort = page.locator('.dt-th[data-col-key="releaseDate"] .dt-th-sort');
+  const banner = page.locator('.pref-unsaved-banner');
+  const share = page.getByRole('button', { name: 'Share layout' });
+  await sort.click();
+  await banner.getByRole('button', { name: 'Discard' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(banner).toHaveCount(0);
+  await expect(share).toBeFocused();
+  await sort.click();
+  await banner.getByRole('button', { name: 'Save' }).click();
+  await expect(banner).toHaveCount(0);
+  await expect(share).toBeFocused();
+});
+
 test('Y1 edge: signed in, a saved table layout syncs, without page or search, and only on Save', async ({ page }) => {
   await mockApi(page, { states: ['signed-in'] });
   // An account with no prefs: nothing to adopt, so no reload under the typing.
@@ -2724,6 +2787,16 @@ test('Y1 edge: signed in, a saved table layout syncs, without page or search, an
   await expect.poll(() => pushed.length).toBe(1);
   expect(pushed[0]).not.toHaveProperty('searchQuery');
   expect(pushed[0]).not.toHaveProperty('page');
+});
+
+test('C1 edge: a private player is named in the title and the warning, not as typed', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=frank');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Alice vs. Frank');
+  const warning = page.locator('.compare-failures');
+  await expect(warning.locator('strong')).toHaveText('Frank');
+  await expect(warning).toContainText(PRIVATE_LIBRARY);
+  await expect(warning.getByRole('link', { name: /Steam privacy settings/ })).toBeVisible();
 });
 
 test('C1 edge: my account comes first, is prefilled, and only once', async ({ page }) => {
@@ -3054,6 +3127,28 @@ test('L1 edge: Add hands focus to an added row still on screen, not back to the 
   await page.getByRole('textbox', { name: 'New list name' }).fill('Later');
   await toolbar.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(onScreen).toBeFocused();
+});
+
+test('L1 edge: Clear selection hands focus to a selected row as the selection bar goes', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  const picked = rows(page).nth(1);
+  await picked.getByRole('checkbox').check();
+  await page.locator('.selection-toolbar').getByRole('button', { name: 'Clear selection' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.selection-toolbar')).toHaveCount(0);
+  await expect(picked).toBeFocused();
+});
+
+test('L1 edge: Remove from this list hands focus to the next row left', async ({ page }) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620, 105600])] });
+  await page.goto('/lists/picks');
+  await expect(rows(page)).toHaveCount(2);
+  await rows(page).first().getByRole('checkbox').check();
+  await page.locator('.selection-toolbar').getByRole('button', { name: 'Remove from this list' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page).first()).toBeFocused();
 });
 
 test("L1 edge: the new list's toast stays while pointed at", async ({ page }) => {
@@ -3928,6 +4023,31 @@ test('R1 edge: a ranked list resumes with "Continue ranking", not the nav\'s Com
   await expect(page.getByRole('heading', { name: 'Ranking of Alice — Wishlist' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue ranking' })).toBeVisible();
   await expect(page.getByRole('main').getByRole('button', { name: /^Compare/ })).toHaveCount(0);
+});
+
+test('R1 edge: Exclude keeps focus on a selected row as the selection bar goes', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/wishlist');
+  await page.getByRole('button', { name: /Rank this list/ }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('heading', { name: /^Ranking of/ })).toBeVisible();
+  const toolbar = page.locator('.selection-toolbar');
+  const picked = rows(page).first();
+  await picked.getByRole('checkbox').check();
+  await toolbar.getByRole('button', { name: 'Exclude' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(toolbar).toHaveCount(0);
+  await expect(picked).toBeFocused();
+});
+
+test("R1 edge: ranking selected games lands on the first pick, not the page's top", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  for (const name of ['Portal 2', 'Terraria', 'Hades']) await row(page, name).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Rank 3 games' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Comparing 3 chosen games.')).toBeVisible();
+  await expect(page.locator('.rank-card-pick').first()).toBeFocused();
 });
 
 test('R2 edge: a Wishlist ranking keeps its price columns', async ({ page }) => {
@@ -7119,6 +7239,37 @@ test('F1 edge: the nav search box empties after a pick and on a second Esc', asy
   await expect(box).toHaveValue('');
 });
 
+test('F1 edge: a second Esc in the nav search box hands focus back to where it came from', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(6);
+  const box = page.getByPlaceholder('Look up any game…');
+  const share = page.getByRole('button', { name: 'Share layout' });
+  await share.focus();
+  await page.keyboard.press('/');
+  await expect(box).toBeFocused();
+  await page.keyboard.type('zz');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(share).toBeFocused();
+
+  // From nowhere in particular (the page's top), to the main content rather than <body>.
+  await page.locator('body').evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('/');
+  await expect(box).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('main.app-content')).toBeFocused();
+
+  // Not to one scrolled out of sight since, which would jump the page back to it.
+  await page.setViewportSize({ width: page.viewportSize()!.width, height: 360 });
+  await rows(page).first().focus();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(rows(page).first()).not.toBeInViewport();
+  await page.keyboard.press('/');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('main.app-content')).toBeFocused();
+});
+
 test('F1 edge: the nav search box’s Clear search button empties it and keeps it focused, back on the recents', async ({
   page,
 }) => {
@@ -8349,7 +8500,7 @@ test('I2 edge: a click outside closes each nav popover, and opening one closes t
   }
 });
 
-test('I2 edge: a hidden achievement is revealed by Enter, and by Space', async ({ page }) => {
+test('I2 edge: a hidden achievement is revealed by Enter, and by Space, keeping focus on it', async ({ page }) => {
   await page.route('**/api/achievements/**', (route) => {
     const req = route.request();
     const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
@@ -8367,10 +8518,13 @@ test('I2 edge: a hidden achievement is revealed by Enter, and by Space', async (
   await page.keyboard.press('Enter');
   await expect(card).toContainText('First steps');
   await expect(hidden).toHaveCount(1);
+  // Focus stays on what was just revealed, so it's read out, not dropped to <body>.
+  await expect(card.locator('.panel-achievement-row').filter({ hasText: 'First steps' })).toBeFocused();
   await hidden.focus();
   await page.keyboard.press(' ');
   await expect(card).toContainText('Completionist');
   await expect(hidden).toHaveCount(0);
+  await expect(card.locator('.panel-achievement-row').filter({ hasText: 'Completionist' })).toBeFocused();
 });
 
 test("I2 edge: Enter or Space on the panel's hero opens the lightbox once", async ({ page }) => {

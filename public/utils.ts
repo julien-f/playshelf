@@ -396,10 +396,13 @@ export function hoursFromMinutes(minutes: number): number {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  // The accounts whose games aren't public, on a private-library 400.
+  accounts?: { steamid: string; name: string }[];
+  constructor(message: string, status: number, accounts?: { steamid: string; name: string }[]) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.accounts = accounts;
   }
 }
 
@@ -412,7 +415,7 @@ export const refusalMessage = (err: unknown): string | undefined =>
 export async function fetchJson<T>(url: string, init: RequestInit | undefined, fallback: string): Promise<T> {
   const res = await fetch(url, init);
   const data = await res.json().catch(() => undefined);
-  if (!res.ok || data === undefined) throw new ApiError(data?.error || fallback, res.status);
+  if (!res.ok || data === undefined) throw new ApiError(data?.error || fallback, res.status, data?.accounts);
   return data as T;
 }
 

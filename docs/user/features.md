@@ -29,7 +29,7 @@ Enter a Steam profile URL, vanity name or 64-bit ID on the home page to explore 
 - **Accounts** you look up are kept, with no limit, as one tile each (avatar and name) on the home page's account card: yours first, then by name, the same order in the nav-bar chip, which switches account without going back home. Hover or focus a tile, or press **Edit**, to remove one; past 8 accounts a filter finds one by name.
 - **The copy button copies an account's Steam identifier** — its custom URL name when it has one (`gaben`), its 64-bit ID otherwise — from the home page's account card (one per member for a Family) and from every account in the nav-bar chip. Any remembered account's identifier is one click away, current or not. That's the identifier to hand to someone else, or to paste back into the account field here.
 
-A private profile or wishlist looks identical to an empty one from the outside; the app shows what it can see.
+A private library is named, with the Steam setting that makes it public and a link to Steam's privacy settings; so is a private friends list. A private wishlist looks identical to an empty one from the outside; the app shows what it can see.
 
 ## Lists
 

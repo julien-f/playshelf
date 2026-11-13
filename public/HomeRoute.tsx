@@ -36,7 +36,8 @@ import { getAccountOverrideState, adoptAccount, accountOverrideStatusText } from
 import { withAccountParam, parseUrlState, compareUrl, COMPARE_PATH } from './urlState.ts';
 import { resolveAccountSlot, fetchAccountOverview, fetchAccountWishlist, accountInfoFrom } from './accountData.ts';
 import type { AccountPlayer } from './accountData.ts';
-import { normalizeInput, steamVanity, fmtAge, countryFlag } from './utils.ts';
+import { ApiError, normalizeInput, steamVanity, fmtAge, countryFlag } from './utils.ts';
+import { SteamPrivacyLink } from './SteamPrivacyLink.tsx';
 import { CopyButton } from './CopyButton.tsx';
 import { AccountFriends } from './AccountFriends.tsx';
 import { AccountTiles } from './AccountTiles.tsx';
@@ -104,7 +105,7 @@ export default function HomeRoute() {
   const currentAccount = getEffectiveCurrentAccount;
   const overrideState = getAccountOverrideState;
   const [resolveInputs, setResolveInputs] = createSignal<string[]>(['']);
-  const [resolveError, setResolveError] = createSignal('');
+  const [resolveError, setResolveError] = createSignal<{ text: string; isPrivate: boolean } | null>(null);
   const [resolving, setResolving] = createSignal(false);
   // null while loading; 'failed' when the fetch failed, so it doesn't read as an empty library.
   type Count = number | null | 'failed';
@@ -237,12 +238,12 @@ export default function HomeRoute() {
       .filter(Boolean);
     if (trimmed.length === 0 || resolving()) return;
     setResolving(true);
-    setResolveError('');
+    setResolveError(null);
     try {
       pickAccount(await resolveAccountSlot(trimmed));
       setResolveInputs(['']);
     } catch (err) {
-      setResolveError((err as Error).message);
+      setResolveError({ text: (err as Error).message, isPrivate: !!(err instanceof ApiError && err.accounts) });
     } finally {
       setResolving(false);
     }
@@ -746,7 +747,17 @@ export default function HomeRoute() {
             {resolving() ? 'Looking up…' : 'Look up'}
           </button>
         </form>
-        {resolveError() && <p class="error">{resolveError()}</p>}
+        <Show when={resolveError()}>
+          {(e) => (
+            <p class="error">
+              {e().text}
+              <Show when={e().isPrivate}>
+                {' '}
+                <SteamPrivacyLink />
+              </Show>
+            </p>
+          )}
+        </Show>
 
         {/* A Steam Family (several accounts unioned into one slot) — one row per member, since
             the header above can only speak for the slot as a whole. */}

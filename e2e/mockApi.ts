@@ -369,9 +369,16 @@ export function respond(
     const missing = identifiers.find((_, i) => !players[i]);
     if (missing) return json({ error: `Cannot find Steam account: "${missing}"` }, 400);
     const members = players as Player[];
-    const hidden = members.find((p) => p.private);
-    if (hidden)
-      return json({ error: `Cannot access library for ${hidden.steamid} — profile may be set to private` }, 400);
+    // As server.js's privateLibraryError: every private member named.
+    const hidden = members.filter((p) => p.private);
+    if (hidden.length)
+      return json(
+        {
+          error: `${new Intl.ListFormat('en', { type: 'conjunction' }).format(hidden.map((p) => `${p.personaname}'s`))} games aren't public. In Steam: Edit Profile → Privacy Settings → My profile and Game details: Public.`,
+          accounts: hidden.map((p) => ({ steamid: p.steamid, name: p.personaname })),
+        },
+        400,
+      );
     const big = states.has('big-library');
     const appids = [...new Set([...members.flatMap((p) => p.owned), ...(big ? BIG_LIBRARY_APPIDS : [])])];
     const playtime = Object.fromEntries(

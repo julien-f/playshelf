@@ -32,6 +32,7 @@ const {
   getWishlist,
   getFriendList,
   getPlayerSummaries,
+  privateLibraryError,
   getGameRating,
   getAppDetails,
   getStoreBrowseItem,
@@ -267,7 +268,8 @@ function sendRouteError(res, route, err) {
   const unreadable = err.name === 'SyntaxError';
   const status = routeErrorStatus(route, err, unreadable);
   const error = status === 500 ? INTERNAL_ERROR : unreadable ? 'Unreadable reply from upstream' : err.message;
-  res.status(status).json({ error });
+  // privateLibraryError's accounts, for the UI to name them.
+  res.status(status).json({ error, ...(status === 400 && err.accounts && { accounts: err.accounts }) });
 }
 
 const app = express();
@@ -688,10 +690,24 @@ app.post('/api/common-games', searchLimit, async (req, res) => {
 
   try {
     const ids = await resolveSteamIds(members);
-    const [playerList, libraries] = await Promise.all([
+    const [summaries, ...owned] = await Promise.allSettled([
       getPlayerSummaries(ids, { force: refresh }),
-      Promise.all(ids.map((id) => getOwnedGames(id, { force: refresh }))),
+      ...ids.map((id) => getOwnedGames(id, { force: refresh })),
     ]);
+    // An upstream failure first: a private library isn't the user's to fix if Steam didn't answer.
+    const failed = owned.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
+    const upstream = failed.find((err) => !err.privateSteamId);
+    if (upstream) throw upstream;
+    if (failed.length) {
+      const known = summaries.status === 'fulfilled' ? summaries.value : [];
+      throw privateLibraryError(
+        failed.map((err) => err.privateSteamId),
+        known,
+      );
+    }
+    if (summaries.status === 'rejected') throw summaries.reason;
+    const playerList = summaries.value;
+    const libraries = owned.map((r) => r.value);
 
     // Union across accounts (a Steam Family) — first-seen wins.
     const merged = new Map();

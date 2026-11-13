@@ -574,7 +574,7 @@ test('getOwnedGames: throws user error when library is private', async (t) => {
 
   await assert.rejects(
     () => getOwnedGames('76561198000000004'),
-    (err) => !err.isUpstream && err.isClientError === true && /private/.test(err.message),
+    (err) => !err.isUpstream && err.isClientError === true && err.privateSteamId === '76561198000000004',
   );
 });
 

@@ -90,6 +90,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Humble Choice no longer shows as expired, or drops off the bundle list, in the two hours before it actually ends
 - Recently Looked Up no longer says your search history stays in the browser: it syncs when you're signed in with Steam.
 - A Steam sign-in that expires while the app is open now shows as signed out at the next change, instead of changes silently no longer syncing
+- Keyboard focus no longer drops to the page's top when the control holding it goes: the layout banners' buttons, the selection bar's actions, a revealed hidden achievement, a second Esc in the game search, and arriving on the rank screen.
+- A private Steam profile is named instead of shown by its ID, with the Steam setting that makes it public and a link to Steam's privacy settings; the same for a private friends list.
+- An unsaved table change in one comparison no longer carries over to a comparison of other players.
 
 ### Development
 
