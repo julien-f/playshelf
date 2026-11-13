@@ -11,7 +11,7 @@
 // screen at a time, so there's never a moment where two of these could coexist in the same URL
 // the way e.g. `game`/`shot` can. See tableViewPrefs.ts's own layoutDraft/shareTableView
 // (VIEW_PARAM). Unlike most other params here, it's not
-// written automatically on every table interaction — only by the table's own "🔗 Share view" button.
+// written automatically on every table interaction — only by the table's own "🔗 Share layout" button.
 const PARAM_ORDER = ['u', 'op', 'q', 'game', 'shot', 'tv'];
 
 export function reorderUrlParams(params: URLSearchParams): URLSearchParams {

@@ -46,9 +46,9 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 ## Taste profile
 
-- **U204 · minor · F3, B1** — idled games (card farming, left running) skew Plays mostly, Taste fit and Group fit, and nothing tells them apart from real play. An "exclude from my profile" toggle per game.
-- **U215 · minor · F3, L5** — with too few played games, Taste fit is "—" on every row, so Play next (sorted by it) shows its games in no useful order; only a line above the table says why. Fall back to the rating, or say in the view that it sorts by rating until Taste fit can be computed.
-- **U230 · minor · R1, C7, F3** — a ranking stays inside its own list: Owned and Compare can't show or use it, and Taste fit learns from hours, not from what the player said they prefer. A **My rank** column on Owned, and the ranking as a taste signal where one exists. From the Backloggd study (2026-10-30).
+- **U204 · minor · F3, B1** — idled games (card farming, left running) skew Plays mostly, Taste Fit and Group Fit, and nothing tells them apart from real play. An "exclude from my profile" toggle per game.
+- **U215 · minor · F3, L5** — with too few played games, Taste Fit is "—" on every row, so Play next (sorted by it) shows its games in no useful order; only a line above the table says why. Fall back to the rating, or say in the view that it sorts by rating until Taste Fit can be computed.
+- **U230 · minor · R1, C7, F3** — a ranking stays inside its own list: Owned and Compare can't show or use it, and Taste Fit learns from hours, not from what the player said they prefer. A **My rank** column on Owned, and the ranking as a taste signal where one exists. From the Backloggd study (2026-10-30).
 - **U231 · polish · A5** — no look back over a year of play (Backloggd's stats pages). Steam gives only the last launch date per game, no history: at best "played this year" with total hours, not per-year hours or first launches. From the Backloggd study (2026-10-30).
 
 ## Comparing
@@ -92,7 +92,6 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U192 · polish · R1** — right after **Continue**, Undo is disabled with no reason given, so the last answer before Esc can't be undone (R1's edge "Undo right after resuming"); the stack is in memory only. Keep the undo stack with the ranking, or say "Undo covers this session's answers".
 - **U223 · polish · F1** — tag and developer pills are filter buttons on list routes but inert on `/search` and the rank screen, styled the same (same border, only the cursor differs), so a click there does nothing with no hint why. Give the inert pills a plainer style.
 - **U224 · polish · F1, I2** — focus on open differs per page: list routes move it to the hero's "Open in lightbox", `/game/:appid` to Close, `/search` keeps it on the row and Enter on the current row doesn't move it into the panel. One rule (the panel's first stop) everywhere, Search's row ring aside.
-- **U252 · polish · L3, L5, S1** — wording strays from the [glossary](glossary.md): **Share view** and **Default view** act on the layout, while a view is a saved tab (L5's Share view "sends the layout, not the view"); the search dropdown says "Recently looked up"; the Taste fit, Group fit and Tag match columns are in sentence case beside Title Case ones. Rename to match.
 
 ## Review tooling
 

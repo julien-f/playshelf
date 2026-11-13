@@ -102,7 +102,7 @@ Tests map to journeys by title: `A1: â€¦` covers A1's built steps, `A1.1,3-4: â€
   2. read Plays mostly and how many played games it's built from
   3. read the profile line: solo, co-op or PvP; whether story games are played through
   4. read Favourite studios; click one to filter Owned by it, or its **Games by â€¦** link to see what else it made (F4)
-  5. click the count of games played 2 h or less: it opens Owned's **Play next** view (L5), best Taste fit first
+  5. click the count of games played 2 h or less: it opens Owned's **Play next** view (L5), best Taste Fit first
 - **Done when**: every figure says what it's counted from, and stays silent rather than guessing below its threshold; software (Wallpaper Engine) counts toward none of it.
 - **Edges**: private playtime (no profile, and it says so); fewer than 5 played games; a profile too thin for an archetype or tiles (no empty box); a Family, whose profile mixes its members (no archetype); a studio that publishes its own games (shown once); no studio with 2 played games (no tile).
 
@@ -229,7 +229,7 @@ Tests map to journeys by title: `A1: â€¦` covers A1's built steps, `A1.1,3-4: â€
   2. change columns, sort, group, filters
   3. **Save**
   4. reload
-  5. **Default view**, then **Save**
+  5. **Reset layout**, then **Save**
 - **Done when**: a change shows "Unsaved changes" with **Save** / **Discard** until one is picked, survives a reload in the tab meanwhile, and is stored per list kind once saved; reset restores defaults.
 - **Edges**: **Discard**; a game page and Back with unsaved changes; someone else's Owned (A2).
 
@@ -252,7 +252,7 @@ Tests map to journeys by title: `A1: â€¦` covers A1's built steps, `A1.1,3-4: â€
   3. switch views from the tabs under the header
   4. change a view's sort or filters, then **Save** or **Discard**
   5. Home: open a view from the Owned card
-- **Done when**: each view keeps its own layout; a friend's Owned opens through the same views; each view keeps its unsaved edits in the tab until Save or Discard; Share view sends the layout, not the view.
+- **Done when**: each view keeps its own layout; a friend's Owned opens through the same views; each view keeps its unsaved edits in the tab until Save or Discard; Share layout sends the layout, not the view.
 - **Edges**: a link to a deleted view; Bargains while prices load; Short games while HLTB loads, and games with no HLTB entry; the tabs on a phone.
 
 ## Ranking
@@ -286,7 +286,7 @@ Tests map to journeys by title: `A1: â€¦` covers A1's built steps, `A1.1,3-4: â€
 - **Who / goal**: send a friend my top 20.
 - **Steps**:
   1. ranked list
-  2. **Share view** â—‡ U229
+  2. **Share list** â—‡ U229
   3. friend opens it
 - **Done when**: the friend sees the order read-only, and can save it or rank the same games themselves; ranked lists can't be shared today.
 
@@ -387,7 +387,7 @@ Tests map to journeys by title: `A1: â€¦` covers A1's built steps, `A1.1,3-4: â€
   3. sort by rating; **What don't I own?** for the ones I don't own
   4. open one in the panel
   5. Back to where I came from
-- **Done when**: the list is named for the developer or publisher ("Games by X", "Published by X"); ownership and Taste fit show; the ones I don't own open as a shared list I can save; the panel opens in place; Back returns.
+- **Done when**: the list is named for the developer or publisher ("Games by X", "Published by X"); ownership and Taste Fit show; the ones I don't own open as a shared list I can save; the panel opens in place; Back returns.
 - **Edges**: no game under that exact name; more than Steam's first page (only those are ranked); Steam's store search down; a game with no Steam tags; developer = publisher; a name ending in `.io` or holding a `/`; opened from `/game/:appid`; going from one developer's list to another's; phone width; keyboard only.
 
 ## Media
@@ -435,7 +435,7 @@ Tests map to journeys by title: `A1: â€¦` covers A1's built steps, `A1.1,3-4: â€
 - **Who / goal**: show a friend my curated, filtered wishlist.
 - **Steps**:
   1. set up the table
-  2. **Share view** (carries my account on Owned/Wishlist)
+  2. **Share layout** (carries my account on Owned/Wishlist)
   3. friend opens the link
 - **Done when**: the friend sees my account's list with my layout; their own account and saved views are untouched; clicking around keeps the shared account. The link previews in a chat app naming whose list it is, with their avatar.
 - **Edges**: sharing a dynamic list (`/lists/shared?f=`) â†’ friend saves it; on a ranked or manual-sourced list the button says why it can't share, before it's clicked â—‡ U229.

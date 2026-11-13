@@ -94,7 +94,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `listLabels.ts` — how an op and a source read on screen, shared by the hero, Home's combine form, and the tree.
 - `membershipColumn.ts` — the "Owned by"/"In" column a group-by-membership list is grouped by (see [game-table.md](game-table.md#each-list-kind-in-practice)).
 - `gameStatuses.ts` — the viewer's own Finished/Abandoned mark per game, one synced map for whoever uses the browser.
-- `tagTaste.ts` — tag-weight vectors: an account's `Taste`, Taste fit, Group fit, similarity and the profile figures built on them.
+- `tagTaste.ts` — tag-weight vectors: an account's `Taste`, Taste Fit, Group Fit, similarity and the profile figures built on them.
 - `bundleSnapshots.ts` — the last-known title and games of each bundle a saved list uses, kept for when ITAD stops listing it.
 - `myOwnership.ts` — one cached pair of owned/wishlisted appid sets for the effective account, behind both the panel's badge and the search dropdown's markers.
 - `recentGames.ts` — the recently-looked-up list backing `/game`.
@@ -126,7 +126,7 @@ source  ::= "o:" accountId | "w:" accountId | "b:" bundleId | "d:" name | "p:" n
 - `gameSearch.ts` — the combobox/debounce UI for "look up any game" (the shell owns where results go).
 - `urlState.ts` — param parsing, canonical param order, and the `?game=`/`&shot=`/`?u=` writers.
 - `prefs.ts` / `StorageFullBanner.tsx` / `prefsPopover.tsx` / `region.ts` / `navPopover.ts` — the localStorage preference blob; the banner when storage refuses a write of it; the Preferences panel's contents; the region preference and its detection; nav popovers' Escape and positioning.
-- `tableViewPrefs.ts` / `tableViewKeys.ts` / `tableViewSync.ts` / `SharedViewBanner.tsx` / `TableViewControls.tsx` — a table's layout draft, restore/share/reset; the table-view pref keys; what a stored layout leaves out and which parts differ; the shared-layout and unsaved-changes banners and the Share/Default view buttons.
+- `tableViewPrefs.ts` / `tableViewKeys.ts` / `tableViewSync.ts` / `SharedViewBanner.tsx` / `TableViewControls.tsx` — a table's layout draft, restore/share/reset; the table-view pref keys; what a stored layout leaves out and which parts differ; the shared-layout and unsaved-changes banners and the Share/Reset layout buttons.
 - `listViews.ts` / `ViewTabs.tsx` — Owned/Wishlist's saved views and their templates; the tabs, the active view's ⋯ and the hero's New view menu.
 - `clipboard.ts` / `CopyButton.tsx` — the one copy-then-confirm helper behind every copy button (`copyWithFeedback` for plain DOM buttons, `<CopyButton>` for JSX), with a `window.prompt` fallback where the Clipboard API isn't available (it needs a secure context, and can be permission-denied).
 - `announce.ts` — the app's one polite live region, for a change shown only visually.
@@ -207,7 +207,7 @@ Still deliberately imperative: the subnav scroll-spy (measures section positions
 
 The "look up any game" box is one nav-bar search in the shell, not one per route.
 
-- Focused while **empty**, it shows recently looked-up games under a heading, with a sticky "See all recently looked up" row (with an arrow) to `/game`. They're `GameSearchResult`-shaped, so roving selection, ownership markers and `onSelect` apply unchanged; the heading and "see all" row are `role="presentation"`.
+- Focused while **empty**, it shows recently looked-up games under a heading, with a sticky "See all Recently Looked Up" row (with an arrow) to `/game`. They're `GameSearchResult`-shaped, so roving selection, ownership markers and `onSelect` apply unchanged; the heading and "see all" row are `role="presentation"`.
 - `gameSearch.ts` takes the list and the "see all" destination as options rather than importing `recentGames.ts`.
 - Typing a query gets "See all results for '…'" instead, to `/search?q=…`.
 

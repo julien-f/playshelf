@@ -128,7 +128,7 @@ const CREATORS: Record<number, { developers: string[]; publishers: string[] }> =
 };
 const creators = (appid: number) => CREATORS[appid] ?? { developers: ['Test Studio'], publishers: ['Test Publisher'] };
 
-// Out of rating order, so sorting by Tag match visibly reorders a co-op filter.
+// Out of rating order, so sorting by Tag Match visibly reorders a co-op filter.
 const COOP_WEIGHT: Record<number, number> = { 620: 0.3, 105600: 0.9, 413150: 0.6, 892970: 1 };
 
 function details(appid: number, states: ReadonlySet<string>) {

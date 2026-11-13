@@ -269,7 +269,7 @@ test('shareTableView: copies a link with the view snapshotted into the param, wi
         },
       };
       Object.defineProperty(globalThis, 'navigator', { value: stubNav, configurable: true });
-      const btn = { textContent: 'Share view', childNodes: [], replaceChildren() {} };
+      const btn = { textContent: 'Share layout', childNodes: [], replaceChildren() {} };
       shareTableView(table, btn);
       await Promise.resolve();
       await Promise.resolve(); // let writeText()'s .then() microtask run
@@ -288,7 +288,7 @@ test('shareTableView: an unchanged view sends no param, so the link opens on the
       let copied = null;
       const stubNav = { clipboard: { writeText: async (text) => (copied = text) } };
       Object.defineProperty(globalThis, 'navigator', { value: stubNav, configurable: true });
-      shareTableView(fakeTable({}), { textContent: 'Share view', childNodes: [], replaceChildren() {} });
+      shareTableView(fakeTable({}), { textContent: 'Share layout', childNodes: [], replaceChildren() {} });
       await Promise.resolve();
       await Promise.resolve();
       assert.equal(new URL(copied).searchParams.has('tv'), false);
@@ -315,7 +315,7 @@ test('shareTableView: adds extra params, but never over one the URL already sets
       await withLocation(search, async () => {
         shareTableView(
           fakeTable({}),
-          { textContent: 'Share view', childNodes: [], replaceChildren() {} },
+          { textContent: 'Share layout', childNodes: [], replaceChildren() {} },
           { u: 'alice' },
         );
         await Promise.resolve();
@@ -337,7 +337,9 @@ test('shareTableView: drops the params the recipient has no use for', async () =
       let copied = null;
       const stubNav = { clipboard: { writeText: async (text) => (copied = text) } };
       Object.defineProperty(globalThis, 'navigator', { value: stubNav, configurable: true });
-      shareTableView(fakeTable({}), { textContent: 'Share view', childNodes: [], replaceChildren() {} }, {}, ['view']);
+      shareTableView(fakeTable({}), { textContent: 'Share layout', childNodes: [], replaceChildren() {} }, {}, [
+        'view',
+      ]);
       await Promise.resolve();
       await Promise.resolve();
       const params = new URL(copied).searchParams;

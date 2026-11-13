@@ -20,7 +20,7 @@ export function prefViewStore(key: string): ViewStore {
   return { load: () => getPref<TableViewState>(key, {}), save: (view) => setPref(key, view) };
 }
 
-// The URL param a "🔗 Share view" link carries the view in — one for every table, since a route
+// The URL param a "🔗 Share layout" link carries the view in — one for every table, since a route
 // only ever has one on screen (see urlState.ts's own comment on `tv`).
 export const VIEW_PARAM = 'tv';
 

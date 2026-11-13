@@ -405,7 +405,7 @@ export default function BundlesBrowseRoute() {
     () => tableContainer,
   );
   slideRowsOnViewChange(table, () => tableContainer);
-  // The layout as a draft until Save; a 🔗 Share view link's layout is shown but not saved until kept.
+  // The layout as a draft until Save; a 🔗 Share layout link's layout is shown but not saved until kept.
   const layout = layoutDraft(table, VIEW_PREF_KEY, prefViewStore(VIEW_PREF_KEY));
   const [viewingShared, setViewingShared] = createSignal(layout.restore());
   const [sharedViewEdited, setSharedViewEdited] = createSignal(false);

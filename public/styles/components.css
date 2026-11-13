@@ -1637,7 +1637,7 @@
     font-size: var(--fs-ui);
   }
 
-  /* Share view / Default view, in the table toolbar's end slot. */
+  /* Share layout / Reset layout, in the table toolbar's end slot. */
   .list-view-actions {
     position: relative;
     display: flex;
