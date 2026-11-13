@@ -2696,6 +2696,22 @@ test('C1.4: compare three players — one table grouped from "all" to "only one"
   );
 });
 
+test("C1 edge: an unsaved change stays with its comparison, not the next group's", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=bob&u=carol');
+  await expect(groupRows(page).first()).toBeVisible();
+  await page.locator('.dt-th[data-col-key="name"] .dt-th-sort').click();
+  const banner = page.locator('.pref-unsaved-banner');
+  await expect(banner).toContainText('Unsaved changes to your comparison layout (Sort)');
+
+  await page.goto('/lists/compare?u=alice&u=bob&u=dave');
+  await expect(groupRows(page).first()).toBeVisible();
+  await expect(banner).toHaveCount(0);
+
+  await page.goto('/lists/compare?u=alice&u=bob&u=carol');
+  await expect(banner).toContainText('Unsaved changes to your comparison layout (Sort)');
+});
+
 test("C1 edge: the account's ungrouped comparison layout keeps the comparison grouped, unchanged", async ({ page }) => {
   await mockApi(page, { states: ['signed-in'] });
   // The account's saved comparison layout, with the grouping removed: adopted, then reloaded.

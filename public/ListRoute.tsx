@@ -2124,8 +2124,8 @@ export default function ListRoute() {
   // kept total anyway so a stray call never returns undefined.
   function viewPrefKey(): string {
     if (kind === 'wishlist') return 'wishlistListView';
-    // Shared across every comparison, like the bundle key above: a comparison has no stored list
-    // of its own to hang a view on.
+    // Saved once for every comparison, like the bundle key above: a comparison has no stored list
+    // of its own to hang a view on. Its draft is per comparison (storedLayout).
     if (kind === 'compare') return 'compareListView';
     // Shared across every /lists/shared link, not per-link — the "kind has no stored list of its
     // own to hang a view on" reasoning above applies just as much here, and a link is one-off by
@@ -2164,7 +2164,15 @@ export default function ListRoute() {
         store: { load: () => getList(id)?.tableView ?? {}, save: (view) => setListTableView(id, view) },
       };
     const key = viewPrefKey();
-    return { id: key + account, store: prefViewStore(key) };
+    // A comparison's draft stays with its players: tonight's filter shouldn't open the next group's.
+    const players =
+      kind === 'compare'
+        ? `:${untrack(compareAccounts)
+            .map((a) => a.id)
+            .sort()
+            .join('|')}`
+        : '';
+    return { id: key + account + players, store: prefViewStore(key) };
   }
   // The layout on screen as a draft over its stored one, rebound on each table build and view switch.
   let tableDefaults: TableViewState = {};
