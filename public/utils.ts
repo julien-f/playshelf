@@ -477,8 +477,9 @@ export function fetchGameDetails(appid: number, { refresh = false } = {}): Promi
 export function detailsFields(
   data: GameDetailsReply,
 ): Pick<Game, 'details' | 'loading' | 'detailsFetchedAt' | 'detailsFetchedAts' | 'failedSources'> {
+  const { limited: _limited, ...details } = data; // the reply's status, not the game's
   return {
-    details: data,
+    details,
     loading: false,
     detailsFetchedAt: data.fetchedAt, // absent when nothing was fetched: no age
     detailsFetchedAts: data.fetchedAts ?? null,

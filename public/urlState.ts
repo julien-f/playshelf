@@ -12,7 +12,8 @@
 // the way e.g. `game`/`shot` can. See tableViewPrefs.ts's own layoutDraft/shareTableView
 // (VIEW_PARAM). Unlike most other params here, it's not
 // written automatically on every table interaction — only by the table's own "🔗 Share layout" button.
-// The params naming the list (`f`, `name`, `view`) come before the overlays opened on it.
+// The params naming the list (`f`, `name`) and its saved table layout (`view`) come before the
+// overlays opened on it.
 const PARAM_ORDER = ['u', 'op', 'f', 'name', 'view', 'q', 'game', 'shot', 'tv'];
 
 export function reorderUrlParams(params: URLSearchParams): URLSearchParams {
@@ -40,13 +41,13 @@ export function urlWithParams(params: URLSearchParams, pathname: string = locati
   return qs ? `${pathname}?${qs}` : pathname;
 }
 
-// reorderUrlParams' query, with a shared formula (`?f=`) left as shareListUrl writes it: the
-// characters it leaves literal are unescaped back (lossless: a literal `%` serializes as `%25`).
+// reorderUrlParams' query, with a shared formula (`?f=`) as readable as the address bar allows: the
+// characters shareListUrl leaves literal are unescaped back, except `'`, which browsers re-encode.
 function queryString(params: URLSearchParams): string {
   return reorderUrlParams(params)
     .toString()
     .split('&')
-    .map((pair) => (pair.startsWith('f=') ? pair.replace(/%(21|27|28|29|2C|3A|3B|7E)/g, decodeURIComponent) : pair))
+    .map((pair) => (pair.startsWith('f=') ? pair.replace(/%(21|28|29|2C|3A|3B|7E)/g, decodeURIComponent) : pair))
     .join('&');
 }
 

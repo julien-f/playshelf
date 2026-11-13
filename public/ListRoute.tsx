@@ -2080,9 +2080,10 @@ export default function ListRoute() {
   // has its own store (see standaloneRows).
   async function refreshGame(game: Game): Promise<void> {
     const unresolved = !game.details?.meta;
+    const gen = loadGuard.current();
     try {
       const data: DetailsEvent = { ...(await fetchGameDetails(game.appid, { refresh: true })), appid: game.appid };
-      if (data.limited) setDetailsLimited(data.limited);
+      if (data.limited && !loadGuard.isStale(gen)) setDetailsLimited(data.limited);
       const updated = rowStore.mutateRow(game.appid, (draft) => applyDetailsEvent(draft, data));
       if (!updated && standaloneRows[game.appid]) {
         setStandaloneRows(
@@ -3994,7 +3995,7 @@ export default function ListRoute() {
     if (backlogShown()) return navigate(viewHref(routerLocation, null));
     let view = templateView('owned', PLAY_NEXT);
     if (!view) {
-      view = createFromTemplate(VIEW_TEMPLATES.find((t) => t.id === PLAY_NEXT)!);
+      view = createFromTemplate(VIEW_TEMPLATES.find((t) => t.kind === 'owned' && t.id === PLAY_NEXT)!);
       showSelectionStatus(`Saved view ${view.name}`);
     }
     navigate(viewHref(routerLocation, view.id));
