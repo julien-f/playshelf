@@ -120,6 +120,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Reopening a game from the table morphs its picture into the panel again, not only on its first open
 - About now lists every data source, including Fanatical, PC Game Pass and Steam sign-in, and says what signing in stores and for how long data is kept.
 - Past your share of new lookups, a game lookup, Rank and Refresh details say so in the status line, as lists do
+- A shared list's link keeps its formula readable after opening a game, and its parameters in a stable order
 
 ### Development
 
