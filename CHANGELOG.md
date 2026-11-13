@@ -56,7 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Play next, Short games and the Barely played count leave out games not out yet, like a pre-order; a hidden Availability column says which are Coming soon
 - Play next lists best rated first when the account has too few games played for Taste Fit, and says so
 - Loading a large list makes about 50 times fewer calls to Steam for its tags and store details
-- The first account you look up on Home becomes your ★ account, until you sign in with Steam: that stars the signed-in one. An account opened from a link never becomes it
+- The first account you look up on Home becomes your ★ account; an account opened from a link never does
 - Another open tab now follows a region picked, or a game added to or removed from a list, in this one without a reload
 
 ### Fixed
