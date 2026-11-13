@@ -107,7 +107,7 @@ function seedSlots(initial: string[][], known: KnownAccount[]): Slot[] {
 }
 
 export function ComparePlayersForm(props: ComparePlayersFormProps): JSX.Element {
-  // A memo: a `?u=` account resolving after mount still shows up as a suggestion.
+  // A memo: a `?u=` account resolving, or friends landing, after mount still show up as suggestions.
   const known = createMemo(() => {
     const stored = knownAccounts();
     return [...stored, ...friendAccounts(stored)];

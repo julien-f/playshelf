@@ -3091,6 +3091,20 @@ async function compareAfterHomeFriends(page: Page): Promise<() => number> {
   return () => friendRequests - homeRequests;
 }
 
+test('C1 edge: friends Home is still fetching show in the player boxes once they arrive', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const friends = await gate(page, '**/api/friends');
+  await page.goto('/');
+  await friends.requested;
+  await page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link', { name: 'Compare' }).click();
+  const box = page.locator('.compare-form').getByRole('combobox').nth(1);
+  await box.focus();
+  await expect(page.getByRole('option', { name: /Friend/ })).toHaveCount(0);
+  friends.release();
+  await expect(page.getByRole('option')).toHaveText([/Bob.*Friend/, /Carol.*Friend/, /Dave.*Friend/]);
+  expect(friends.count).toBe(1);
+});
+
 test('C1 edge: the player boxes suggest the friends Home fetched, below the stored accounts, without fetching them again', async ({
   page,
 }) => {

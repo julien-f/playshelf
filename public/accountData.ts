@@ -189,35 +189,38 @@ interface CacheEntry {
 // One fetch per kind and account, shared by every caller (Home, a list, the panel's ✓/☆).
 const accountCache = new Map<string, CacheEntry>();
 const versions = new Map<string, Signal<number>>();
+// Bumped whenever the value a synchronous read sees changes, a first fetch landing included.
+const settles = new Map<string, Signal<number>>();
 
 const cacheKey = (kind: AccountDataKind, members: string[]) => `${kind}:${accountIdFor(members)}`;
 const isFresh = (entry: CacheEntry | undefined): entry is CacheEntry =>
   entry !== undefined && isClientCacheFresh(entry.at);
 
-function versionSignal(key: string): Signal<number> {
-  let signal = versions.get(key);
+function counter(map: Map<string, Signal<number>>, key: string): Signal<number> {
+  let signal = map.get(key);
   if (!signal) {
-    const [version, setVersion] = createSignal(0);
-    versions.set(key, (signal = [version, setVersion]));
+    const [count, setCount] = createSignal(0);
+    map.set(key, (signal = [count, setCount]));
   }
   return signal;
 }
 
 // Tracked; bumped when new data replaces a key's earlier data (a ↻, or a refetch past the max age).
 export function accountDataVersion(kind: AccountDataKind, members: string[]): number {
-  return versionSignal(cacheKey(kind, members))[0]();
+  return counter(versions, cacheKey(kind, members))[0]();
 }
 
 function storeEntry<T>(key: string, promise: Promise<T>): Promise<T> {
   const replaced = accountCache.get(key);
   const entry: CacheEntry = { promise, at: Date.now() };
   accountCache.set(key, entry);
-  const bump = () => versions.get(key)?.[1]((v) => v + 1);
+  const bump = (map: Map<string, Signal<number>>) => map.get(key)?.[1]((v) => v + 1);
   promise.then(
     (value) => {
       entry.value = value;
-      if (accountCache.get(key) !== entry) entry.unannounced = true;
-      else if (replaced) bump();
+      if (accountCache.get(key) !== entry) return void (entry.unannounced = true);
+      bump(settles);
+      if (replaced) bump(versions);
     },
     () => {
       entry.failed = true;
@@ -225,9 +228,10 @@ function storeEntry<T>(key: string, promise: Promise<T>): Promise<T> {
       // A failed refresh keeps what it replaced unless that failed too; else the next caller asks again.
       if (!replaced || replaced.failed) return void accountCache.delete(key);
       accountCache.set(key, replaced);
+      bump(settles);
       if (replaced.unannounced) {
         replaced.unannounced = false;
-        bump();
+        bump(versions);
       }
     },
   );
@@ -400,8 +404,11 @@ export function fetchAccountFriends(
 }
 
 // The friends list this page load already fetched for these members, if any — never a request.
+// Tracked: a fetch in flight still shows once it lands.
 export function cachedAccountFriends(members: string[]): AccountFriends | undefined {
-  const entry = accountCache.get(cacheKey('friends', members));
+  const key = cacheKey('friends', members);
+  counter(settles, key)[0]();
+  const entry = accountCache.get(key);
   return isFresh(entry) ? (entry.value as AccountFriends | undefined) : undefined;
 }
 
