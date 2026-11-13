@@ -2,7 +2,7 @@
 
 An Express backend (`server.js` + `lib/*`, plain CommonJS JavaScript but for `lib/streamEvent.mjs`) serving a Solid.js single-page app (`public/*`, TypeScript, bundled by Vite). The backend is a caching proxy over Steam/HLTB/IsThereAnyDeal/ProtonDB/Fanatical and the Xbox PC Game Pass catalog; accounts, lists and preferences live in the browser's `localStorage`, and the server stores them only for a signed-in user who syncs (`users`, `sessions`, `user_prefs` — [data.md](data.md)).
 
-Setup and dev commands are in [README.md](../../README.md), along with the index of the other docs; tests and hooks in [testing.md](testing.md).
+Setup and dev commands are in [README.md](../../README.md), the index of the other docs in [CLAUDE.md](../../CLAUDE.md#where-things-are-documented); tests and hooks in [testing.md](testing.md).
 
 ## Build and serving
 

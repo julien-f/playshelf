@@ -54,21 +54,7 @@ Application data lives in `db.sqlite` (gitignored); it holds the upstream caches
 
 ### Development
 
-- [architecture.md](docs/dev/architecture.md) — backend, build, API routes, request flow
-- [frontend.md](docs/dev/frontend.md) — the SPA: routes, modules, reactivity, URL state
-- [game-table.md](docs/dev/game-table.md) — the game table and each list kind
-- [panel-and-lightbox.md](docs/dev/panel-and-lightbox.md) — the side panel, the lightbox and the presentation window
-- [lists-and-accounts.md](docs/dev/lists-and-accounts.md) — the account/list data model
-- [integrations.md](docs/dev/integrations.md) — Steam, HLTB, IsThereAnyDeal, ProtonDB
-- [data.md](docs/dev/data.md) — database, cache tiers, refresh paths
-- [observability.md](docs/dev/observability.md) — metrics endpoint and log warnings
-- [journeys.md](docs/dev/journeys.md) — user journeys, for design reviews and end-to-end tests
-- [ui-guidelines.md](docs/dev/ui-guidelines.md) — UI conventions and the checklist for a new UI feature
-- [glossary.md](docs/dev/glossary.md) — the words the UI uses, and the ones it avoids
-- [testing.md](docs/dev/testing.md) — unit and e2e tests, the mocked server, the git hooks
-- [pitfalls.md](docs/dev/pitfalls.md) — surprising behaviors and their fixes
-- [decisions.md](docs/dev/decisions.md) — computed ratings, heuristics, tooling choices
-- [improvements.md](docs/dev/improvements.md) · [code-backlog.md](docs/dev/code-backlog.md) · [setup-backlog.md](docs/dev/setup-backlog.md) — UX, code and Claude Code setup backlogs
+The developer docs are indexed, each with when to read it, in [CLAUDE.md](CLAUDE.md#where-things-are-documented).
 
 Screenshots used by the docs live in [docs/images/](docs/images).
 
