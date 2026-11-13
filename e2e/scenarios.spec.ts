@@ -62,6 +62,16 @@ test('A1 edge: the first account resolved becomes my ★ account; a later one do
   await expect(page.locator('.account-tiles .account-tile').first()).toHaveText(/Alice.*\(yours\)/);
 });
 
+test('A2 edge: after unstarring my account, looking up a friend does not star them', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Unstar Alice' }).click();
+  await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('bob');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.getByRole('banner')).toContainText('Bob');
+  await expect(page.getByRole('button', { name: 'Star Bob as mine' })).toBeVisible();
+});
+
 test('A1 edge: an account reached by a ?u= or compare link is never starred', async ({ page }) => {
   await page.goto('/lists/compare?u=alice&u=bob');
   await expect(rows(page).first()).toBeVisible();

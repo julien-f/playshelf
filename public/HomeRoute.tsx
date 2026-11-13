@@ -26,6 +26,7 @@ import { A, useLocation, useNavigate } from '@solidjs/router';
 import {
   getMyAccount,
   setMyAccount,
+  getCurrentAccount,
   getEffectiveCurrentAccount,
   getAccountOverride,
   accountDisplayLabel,
@@ -241,8 +242,8 @@ export default function HomeRoute() {
     setResolveError(null);
     try {
       const account = await resolveAccountSlot(trimmed);
-      // The first account looked up is the visitor's own; one reached by a link never is.
-      if (!getMyAccount()) setMyAccount(account);
+      // The very first account looked up is the visitor's own; any later one, a friend's.
+      if (!getMyAccount() && !getCurrentAccount()) setMyAccount(account);
       pickAccount(account);
       setResolveInputs(['']);
     } catch (err) {
