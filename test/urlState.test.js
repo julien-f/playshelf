@@ -14,6 +14,7 @@ const {
   compareUrl,
   COMPARE_PATH,
 } = require('../public/urlState.ts');
+const { encodeListFormula, shareListUrl } = require('../public/listShare.ts');
 
 // ── parseUrlState — slots ─────────────────────────────────────────────────────
 
@@ -133,11 +134,14 @@ test('withAccountParam: carries the u= value onto a bare path', () => {
   assert.equal(withAccountParam('/lists/owned', '?u=alice,bob_family'), '/lists/owned?u=alice%2Cbob_family');
 });
 
-test("withAccountParam: keeps a shared formula's :;() literal", () => {
-  assert.equal(
-    withAccountParam('/lists/shared?f=union:(o:bob;r)', '?u=alice'),
-    '/lists/shared?u=alice&f=union:(o:bob;r)',
-  );
+test("withAccountParam: a shared list's link reads the same with or without a u= carried along", () => {
+  const sources = [
+    { kind: 'developer', name: "Don't Nod (Paris)!" },
+    { kind: 'publisher', name: 'a,b~c' },
+  ];
+  const result = encodeListFormula({ op: 'union', sources }, () => undefined);
+  const url = shareListUrl(result.formula);
+  assert.equal(withAccountParam(url, '?u=alice'), url.replace('?', '?u=alice&'));
 });
 
 test("withAccountParam: does not carry a comparison's several slots — they are not an override", () => {
