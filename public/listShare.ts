@@ -195,7 +195,7 @@ function parseSource(token: string, synthetic: Map<string, GameList>, makeId: ()
 export const SHARED_LIST_PATH = '/lists/shared';
 
 // The route reads `?f=` through URLSearchParams (one decode), so the leaves' `%` escapes are
-// escaped again; the sub-delims `:;(),` stay readable.
+// escaped again; the sub-delims `:;(),` stay readable. `'` is written `%27`, as browsers re-encode it.
 export function shareListUrl(formula: string): string {
-  return `${SHARED_LIST_PATH}?f=${formula.replaceAll('%', '%25')}`;
+  return `${SHARED_LIST_PATH}?f=${formula.replaceAll('%', '%25').replaceAll("'", '%27')}`;
 }
