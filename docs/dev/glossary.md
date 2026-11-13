@@ -50,8 +50,10 @@ The words the UI uses, so a new label, doc line or backlog item says the same th
 | Taste Fit       | how close a game is to the current account's taste ([features.md](../user/features.md#lists))                                | taste fit        | match, recommendation  |
 | Group Fit       | Taste Fit for the comparison's player it suits least ([comparing](../user/features.md#comparing-libraries))                  | group fit        | average fit            |
 | Plays mostly    | the Steam tags an account spends its time on                                                                                 | play profile     | favourite genres       |
+| Tag Match       | how strongly a game carries the tags a filter asks for, ranking its matches                                                  | `tagMatch`       | relevance              |
 | Best Deal       | the lowest current price across stores, from IsThereAnyDeal                                                                  | `bestDealPrice`  | cheapest, lowest price |
 | 🔥 ★ ☆          | a deal at or near its record low ([prices](../user/features.md#prices))                                                      | `dealRecordTier` |                        |
+| ☆ after a name  | the game is on the account's wishlist (U265: the same mark as a deal's)                                                      | wishlisted       |                        |
 
 ## Presenting
 

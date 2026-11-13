@@ -65,13 +65,13 @@ Pick two or more lists and an operation:
 - **Union** — everything in any of them.
 - **Intersect** — only what they all share.
 - **Subtract** — what's in the first but not the others. Pick order sets which source is "first" — the combine form shows your picks as a numbered, reorderable list whenever Subtract is chosen.
-- **Group by membership** — one table grouped by combination of sources, so you can see what all three accounts share, what only two do (and who's missing), and so on — with one sort, filter and column setup for all of it. Combining several accounts' Owned lists this way is how you compare libraries.
+- **Grouped by membership** — one table grouped by combination of sources, so you can see what all three accounts share, what only two do (and who's missing), and so on — with one sort, filter and column setup for all of it. Combining several accounts' Owned lists this way is how you compare libraries.
 
 Naming the combined list is optional: leave the name empty and it's called by what it does — "Alice — Owned ∩ Bob — Owned" — in your list tree and on its own page, updating by itself if you later change its sources or rename an account. Type a name whenever you'd rather have one.
 
 The result is saved as a dynamic list, re-resolved every time you open it. Its page states its formula, names every source, and says what each contributed.
 
-A bundle joins a combine from its own page: **What does this add?** shows that bundle minus your Owned games right away, unsaved and shareable, with the bundle's Tier Price ("Varies" for a pick-and-mix one, whose rate depends on how many you pick) and Best Deal columns and a link back to the bundle. **Save as a list** keeps it, Tier Price included; **Edit sources** then changes it — a Family's Owned, or Group by membership with a friend's. Once IsThereAnyDeal stops listing an ended bundle, a list using it keeps the bundle's last-known games and says so.
+A bundle joins a combine from its own page: **What does this add?** shows that bundle minus your Owned games right away, unsaved and shareable, with the bundle's Tier Price ("Varies" for a pick-and-mix one, whose rate depends on how many you pick) and Best Deal columns and a link back to the bundle. **Save as a list** keeps it, Tier Price included; **Edit sources** then changes it — a Family's Owned, or Grouped by membership with a friend's. Once IsThereAnyDeal stops listing an ended bundle, a list using it keeps the bundle's last-known games and says so.
 
 ![Two lists combined with group by membership: one table grouped by combination — in both lists, then each list's exclusive games — under the formula that produced them](../images/group-by-membership.png)
 

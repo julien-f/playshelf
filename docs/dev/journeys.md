@@ -324,7 +324,7 @@ Tests map to journeys by title: `A1: …` covers A1's built steps, `A1.1,3-4: �
   1. open a bundle
   2. **What does this add?** (bundle minus my Owned, unsaved)
   3. **Save as a list**
-  4. **Edit sources** to swap in the Family's Owned (or **Group by membership** with a friend's Owned)
+  4. **Edit sources** to swap in the Family's Owned (or **Grouped by membership** with a friend's Owned)
 - **Edges**: the bundle ends and IsThereAnyDeal stops listing it — the list keeps its last-known games and says so.
 - **Done when**: the default name reads the formula; games with no Steam listing are still accounted for.
 
