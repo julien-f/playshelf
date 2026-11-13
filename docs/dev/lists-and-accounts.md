@@ -142,7 +142,7 @@ Signing in (the account chip's popover, `AccountChip.tsx`) is optional; without 
   - **First sync of a device with an account** (no `steam.isonoe.net:prefs-synced:<steamid>` localStorage flag — its own key, never synced, so an adopted blob can't carry it): server wins for every key both sides have, whatever the timestamps (a new device's local state may be leftover anonymous browsing); keys only local are pushed.
   - **Every later sync**: per-key last-write-wins both ways; a key on one side propagates; a tie is left alone.
   - One key is one value: concurrent edits to it on two devices keep the newest whole, `lists` and `listViews` alike (two views added at once on two devices: one is lost).
-  - Adopting anything from the server reloads the page, since every store seeds its state from `localStorage` once at load. An adoption storage refuses (full, disabled) is skipped with an `[auth]` warning instead, or every load would re-adopt and reload.
+  - Adopting anything from the server reloads the page: `getPref`'s readers follow an adopted key, but not those that copy it at load ([below](#storage-schema), U274). An adoption storage refuses (full, disabled) is skipped with an `[auth]` warning instead, or every load would re-adopt and reload.
 - **Table-view keys sync like any key** (`TABLE_VIEW_PREF_KEYS`, `public/tableViewKeys.ts`). They're written only on **Save** (a table change is a draft until then, [game-table.md](game-table.md#layouts-and-saved-views)), so each push is one.
   - A schema v2 blob's table-view keys read as `updatedAt: 0`, so the account's saved layout wins at the next sync: v2 wrote them on every edit and never pushed them.
 - **A push answered 401** (the session ended while the page was open; `prefs.ts`'s `sessionLost`) signs out on the spot and drops pending pushes: each edit's local `updatedAt` stays newer than the server's, so the next sign-in's merge pushes it. Two limits:
@@ -180,4 +180,7 @@ Also outside it, device-local: `steam.isonoe.net:lightbox-hint-seen`, set once t
 - **Bounded**: at most `TASTE_CACHE_MAX` tastes; saving one evicts the oldest (`at`, the last Owned load), never the ★ or current account's. An evicted account's Taste Fit asks to open its Owned again.
 - **Evicted first when storage is full**: a write that hits the quota (`QuotaExceededError`) evicts tastes oldest first until it fits — a pref write any taste, a taste write any but the ★, current and its own — and puts them back if it never does. A `setPref` write that still fails isn't pushed to the server either (the edit snaps back), warns `[prefs]` and shows a banner ([frontend.md](frontend.md#shell)).
 
-**Cross-tab sync**: not implemented. Nothing listens for `storage` events, so two open tabs can hold divergent state until one reloads (U274).
+**Two open tabs** share the blob, and no edit is lost: `getPref` re-reads it whenever its string changed, and every mutation reads the current value before writing.
+
+- A `storage` event from another tab reruns the readers of each key it changed (`prefs.ts`): the region, the accounts, a game panel's lists follow it on screen.
+- Readers that copy a pref at load wait for a reload (U274): an open list's rows, Home's list tree, a table's layout.

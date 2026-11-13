@@ -408,9 +408,9 @@ test('getPref is reactive per key: an effect reruns on its own key only', async 
   });
   setPref('lists', []);
   setPref('region', 'GB');
-  adoptPrefEntry('region', 'DE', 1); // silent: see adoptPrefEntry
+  adoptPrefEntry('region', 'DE', 1);
   dispose();
-  assert.deepEqual(seen, [null, 'GB']);
+  assert.deepEqual(seen, [null, 'GB', 'DE']);
 });
 
 // ── failed writes ───────────────────────────────────────────────────────────────────────────────

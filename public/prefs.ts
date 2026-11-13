@@ -9,7 +9,7 @@
 // account pulls down) without needing to know every individual key up front. This is purely a
 // local-storage convenience, though — it does NOT mean sync itself works on the whole blob (see
 // setPref below).
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
 import { TABLE_VIEW_PREF_KEYS } from './tableViewKeys.ts';
 import { setItemMakingRoom } from './tasteCache.ts';
 
@@ -97,6 +97,19 @@ function version(key: string): { track: () => void; notify: () => void } {
     versions.set(key, (v = { track, notify: () => notify() }));
   }
   return v;
+}
+
+// Another tab wrote the blob: rerun the readers of each key it changed (all of them on a clear).
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === null) return batch(() => versions.forEach((v) => v.notify()));
+    if (e.key !== PREFS_STORAGE_KEY) return;
+    const [before, after] = [parseEntries(e.oldValue), parseEntries(e.newValue)];
+    const changed = (key: string) => JSON.stringify(before[key]?.value) !== JSON.stringify(after[key]?.value);
+    batch(() => {
+      for (const [key, v] of versions) if (changed(key)) v.notify();
+    });
+  });
 }
 
 // Whether storage refused setPref's last write; AppShell.tsx's banner says so.
@@ -248,10 +261,11 @@ export function getAllPrefEntries(): Record<string, PrefEntry> {
 
 // Writes one key's value locally without pushing it back to the server — used when a merge finds
 // the server's copy of that key is newer than this device's own. Bypasses setPref specifically to
-// avoid that echo. Silent: the merge reloads the page after adopting, and Revert patches its table itself.
-// Returns whether the write was persisted.
+// avoid that echo. Returns whether the write was persisted.
 export function adoptPrefEntry(key: string, value: unknown, updatedAt: number): boolean {
   const entries = readEntries();
   entries[key] = { value, updatedAt };
-  return writeEntries(entries);
+  const written = writeEntries(entries);
+  if (written) version(key).notify();
+  return written;
 }

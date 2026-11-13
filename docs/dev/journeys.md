@@ -492,7 +492,7 @@ Tests map to journeys by title ([testing.md](testing.md#end-to-end-tests)).
   2. add a game in one
   3. remove another in the second
   4. reload both
-- **Done when**: no silent loss of either edit ◇ U274.
+- **Done when**: no silent loss of either edit; each tab shows the other's edit without a reload ◇ U274.
 
 ## Freshness and failures
 

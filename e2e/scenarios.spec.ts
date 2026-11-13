@@ -8905,6 +8905,24 @@ test("Y1.1,3: signed in on a new device, the account's lists win over this brows
   await expect(page.getByText('Signed in — your accounts/lists/settings sync')).toBeVisible();
 });
 
+test("Y3 edge: a game's lists edited in one tab show in the other without a reload", async ({ page }) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620])] });
+  await page.goto('/game/1145360');
+  const other = await page.context().newPage(); // same context: the tabs share localStorage
+  other.on('pageerror', (err) => pageErrors.push(err.message));
+  await other.goto('/game/1145360');
+  const panel = page.locator('#game-panel');
+  const otherPanel = other.locator('#game-panel');
+
+  await panel.getByRole('button', { name: 'Add to list' }).click();
+  await panel.getByRole('checkbox', { name: 'Picks' }).check();
+  await expect(otherPanel.getByRole('button', { name: 'In 1 list: add or remove' })).toBeVisible();
+
+  await otherPanel.getByRole('button', { name: 'In 1 list: add or remove' }).click();
+  await otherPanel.getByRole('checkbox', { name: 'Picks' }).uncheck();
+  await expect(panel.getByRole('button', { name: 'Add to list' })).toBeVisible();
+});
+
 test('Y1 edge: signing out switches the account menu back to signing in', async ({ page }) => {
   await mockApi(page, { states: ['signed-in'] });
   await page.route('**/auth/logout', (route) => route.fulfill({ json: { ok: true } }));
