@@ -34,7 +34,7 @@ You fix <items> from <backlog file> in this repo, in your own git worktree (your
 - Stay in your worktree: no `git -C <main checkout>`, `--prefix` or `cwd` parameter; one plain command per Bash call, no `&&`/`;` chains or heredocs (you can't answer a permission prompt, and a chain is judged whole, so it's refused).
 - Commit messages: write them to <scratchpad>/msg-<lane>.txt (the scratchpad is shared, a generic name gets overwritten), then `E2E_DEFER=1 git commit -F <file>`.
 - Before each commit, run only your item's test file: the commit hook runs the unit suite, typecheck and lint, so don't run them by hand.
-- Before reporting, run `npm run test:e2e -- --since=main` once (both widths; skipped when your commits touch no UI file) and fix what fails: re-run only the failures (`-- --last-failed`) until green, then the full suite once.
+- Before reporting, run `npm run test:e2e -- --since=main` once (both widths; skipped when your commits touch no UI file) and fix what fails: re-run only the failures (`-- --last-failed`) until green. No full-suite rerun: the lead runs it once over the merged lanes. Don't start it while your `/code-review` runs.
 - Then run `/code-review medium <your first commit>^..HEAD` and fix each confirmed finding, test first, as a follow-up commit; the lead's review of the merge then only has to catch where lanes meet.
 Report: item → commit → how verified; review findings fixed and dropped (with why); anything skipped or narrowed and why; new problems found.
 ```
