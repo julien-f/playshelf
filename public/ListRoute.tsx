@@ -3995,7 +3995,7 @@ export default function ListRoute() {
     if (backlogShown()) return navigate(viewHref(routerLocation, null));
     let view = templateView('owned', PLAY_NEXT);
     if (!view) {
-      view = createFromTemplate(VIEW_TEMPLATES.find((t) => t.id === PLAY_NEXT)!);
+      view = createFromTemplate(VIEW_TEMPLATES.find((t) => t.kind === 'owned' && t.id === PLAY_NEXT)!);
       showSelectionStatus(`Saved view ${view.name}`);
     }
     navigate(viewHref(routerLocation, view.id));
