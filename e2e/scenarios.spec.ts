@@ -49,6 +49,41 @@ test('A1: first visit — resolve my account, then open my library', async ({ pa
   await expect(rows(page)).toHaveCount(6);
 });
 
+test('A1 edge: the first account resolved becomes my ★ account; a later one does not', async ({ page }) => {
+  await page.goto('/');
+  const lookup = page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…');
+  await lookup.fill('alice');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Unstar Alice' })).toBeVisible();
+
+  await lookup.fill('bob');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Star Bob as mine' })).toBeVisible();
+  await expect(page.locator('.account-tiles .account-tile').first()).toHaveText(/Alice.*\(yours\)/);
+});
+
+test('A2 edge: after unstarring my account, looking up a friend does not star them', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Unstar Alice' }).click();
+  await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('bob');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.getByRole('banner')).toContainText('Bob');
+  await expect(page.getByRole('button', { name: 'Star Bob as mine' })).toBeVisible();
+});
+
+test('A1 edge: an account reached by a ?u= or compare link is never starred', async ({ page }) => {
+  await page.goto('/lists/compare?u=alice&u=bob');
+  await expect(rows(page).first()).toBeVisible();
+  await page.goto('/?u=bob');
+  await page.getByRole('button', { name: 'Set as my current account' }).click();
+  await expect(page.getByRole('button', { name: 'Star Bob as mine' })).toBeVisible();
+  const myAccount = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('steam.isonoe.net:prefs') ?? '{}').myAccount?.value ?? null,
+  );
+  expect(myAccount).toBeNull();
+});
+
 test('A1 edge: Home, then Owned, then a game download the library and wishlist once', async ({ page }) => {
   await asPlayer(page, ALICE);
   const asked: string[] = [];
