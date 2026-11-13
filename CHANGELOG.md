@@ -110,6 +110,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - upstream-bugs.js asks to check a closed bug was really fixed before removing its workaround.
 - GET /api/metrics says when ITAD's bundle end dates match Fanatical's or Humble's again, so their overrides can be dropped.
 - session-end.js also lists what production's metrics show since its last run: warnings, event-loop blocks, server errors, unexpected upstream answers and an undeployed main.
+- Design docs: personas and core journeys, a UI glossary, and every unbuilt journey step tracked by a backlog item (checked by `npm run check`)
 
 ## [0.12.0] - 2026-10-30
 

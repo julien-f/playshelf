@@ -24,6 +24,7 @@ Each doc, and when to read it — the section you need, not the whole file:
 - [docs/dev/observability.md](docs/dev/observability.md) — before adding an outbound group, a rate limiter or a log warning
 - [docs/dev/journeys.md](docs/dev/journeys.md) — before a design review, an end-to-end test or a user-facing feature plan
 - [docs/dev/ui-guidelines.md](docs/dev/ui-guidelines.md) — before any UI change; its checklist for a new UI feature
+- [docs/dev/glossary.md](docs/dev/glossary.md) — before naming anything a user reads: a label, a message, a list
 - [docs/dev/improvements.md](docs/dev/improvements.md) · [docs/dev/code-backlog.md](docs/dev/code-backlog.md) · [docs/dev/setup-backlog.md](docs/dev/setup-backlog.md) — open UX, code and setup work: check before proposing something (it may be filed, or declined)
 - [docs/dev/decisions.md](docs/dev/decisions.md) — before changing a computed value or a tooling choice that looks wrong
 - [docs/dev/testing.md](docs/dev/testing.md) — before writing or fixing a test, looking at the UI, or touching the hooks
@@ -48,7 +49,7 @@ These add to the user-level `~/.claude/CLAUDE.md` working style.
   - Code comments: one line (two at most, for a _why_ that needs it), stating the _why_, only when it isn't obvious from the code; skip the comment entirely if the code speaks for itself. This governs new comments; leave the long-form ones already in the tree alone.
   - Doc prose (this file, `README.md`, `CHANGELOG.md`, `docs/`): short bullets over paragraphs; no preamble, no summary section, lead with the point. Docs state current behavior and its why, never how it got there (that's commits and `CHANGELOG.md`); each number lives in one place (`default.env`, or the doc that owns it) and the others link it.
 - Saying something is done includes where to see it: the route and steps for a UI change, the link to a posted comment or issue after checking it exists.
-- A user-facing feature's plan review includes one as the app's users ([journeys.md](docs/dev/journeys.md)'s _Who / goal_): would they use it, is it worth its place?
+- A user-facing feature's plan review includes one as the app's users ([journeys.md](docs/dev/journeys.md#who-uses-it)'s personas): would they use it, is it worth its place?
 - When code models an upstream's behavior (pricing, limits, matching rules) from inference rather than its docs, state the assumption in the plan and confirm it before building on it; record confirmed rules and remaining assumptions in [integrations.md](docs/dev/integrations.md).
 
 ## Ask first

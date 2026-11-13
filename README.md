@@ -64,6 +64,7 @@ Application data lives in `db.sqlite` (gitignored); it holds the upstream caches
 - [observability.md](docs/dev/observability.md) — metrics endpoint and log warnings
 - [journeys.md](docs/dev/journeys.md) — user journeys, for design reviews and end-to-end tests
 - [ui-guidelines.md](docs/dev/ui-guidelines.md) — UI conventions and the checklist for a new UI feature
+- [glossary.md](docs/dev/glossary.md) — the words the UI uses, and the ones it avoids
 - [testing.md](docs/dev/testing.md) — unit and e2e tests, the mocked server, the git hooks
 - [pitfalls.md](docs/dev/pitfalls.md) — surprising behaviors and their fixes
 - [decisions.md](docs/dev/decisions.md) — computed ratings, heuristics, tooling choices

@@ -33,7 +33,7 @@ The smallest change that closes the item, following [frontend.md](../../../docs/
 
 ## 4. Close and commit
 
-- Remove the item from improvements.md, or narrow it to what's left and say so.
+- Remove the item from improvements.md, or narrow it to what's left and say so. A ◇ naming it in journeys.md goes in the same commit: drop the ◇ once built, or re-point it to the item left (`npm run check` fails otherwise).
 - Then CLAUDE.md's Development workflow and Changelog; the subject says what changed for the user, the body names `U<n>` and why.
 
 ## 5. Review the batch
