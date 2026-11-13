@@ -12,7 +12,7 @@ What users come to the app to get done: the input for design reviews (walk each 
 
 ## Who uses it
 
-Derived from the journeys below and the features built for them, not from user research. A journey not listed here (M, D2, Y, I) is everyone's.
+Derived from the journeys below and the features built for them, not from user research. Production's metrics can't check them: they count API calls, and every page is the same app shell ([observability.md](observability.md)). A journey not listed here (M, D2, Y, I) is everyone's.
 
 - **Curator**: one player tending their own library — the backlog, rankings, the wishlist and its deals, a gift for a friend.
   - Desktop for building lists and ranking; a phone on the couch for picking tonight's game.
