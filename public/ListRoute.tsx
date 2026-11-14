@@ -2144,24 +2144,24 @@ export default function ListRoute() {
     }),
   );
 
-  // Unused for kind === 'user' (its view lives on the list itself, see storedLayout below) —
-  // kept total anyway so a stray call never returns undefined.
-  function viewPrefKey(): string {
-    if (kind === 'wishlist') return 'wishlistListView';
-    // Saved once for every comparison, like the bundle key above: a comparison has no stored list
-    // of its own to hang a view on. Its draft is per comparison (storedLayout).
-    if (kind === 'compare') return 'compareListView';
-    // Shared across every /lists/shared link, not per-link — the "kind has no stored list of its
-    // own to hang a view on" reasoning above applies just as much here, and a link is one-off by
-    // nature (a bookmark of *this* view specifically is what "🔗 Share layout" is already for).
-    if (kind === 'shared') return 'sharedListView';
-    // Pick-and-mix bundles share their own layout: grouped and sorted for picking, not by tier.
-    if (kind === 'bundle') return untrack(bundleMeta)?.model === 'pick' ? 'pickBundleListView' : 'bundleListView';
-    if (kind === 'recent') return 'recentListView';
-    if (kind === 'creator') return 'creatorListView';
-    if (kind === 'game-pass') return 'gamePassListView';
-    return 'ownedListView';
-  }
+  // Each kind's own layout when it has no saved view or list of its own: its pref key, and what Save calls it.
+  const KIND_LAYOUTS: Record<ListKind, { prefKey: string; name: string }> = {
+    owned: { prefKey: 'ownedListView', name: 'Owned' },
+    wishlist: { prefKey: 'wishlistListView', name: 'Wishlist' },
+    bundle: { prefKey: 'bundleListView', name: 'bundle' },
+    recent: { prefKey: 'recentListView', name: 'Recently Looked Up' },
+    // One for every comparison and every shared link: neither has a stored list to hang a view on (a
+    // comparison's draft is per comparison, storedLayout; a shared link's own view is what Share layout is for).
+    compare: { prefKey: 'compareListView', name: 'comparison' },
+    shared: { prefKey: 'sharedListView', name: 'shared list' },
+    creator: { prefKey: 'creatorListView', name: 'developer and publisher list' },
+    'game-pass': { prefKey: 'gamePassListView', name: 'Game Pass' },
+    user: { prefKey: 'ownedListView', name: 'list' }, // unreached: a user list's layout lives on the list
+  };
+  // Pick-and-mix bundles share their own layout: grouped and sorted for picking, not by tier.
+  const PICK_BUNDLE_LAYOUT = { prefKey: 'pickBundleListView', name: 'pick & mix bundle' };
+  const kindLayout = () =>
+    kind === 'bundle' && bundleMeta()?.model === 'pick' ? PICK_BUNDLE_LAYOUT : KIND_LAYOUTS[kind];
   // Owned/Wishlist's saved view (listViews.ts) in `?view=`, for whichever account is current.
   const viewKind = kind === 'owned' || kind === 'wishlist' ? kind : null;
   const viewId = createMemo(() => (viewKind ? new URLSearchParams(routerLocation.search).get('view') : null));
@@ -2187,7 +2187,7 @@ export default function ListRoute() {
         id: `list:${id}`,
         store: { load: () => getList(id)?.tableView ?? {}, save: (view) => setListTableView(id, view) },
       };
-    const key = viewPrefKey();
+    const key = untrack(kindLayout).prefKey;
     // A comparison's draft stays with its players: tonight's filter shouldn't open the next group's.
     const players =
       kind === 'compare'
@@ -2218,29 +2218,17 @@ export default function ListRoute() {
   }
   // Another tab of the same list: no reload, only its view (and where it's kept) changes.
   createEffect(on(viewId, () => table && bindLayout(), { defer: true }));
-  // What the unsaved-changes banner names, and what Save does.
-  const LAYOUT_NAMES: Record<string, string> = {
-    owned: 'Owned',
-    wishlist: 'Wishlist',
-    bundle: 'bundle',
-    recent: 'Recently Looked Up',
-    compare: 'comparison',
-    shared: 'shared list',
-    creator: 'developer and publisher list',
-    'game-pass': 'Game Pass',
-  };
   const exploringSomeoneElse = () => !!viewKind && !showingMyAccount() && !activeView();
   function layoutName(): string {
     const saved = activeView();
     if (saved) return saved.name;
     const list = userList();
     if (list) return `the layout of “${list.name}”`;
-    const name = kind === 'bundle' && bundleMeta()?.model === 'pick' ? 'pick & mix bundle' : LAYOUT_NAMES[kind];
-    return exploringSomeoneElse() ? 'this table' : `your ${name ?? 'list'} layout`;
+    return exploringSomeoneElse() ? 'this table' : `your ${kindLayout().name} layout`;
   }
   function layoutNote(): string {
     return exploringSomeoneElse()
-      ? `Save makes it your ${LAYOUT_NAMES[kind]} layout.`
+      ? `Save makes it your ${kindLayout().name} layout.`
       : 'kept in this tab until you save or discard.';
   }
   // A view filtering on prices (Bargains) matches nothing until they arrive: say so, not "no match".
