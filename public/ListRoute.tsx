@@ -2408,7 +2408,7 @@ export default function ListRoute() {
         if (loadGuard.isStale(gen)) return null;
         setListSources(toSources(sources));
         pendingGroups = Array.isArray(result) ? result : null;
-        const appids = Array.isArray(result) ? new Set(result.flatMap((g) => g.appids)) : flattenCombineResult(result);
+        const appids = flattenCombineResult(result);
         return { appids, rows: [...appids].map((appid) => ({ appid, name: '', loading: true, details: null })) };
       } catch (err) {
         if (!loadGuard.isStale(gen)) setStatusText(`Error: ${(err as Error).message}`);
