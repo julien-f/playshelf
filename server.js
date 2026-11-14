@@ -460,14 +460,12 @@ const sourcesCached = (sources, appid, force = false) =>
 // loaded comparison (all cache hits) burns the budget and 429s itself. A forced one
 // counts unless every source was fetched too recently to refetch (FORCE_MIN_AGE_MINUTES).
 
-const allDetailsCached = (appid, force = false) => sourcesCached(DETAILS_SOURCES, appid, force);
-
 const detailsLimit = namedRateLimit('details', {
   max: DETAILS_RATE_LIMIT_MAX,
   skip: (req) => {
     const { appid } = req;
     if (appid === undefined) return false; // POST /api/game-details/stream has no :appid
-    return allDetailsCached(appid, isForceRefresh(req));
+    return sourcesCached(DETAILS_SOURCES, appid, isForceRefresh(req));
   },
 });
 
