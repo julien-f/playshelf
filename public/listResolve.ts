@@ -200,6 +200,15 @@ export interface DefaultFetchersOptions {
 }
 export type BundleGamesCallback = (bundleId: string, bundle: Bundle, resolved: ResolvedGame[]) => void;
 
+// A source's failure fails the list as a whole, so its message says which source did it.
+async function titled<T>(title: string, promise: Promise<T>): Promise<T> {
+  try {
+    return await promise;
+  } catch (err) {
+    throw new Error(`${title}: ${(err as Error).message}`, { cause: err });
+  }
+}
+
 // The real ListResolveFetchers, wiring the injectable seam above to actual network calls
 // (accountData.ts/bundleData.ts), localStorage (recentGames.ts), and listsStore.ts's own
 // synchronous getList — what real routes construct and pass to resolveRef/
@@ -240,26 +249,17 @@ export function createDefaultFetchers({
       ),
     recentGames: async () => new Set(loadRecentGames().map((g) => g.appid)),
     creator: async (role, name) => {
-      let result;
-      try {
-        result = await fetchCreatorGames(role, name, { refresh });
-      } catch (err) {
-        // The list fails as a whole, so say which source did it.
-        throw new Error(`${creatorTitle(role, name)}: ${(err as Error).message}`, { cause: err });
-      }
-      const { appids, total, capped, fetchedAt } = result;
+      const { appids, total, capped, fetchedAt } = await titled(
+        creatorTitle(role, name),
+        fetchCreatorGames(role, name, { refresh }),
+      );
       onFetchedAt?.(fetchedAt);
       if (capped) onCreatorCapped?.(role, name, total);
       return new Set(appids);
     },
     // No snapshot to fall back on, unlike a bundle: a failure fails the list.
     gamePass: async () => {
-      let result;
-      try {
-        result = await fetchGamePass(currentRegion(), { refresh });
-      } catch (err) {
-        throw new Error(`${GAME_PASS_TITLE}: ${(err as Error).message}`, { cause: err });
-      }
+      const result = await titled(GAME_PASS_TITLE, fetchGamePass(currentRegion(), { refresh }));
       onFetchedAt?.(result.fetchedAt);
       onGamePassLeftOut?.(result.notOnSteam.length);
       return new Set(result.appids);
