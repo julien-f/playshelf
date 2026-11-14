@@ -1553,8 +1553,10 @@ const authLimit = namedRateLimit('auth', {
   max: 20,
 });
 
+const sessionIdOf = (req) => parseCookies(req.headers.cookie)[SESSION_COOKIE];
+
 function requireAuth(req, res, next) {
-  const user = getSessionUser(parseCookies(req.headers.cookie)[SESSION_COOKIE]);
+  const user = getSessionUser(sessionIdOf(req));
   if (!user) return res.status(401).json({ error: 'Not signed in' });
   req.user = user;
   next();
@@ -1612,7 +1614,7 @@ app.get('/auth/steam/callback', authLimit, requireSignIn, async (req, res) => {
 });
 
 app.post('/auth/logout', (req, res) => {
-  destroySession(parseCookies(req.headers.cookie)[SESSION_COOKIE]);
+  destroySession(sessionIdOf(req));
   res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, '', {}));
   res.json({ ok: true });
 });
@@ -1623,7 +1625,7 @@ app.post('/auth/logout', (req, res) => {
 // every single one of them.
 // Also where a session slides forward (touchSession): the one call every page load makes.
 app.get('/api/me', (req, res) => {
-  const sessionId = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  const sessionId = sessionIdOf(req);
   const user = getSessionUser(sessionId);
   if (user && touchSession(sessionId)) {
     res.setHeader(
