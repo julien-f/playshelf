@@ -624,7 +624,7 @@ const PRICE_STATUS_COLUMN: ColumnDef<Row> = {
   label: 'Price Status',
   groupable: true,
   value: (row: Row) => computePriceStatus(row),
-  format: (v) => (v === undefined ? '…' : v == null ? '—' : String(v)),
+  format: fmt.num,
   render: renderPriceStatus,
   compare: comparePriceStatus,
   defaultSortDir: 'desc',
