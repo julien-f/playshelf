@@ -136,12 +136,15 @@ export default function HomeRoute() {
   // Extracted from the effect below so the card's own ↻ can re-run it with `refresh: true`,
   // which forces the server past its library-tier cache for this account (owned games, wishlist
   // and profile alike) rather than waiting out a TTL now measured in weeks.
-  function loadAccountData(account: AccountSlot, { refresh = false }: { refresh?: boolean } = {}): void {
+  // Every load, not just a refresh: a superseded one never settles these for the next account.
+  function resetAccountData(refreshing: boolean): void {
     setCounts({ owned: null, wishlist: null });
     setPlayers([]);
-    // Every load, not just a refresh: a superseded one never settles these for the next account.
-    setRefreshing(refresh);
+    setRefreshing(refreshing);
     setFetchedAt(null);
+  }
+  function loadAccountData(account: AccountSlot, { refresh = false }: { refresh?: boolean } = {}): void {
+    resetAccountData(refresh);
     const members = account.members;
     // Guards every setter below: switching accounts again before this fetch settles (e.g.
     // adopting a `?u=` override right after landing on it, which fires this same effect for
@@ -187,10 +190,7 @@ export default function HomeRoute() {
     on(currentAccountId, () => {
       const account = currentAccount();
       if (!account) {
-        setCounts({ owned: null, wishlist: null });
-        setPlayers([]);
-        setFetchedAt(null);
-        setRefreshing(false);
+        resetAccountData(false);
         return;
       }
       loadAccountData(account);
