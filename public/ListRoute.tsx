@@ -3056,7 +3056,7 @@ export default function ListRoute() {
     if (kind === 'recent') {
       if (params.appid) openOrAddRecentGame(Number(params.appid));
     } else {
-      const gameParam = new URLSearchParams(routerLocation.search).get('game');
+      const gameParam = search.get('game');
       if (gameParam) handleOpenGameRequest(Number(gameParam));
     }
 
