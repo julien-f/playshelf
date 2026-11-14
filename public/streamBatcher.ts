@@ -32,6 +32,9 @@ export interface StreamBatcher<E> {
   flushNow(): void;
 }
 
+// Matches the debounce this replaced.
+export const FLUSH_MS = 150;
+
 export function createStreamBatcher<E>(opts: {
   // Called once per non-stale queued event, inside the one `batch()` a flush wraps every event
   // in — same "which events survive" contract every other generation-tagged checkpoint in this
@@ -41,9 +44,7 @@ export function createStreamBatcher<E>(opts: {
   // Runs once per flush, after the batch — e.g. the page's own status-text/tooltip update,
   // which needs the same amortized cadence but isn't itself a per-event row mutation.
   onFlush?: () => void;
-  flushMs?: number; // default 150 — matches the debounce this replaced
 }): StreamBatcher<E> {
-  const flushMs = opts.flushMs ?? 150;
   let pending: { event: E; gen: number }[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -67,7 +68,7 @@ export function createStreamBatcher<E>(opts: {
 
   function push(event: E, gen: number): void {
     pending.push({ event, gen });
-    if (timer === null) timer = setTimeout(flushNow, flushMs);
+    if (timer === null) timer = setTimeout(flushNow, FLUSH_MS);
   }
 
   return { push, flushNow };

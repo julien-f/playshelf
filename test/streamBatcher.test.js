@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createStreamBatcher } = require('../public/streamBatcher.ts');
+const { createStreamBatcher, FLUSH_MS } = require('../public/streamBatcher.ts');
 
 test('createStreamBatcher: does not apply anything until a flush happens', () => {
   const applied = [];
@@ -57,14 +57,13 @@ test('createStreamBatcher: onFlush runs once per flushNow(), even when nothing w
   assert.equal(flushes, 2);
 });
 
-test('createStreamBatcher: schedules exactly one timer regardless of how many pushes happen before it fires', (t, done) => {
+test('createStreamBatcher: schedules exactly one timer regardless of how many pushes happen before it fires', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const applied = [];
-  const batcher = createStreamBatcher({ apply: (e) => applied.push(e), isStale: () => false, flushMs: 10 });
+  const batcher = createStreamBatcher({ apply: (e) => applied.push(e), isStale: () => false });
   batcher.push('a', 1);
   batcher.push('b', 1);
   batcher.push('c', 1);
-  setTimeout(() => {
-    assert.deepEqual(applied, ['a', 'b', 'c']);
-    done();
-  }, 30);
+  t.mock.timers.tick(FLUSH_MS);
+  assert.deepEqual(applied, ['a', 'b', 'c']);
 });
