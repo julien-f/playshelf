@@ -1480,7 +1480,7 @@ function AchievementsSection(props: { game: ReadonlyGame }): JSX.Element {
 function OwnersSection(): JSX.Element {
   const owners = (): GameOwner[] => panelData.owners() ?? [];
   const sorted = createMemo(() => sortOwners(owners()));
-  const maxMinutes = createMemo(() => Math.max(...sorted().map((o) => o.minutes), 1));
+  const maxMinutes = createMemo(() => Math.max(...sorted().map((o) => o.minutes)));
   return (
     <Show when={sorted().length > 0}>
       <section class="panel-section" id="panel-section-owners">
