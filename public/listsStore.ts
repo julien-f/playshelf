@@ -24,25 +24,18 @@ import type { Folder, GameList, ListRef, CombineOp } from './types.ts';
 const LISTS_KEY = 'lists';
 const FOLDERS_KEY = 'folders';
 
-function genId(): string {
-  return crypto.randomUUID();
-}
-
 function readLists(): GameList[] {
   return getPref<GameList[]>(LISTS_KEY, []);
 }
 function writeLists(lists: GameList[]): void {
   setPref(LISTS_KEY, lists);
 }
-function readFolders(): Folder[] {
-  return getPref<Folder[]>(FOLDERS_KEY, []);
-}
 function writeFolders(folders: Folder[]): void {
   setPref(FOLDERS_KEY, folders);
 }
 
 function nextOrder(parentId: string | null): number {
-  const folders = readFolders().filter((f) => f.parentId === parentId);
+  const folders = getFolders().filter((f) => f.parentId === parentId);
   const lists = readLists().filter((l) => l.parentId === parentId && !l.deletedAt);
   const orders = [...folders.map((f) => f.order), ...lists.map((l) => l.order)];
   return orders.length ? Math.max(...orders) + 1 : 0;
@@ -51,12 +44,12 @@ function nextOrder(parentId: string | null): number {
 // ── Reads ────────────────────────────────────────────────────────────────────────────────────
 
 export function getFolders(): Folder[] {
-  return readFolders();
+  return getPref<Folder[]>(FOLDERS_KEY, []);
 }
 
 // Every folder with its full path ("Weekend / Friday"), in tree order — for pickers like Home's
 // "Move to…".
-export function folderPaths(folders: Folder[] = readFolders()): { id: string; path: string }[] {
+export function folderPaths(folders: Folder[] = getFolders()): { id: string; path: string }[] {
   const out: { id: string; path: string }[] = [];
   const walk = (parentId: string | null, prefix: string) => {
     for (const f of folders.filter((x) => x.parentId === parentId).sort((a, b) => a.order - b.order)) {
@@ -207,13 +200,13 @@ export function isAccountReferenced(accountId: string): boolean {
 // ── Folder CRUD ──────────────────────────────────────────────────────────────────────────────
 
 export function createFolder(name: string, parentId: string | null = null): Folder {
-  const folder: Folder = { id: genId(), name, parentId, order: nextOrder(parentId) };
-  writeFolders([...readFolders(), folder]);
+  const folder: Folder = { id: crypto.randomUUID(), name, parentId, order: nextOrder(parentId) };
+  writeFolders([...getFolders(), folder]);
   return folder;
 }
 
 export function renameFolder(id: string, name: string): void {
-  const folders = readFolders();
+  const folders = getFolders();
   const folder = folders.find((f) => f.id === id);
   if (!folder) return;
   folder.name = name;
@@ -222,7 +215,7 @@ export function renameFolder(id: string, name: string): void {
 
 export function moveFolder(id: string, parentId: string | null): void {
   if (parentId === id) throw new Error('Cannot move a folder into itself');
-  const folders = readFolders();
+  const folders = getFolders();
   if (parentId != null && isDescendantFolder(parentId, id, folders)) {
     throw new Error('Cannot move a folder into its own descendant');
   }
@@ -238,7 +231,7 @@ export function moveFolder(id: string, parentId: string | null): void {
 // deletes child folders and applies deleteList's own soft-delete rule to child lists — never
 // an unconditional wipe of something still referenced elsewhere.
 export function deleteFolder(id: string, mode: 'promote' | 'delete'): void {
-  const folders = readFolders();
+  const folders = getFolders();
   const folder = folders.find((f) => f.id === id);
   if (!folder) return;
 
@@ -264,7 +257,7 @@ export function deleteFolder(id: string, mode: 'promote' | 'delete'): void {
   const childLists = readLists().filter((l) => l.parentId === id && !l.deletedAt);
   childLists.forEach((l) => deleteList(l.id));
 
-  writeFolders(readFolders().filter((f) => f.id !== id));
+  writeFolders(getFolders().filter((f) => f.id !== id));
 }
 
 // ── List CRUD ────────────────────────────────────────────────────────────────────────────────
@@ -280,7 +273,7 @@ export interface CreateListInput {
 }
 
 export function createList(input: CreateListInput): GameList {
-  const id = genId();
+  const id = crypto.randomUUID();
   const parentId = input.parentId ?? null;
   const lists = readLists();
 
@@ -469,7 +462,7 @@ export function orphanBundle(bundleId: string): GameList | undefined {
   if (!snapshot || !isBundleReferenced(bundleId, lists)) return undefined;
   const now = Date.now();
   const orphan: GameList = {
-    id: genId(),
+    id: crypto.randomUUID(),
     name: `${snapshot.title} (no longer listed)`,
     parentId: null,
     order: nextOrder(null),

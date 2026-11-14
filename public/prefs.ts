@@ -78,10 +78,6 @@ function storedJson(c: NonNullable<typeof cache>, key: string): string {
   return json;
 }
 
-function readEntries(): Record<string, PrefEntry> {
-  return { ...readCache().entries };
-}
-
 // False when not persisted: private browsing, storage unavailable, or full even without the cached tastes.
 function writeEntries(entries: Record<string, PrefEntry>): boolean {
   return setItemMakingRoom(PREFS_STORAGE_KEY, JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...entries }));
@@ -172,7 +168,7 @@ function schedulePush(key: string): void {
 function flushPush(key: string, keepalive = false): Promise<void> | undefined {
   clearTimeout(pendingPushes.get(key));
   pendingPushes.delete(key);
-  const entry = readEntries()[key];
+  const entry = readCache().entries[key];
   if (entry && signedInSteamid) return pushPrefToServer(key, entry.value, entry.updatedAt, { keepalive });
 }
 
