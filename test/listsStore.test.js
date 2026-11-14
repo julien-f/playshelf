@@ -421,20 +421,20 @@ test('folderPaths: every folder with its full path, in tree order', () => {
 });
 
 test('listHasPriceSource: a wishlist or bundle source, at any depth, has prices', () => {
-  const { createList, listHasPriceSource } = store();
+  const { createList, getList, listHasPriceSource } = store();
   const wish = createList({ kind: 'dynamic', op: 'union', sources: [{ kind: 'account-wishlist', accountId: 'a' }] });
   const ranked = createList({ kind: 'ranked', source: { kind: 'user', listId: wish.id } });
   const bundle = createList({ kind: 'ranked', source: { kind: 'bundle', bundleId: '1' } });
   const owned = createList({ kind: 'dynamic', op: 'union', sources: [{ kind: 'account-owned', accountId: 'a' }] });
   const manual = createList({ name: 'M', kind: 'manual', appids: [1] });
   const creator = createList({ kind: 'ranked', source: { kind: 'publisher', name: 'P' } });
-  assert.equal(listHasPriceSource(creator), true);
-  assert.equal(listHasPriceSource(createList({ kind: 'ranked', source: { kind: 'game-pass' } })), true);
-  assert.equal(listHasPriceSource(wish), true);
-  assert.equal(listHasPriceSource(ranked), true);
-  assert.equal(listHasPriceSource(bundle), true);
-  assert.equal(listHasPriceSource(owned), false);
-  assert.equal(listHasPriceSource(manual), false);
+  assert.equal(listHasPriceSource(creator, getList), true);
+  assert.equal(listHasPriceSource(createList({ kind: 'ranked', source: { kind: 'game-pass' } }), getList), true);
+  assert.equal(listHasPriceSource(wish, getList), true);
+  assert.equal(listHasPriceSource(ranked, getList), true);
+  assert.equal(listHasPriceSource(bundle, getList), true);
+  assert.equal(listHasPriceSource(owned, getList), false);
+  assert.equal(listHasPriceSource(manual, getList), false);
 });
 
 test('listHasRefreshableSource: an account library or wishlist or a store search, at any depth, through the given lookup', () => {

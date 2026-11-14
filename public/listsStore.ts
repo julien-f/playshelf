@@ -108,7 +108,7 @@ function listReaches(
 const isCreatorRef = (ref: ListRef): boolean => ref.kind === 'developer' || ref.kind === 'publisher';
 
 // Whether a list is built, at any depth, from a source that has prices (a wishlist, a bundle, a store search, Game Pass); `get` as listHasRefreshableSource's.
-export function listHasPriceSource(list: GameList, get: (id: string) => GameList | undefined = getList): boolean {
+export function listHasPriceSource(list: GameList, get: (id: string) => GameList | undefined): boolean {
   return listReaches(
     list,
     (ref) => ref.kind === 'account-wishlist' || ref.kind === 'bundle' || isCreatorRef(ref) || ref.kind === 'game-pass',

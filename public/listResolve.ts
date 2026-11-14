@@ -274,7 +274,7 @@ export function createDefaultFetchers({
 // bundle can't fail the whole list. `fetchContents` is injectable for tests.
 export async function resolveBundleSource(
   bundleId: string,
-  fetchContents: typeof fetchBundleContents = fetchBundleContents,
+  fetchContents: typeof fetchBundleContents,
   onLeftOut?: (bundleId: string, notOnSteam: number) => void,
   onGames?: BundleGamesCallback,
 ): Promise<Set<number>> {
