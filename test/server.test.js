@@ -593,11 +593,6 @@ test('GET /api/metrics: counts HLTB lookups its failed-lookup hold answered', as
 
 // ── POST /api/common-games — input validation ─────────────────────────────────
 
-test('POST /api/common-games: 400 when body has no members field', async () => {
-  const res = await api.post('/api/common-games').send({});
-  assert.equal(res.status, 400);
-});
-
 test('POST /api/common-games: 400 for the old { slots } and { users } bodies', async () => {
   for (const body of [{ slots: [[ID1]] }, { users: [ID1] }]) {
     const res = await api.post('/api/common-games').send(body);
@@ -605,28 +600,40 @@ test('POST /api/common-games: 400 for the old { slots } and { users } bodies', a
   }
 });
 
-test('POST /api/common-games: 400 when members is an empty array', async () => {
-  const res = await api.post('/api/common-games').send({ members: [] });
-  assert.equal(res.status, 400);
-});
-
 test('POST /api/common-games: 400 when a member value is null', async () => {
   const res = await api.post('/api/common-games').send({ members: [null, ID1] });
   assert.equal(res.status, 400);
 });
 
-test('POST /api/common-games: 400 when a member value is an empty string', async () => {
-  const res = await api.post('/api/common-games').send({ members: ['', ID1] });
-  assert.equal(res.status, 400);
-});
+// The member-list routes validate alike (parseMembers); common-games' empty member sits beside a valid one.
+for (const [route, emptyMember] of [
+  ['common-games', ['', ID1]],
+  ['wishlist', ['']],
+  ['friends', ['']],
+]) {
+  test(`POST /api/${route}: 400 when body has no members field`, async () => {
+    const res = await api.post(`/api/${route}`).send({});
+    assert.equal(res.status, 400);
+  });
 
-test('POST /api/common-games: 400 when members exceeds MAX_USERS', async () => {
-  // Default MAX_USERS is 10.
-  const members = Array.from({ length: 11 }, (_, i) => `7656119800000000${i}`);
-  const res = await api.post('/api/common-games').send({ members });
-  assert.equal(res.status, 400);
-  assert.match(res.body.error, /Too many users/);
-});
+  test(`POST /api/${route}: 400 when members is an empty array`, async () => {
+    const res = await api.post(`/api/${route}`).send({ members: [] });
+    assert.equal(res.status, 400);
+  });
+
+  test(`POST /api/${route}: 400 when a member value is an empty string`, async () => {
+    const res = await api.post(`/api/${route}`).send({ members: emptyMember });
+    assert.equal(res.status, 400);
+  });
+
+  test(`POST /api/${route}: 400 when members exceeds MAX_USERS`, async () => {
+    // Default MAX_USERS is 10.
+    const members = Array.from({ length: 11 }, (_, i) => `7656119800000000${i}`);
+    const res = await api.post(`/api/${route}`).send({ members });
+    assert.equal(res.status, 400);
+    assert.match(res.body.error, /Too many users/);
+  });
+}
 
 // ── POST /api/common-games — happy path ──────────────────────────────────────
 
@@ -790,29 +797,6 @@ test("POST /api/common-games: an upstream failure isn't hidden behind a private 
 
 // ── POST /api/wishlist — input validation ─────────────────────────────────────
 
-test('POST /api/wishlist: 400 when body has no members field', async () => {
-  const res = await api.post('/api/wishlist').send({});
-  assert.equal(res.status, 400);
-});
-
-test('POST /api/wishlist: 400 when members is an empty array', async () => {
-  const res = await api.post('/api/wishlist').send({ members: [] });
-  assert.equal(res.status, 400);
-});
-
-test('POST /api/wishlist: 400 when a member value is an empty string', async () => {
-  const res = await api.post('/api/wishlist').send({ members: [''] });
-  assert.equal(res.status, 400);
-});
-
-test('POST /api/wishlist: 400 when members exceeds MAX_USERS', async () => {
-  // Default MAX_USERS is 10.
-  const members = Array.from({ length: 11 }, (_, i) => `7656119800000000${i}`);
-  const res = await api.post('/api/wishlist').send({ members });
-  assert.equal(res.status, 400);
-  assert.match(res.body.error, /Too many users/);
-});
-
 // ── POST /api/wishlist — happy path ───────────────────────────────────────────
 
 function makeWishlistFetch(items1 = [], items2 = []) {
@@ -891,29 +875,6 @@ test('POST /api/wishlist: 502 when Steam API returns a server error', async (t) 
 });
 
 // ── POST /api/friends — input validation ──────────────────────────────────────
-
-test('POST /api/friends: 400 when body has no members field', async () => {
-  const res = await api.post('/api/friends').send({});
-  assert.equal(res.status, 400);
-});
-
-test('POST /api/friends: 400 when members is an empty array', async () => {
-  const res = await api.post('/api/friends').send({ members: [] });
-  assert.equal(res.status, 400);
-});
-
-test('POST /api/friends: 400 when a member value is an empty string', async () => {
-  const res = await api.post('/api/friends').send({ members: [''] });
-  assert.equal(res.status, 400);
-});
-
-test('POST /api/friends: 400 when members exceeds MAX_USERS', async () => {
-  // Default MAX_USERS is 10.
-  const members = Array.from({ length: 11 }, (_, i) => `7656119800000000${i}`);
-  const res = await api.post('/api/friends').send({ members });
-  assert.equal(res.status, 400);
-  assert.match(res.body.error, /Too many users/);
-});
 
 // ── POST /api/friends — happy path ────────────────────────────────────────────
 
