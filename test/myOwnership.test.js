@@ -24,13 +24,7 @@ function makeAccount(id, overrides = {}) {
   return { id, members: [id], rawInputs: [id], ...overrides };
 }
 
-function withFetch(t, handler) {
-  const restore = globalThis.fetch;
-  globalThis.fetch = handler;
-  t.after(() => {
-    globalThis.fetch = restore;
-  });
-}
+const { withFetch } = require('./withFetch.js');
 
 // A minimal /api/common-games + /api/wishlist responder for one account id ("1" by default),
 // owning `ownedAppids` and wishlisting `wishlistAppids`.

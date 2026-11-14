@@ -19,13 +19,10 @@ const {
 } = require('../public/accountData.ts');
 const { CLIENT_CACHE_MAX_AGE_MS } = require('../public/utils.ts');
 
+const { withFetch: swapFetch } = require('./withFetch.js');
 function withFetch(t, handler) {
   clearAccountDataCache();
-  const restore = globalThis.fetch;
-  globalThis.fetch = handler;
-  t.after(() => {
-    globalThis.fetch = restore;
-  });
+  swapFetch(t, handler);
 }
 
 test('membersFromAccountId: splits the sorted-joined id back into member steam64 ids', () => {

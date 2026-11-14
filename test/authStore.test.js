@@ -6,13 +6,7 @@ const { until } = require('./until');
 
 const { makeMemoryLocalStorage } = require('./memoryStorage.js');
 
-function withFetch(t, handler) {
-  const restore = globalThis.fetch;
-  globalThis.fetch = handler;
-  t.after(() => {
-    globalThis.fetch = restore;
-  });
-}
+const { withFetch } = require('./withFetch.js');
 
 beforeEach(() => {
   global.localStorage = makeMemoryLocalStorage();

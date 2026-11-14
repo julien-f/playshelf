@@ -21,13 +21,7 @@ beforeEach(() => {
   setAccountOverride(null);
 });
 
-function withFetch(t, handler) {
-  const restore = globalThis.fetch;
-  globalThis.fetch = handler;
-  t.after(() => {
-    globalThis.fetch = restore;
-  });
-}
+const { withFetch } = require('./withFetch.js');
 
 // A /api/common-games + /api/wishlist responder resolving every requested identifier to one
 // player, mirroring what resolveAccountSlot reads (accountData.ts).

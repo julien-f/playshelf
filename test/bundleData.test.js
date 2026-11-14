@@ -11,13 +11,7 @@ const {
   BundleNotFoundError,
 } = require('../public/bundleData.ts');
 
-function withFetch(t, handler) {
-  const restore = globalThis.fetch;
-  globalThis.fetch = handler;
-  t.after(() => {
-    globalThis.fetch = restore;
-  });
-}
+const { withFetch } = require('./withFetch.js');
 
 function game(id, title = id) {
   return { id, slug: id, title, type: 'game', assets: null };
