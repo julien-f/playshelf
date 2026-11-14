@@ -42,6 +42,7 @@ Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` (load 46.8, ma
 - **L3 e2e build skip** (P78): `scripts/e2e.js` skips `vite build` when public/, static/, configs and lockfile hash as the build in place; 502 of 848 transcript e2e runs had no frontend change since the previous. One-test run (`node scripts/e2e.js --project=desktop -g 'A1: first visit'`): 20.8–23.0 s → 8.7–9.6 s at load ~40 (3 alternating pairs).
 - **L4 per-port e2e output dir** (P79): two e2e runs in one checkout (sessions sharing the main checkout; `claimPort` allows it) shared `test-results/`, which each run empties on start, deleting the other's traces. Reproduction (40 phone tests, a second run started mid-way): 6 failed, 12 ENOENT → 0 failed in 5 of 5.
 - **L5 Clear search flake** (P61): root cause an app bug, a search answering after × replaced the recents (any input now invalidates the in-flight search). New test fails before, passes after; `e2e-flakes.js --repeat=24 --load=24 --workers=12 -g 'Clear search'`: 0 of 144 at load median 40.5 (was 1/5 in the baseline run). Changelog at merge: "Clearing the nav search no longer lets a late answer replace the recently looked-up games".
+- **L6 phone subset at pre-push** (P64, user's choice: CI keeps every test at both widths): 266 edge tests tagged `@any-width`. Phone half: 451 → 181 tests, 62–65 s → 22–31 s (3 alternating pairs of `node scripts/e2e.js --project=phone [--phone-subset]`, load 1.4–23).
 
 ## Negative results
 

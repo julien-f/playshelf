@@ -36,5 +36,6 @@ if ! git diff --quiet HEAD; then
 fi
 
 node scripts/check.js
-# Skipped when this build and these tests already passed in full (scripts/e2e.js).
-npm run -s test:e2e -- --if-changed
+# Skipped when this build and these tests already passed in full (scripts/e2e.js). Phone runs only the
+# tests that depend on width (P64); CI runs every test at both widths.
+npm run -s test:e2e -- --if-changed --phone-subset

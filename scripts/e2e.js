@@ -7,8 +7,9 @@
 // branch whose commits since <ref> touch nothing the suite covers (check.js's UI files) skips it.
 // A port another run holds or something listens on is skipped for the next free one, unless E2E_PORT sets it.
 // The build is skipped when its inputs are those of the build already in its directory (most runs only change e2e/).
+// With --phone-subset (the pre-push hook), phone skips the tests tagged `@any-width`; its pass is recorded apart.
 // Each --if-changed run logs the projects asked for and those run (dev-metrics `e2e-runs`).
-//   node scripts/e2e.js [--if-changed] [--since=<ref>] [playwright args…]
+//   node scripts/e2e.js [--if-changed] [--since=<ref>] [--phone-subset] [playwright args…]
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -105,6 +106,10 @@ async function claimPort(start, { fixed = false, lockDir = CACHE, isBusy = liste
   throw new Error(fixed ? `port ${start} (E2E_PORT) is in use` : `no free port from ${start} to ${MAX_PORT}`);
 }
 
+// The key a project's pass is recorded under: the phone subset apart, as a full phone pass covers it but not
+// the other way round.
+const passKey = (project, phoneSubset) => (project === 'phone' && phoneSubset ? 'phone-subset' : project);
+
 // The projects already passed on `hash`.
 const passedOn = (hash) => {
   try {
@@ -143,8 +148,9 @@ function planRun(pwArgs, passed, ifChanged) {
 async function main() {
   const args = process.argv.slice(2);
   const ifChanged = args.includes('--if-changed');
+  const phoneSubset = args.includes('--phone-subset');
   const since = args.find((a) => a.startsWith('--since='))?.slice(8);
-  const pwArgs = args.filter((a) => a !== '--if-changed' && !a.startsWith('--since='));
+  const pwArgs = args.filter((a) => !['--if-changed', '--phone-subset'].includes(a) && !a.startsWith('--since='));
   if (since) {
     const changed = execFileSync('git', ['diff', '--name-only', `${since}...HEAD`], { cwd: ROOT, encoding: 'utf8' });
     if (!touchesUi(changed.split('\n').filter(Boolean))) {
@@ -179,7 +185,8 @@ async function main() {
     fs.writeFileSync(stamp, inputs);
   }
   const hash = inputsHash(OUT_DIR);
-  const passed = passedOn(hash);
+  const passedKeys = passedOn(hash);
+  const passed = new Set(PROJECTS.filter((p) => passedKeys.has(p) || passedKeys.has(passKey(p, phoneSubset))));
   const { running, runArgs } = planRun(pwArgs, passed, ifChanged);
   const log = (ok, seconds) =>
     ifChanged && running && record('e2e-runs', { asked: splitProjects(pwArgs).projects, ran: running, ok, seconds });
@@ -195,14 +202,17 @@ async function main() {
   const { status } = spawnSync('npx', ['playwright', 'test', ...runArgs], {
     cwd: ROOT,
     stdio: 'inherit',
-    env: { ...process.env, E2E_BUILT: OUT_DIR },
+    env: { ...process.env, E2E_BUILT: OUT_DIR, ...(phoneSubset && { E2E_PHONE_SUBSET: '1' }) },
   });
   log(status === 0, Math.round((Date.now() - started) / 1000));
   if (status === 0 && running)
-    fs.writeFileSync(PASS_FILE, `${[hash, ...new Set([...passed, ...running])].join('\n')}\n`);
+    fs.writeFileSync(
+      PASS_FILE,
+      `${[hash, ...new Set([...passedKeys, ...running.map((p) => passKey(p, phoneSubset))])].join('\n')}\n`,
+    );
   process.exit(status ?? 1);
 }
 
 if (require.main === module) main();
 
-module.exports = { buildInputsHash, claimPort, listening, planRun };
+module.exports = { buildInputsHash, claimPort, listening, passKey, planRun };

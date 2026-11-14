@@ -32,7 +32,12 @@ export default defineConfig({
     // The committed DejaVu fonts, not the machine's: layouts measure the same locally and in CI (Linux only: fontconfig).
     launchOptions: { env: { ...process.env, FONTCONFIG_FILE: path.join(__dirname, 'e2e/fonts/fonts.conf') } },
   },
-  projects: Object.entries(PROJECTS).map(([name, use]) => ({ name, use })),
+  projects: Object.entries(PROJECTS).map(([name, use]) => ({
+    name,
+    use,
+    // The pre-push hook's phone run (scripts/e2e.js --phone-subset) skips tests tagged as the same at any width; CI runs them.
+    ...(name === 'phone' && process.env.E2E_PHONE_SUBSET && { grepInvert: /@any-width/ }),
+  })),
   webServer: {
     // E2E_BUILT: scripts/e2e.js (`npm run test:e2e`) already built into that directory.
     command: process.env.E2E_BUILT

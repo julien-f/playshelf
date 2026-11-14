@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
-const { buildInputsHash, claimPort, listening, planRun } = require('../scripts/e2e');
+const { buildInputsHash, claimPort, listening, passKey, planRun } = require('../scripts/e2e');
 
 test('planRun: records a pass only for the projects a run covers in full', () => {
   const none = new Set();
@@ -102,4 +102,10 @@ test('buildInputsHash: changes with the frontend, static files and configs, not 
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("passKey: the pre-push phone subset's pass is recorded apart from a full phone pass", () => {
+  assert.equal(passKey('phone', true), 'phone-subset');
+  assert.equal(passKey('phone', false), 'phone');
+  assert.equal(passKey('desktop', true), 'desktop');
 });

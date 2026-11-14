@@ -17,7 +17,7 @@
   - A layout check that still fails in CI only, by a few pixels: something else drives the layout there (a glyph DejaVu lacks falling back to a system font, a Chromium version gap). Fix the CSS (size to content, set a line height), not the threshold; to find the breaking change, diff against the last green run's commit (`gh run view <id> --json headSha`), since one push can carry many.
 - Every `/api` call is mocked in the browser (`e2e/mockApi.ts`): no backend, no upstream traffic. Fixtures use made-up accounts only.
 - The presentation window (a popup) gets its stubs from `e2e/presentationHooks.ts`, injected into its HTML by a context route: init scripts, `page.clock` included, miss a popup's first document about one run in four. Fake time on the main page only.
-- The pre-push hook runs all of it, no commit hook: an intermediate commit's e2e break shows only at the push (on HEAD) or in CI. It skips each width already passed on the same build (sourcemaps aside), `e2e/` and test config (`scripts/e2e.js`): a push right after a full run runs nothing.
+- The pre-push hook runs it, no commit hook: an intermediate commit's e2e break shows only at the push (on HEAD) or in CI. Its phone half skips the tests tagged `{ tag: '@any-width' }` (`--phone-subset`): a phone-only break in one of those shows only in CI, which runs every test at both widths. It skips each width already passed on the same build (sourcemaps aside), `e2e/` and test config (`scripts/e2e.js`): a push right after a full run runs nothing.
 - Each checkout's run takes its port from `node scripts/ports.js e2e`; when another run holds it (a lock in `node_modules/.cache/`) or something listens there, `scripts/e2e.js` moves to the next free one. A set `E2E_PORT` fails instead.
 - Each run skips `vite build` when `public/`, `static/`, `vite.config.js`, `tsconfig.json` and the lockfile are those of the build already in its directory (`node_modules/.cache/e2e-dist/<port>.inputs`); delete that file to force one.
 - `npm run test:e2e -- --since=<ref>` skips the run when the commits since `<ref>` touch none of those files (`check.js`'s `touchesUi`): a fix-batch lane's doc- or backend-only work.
@@ -25,6 +25,8 @@
 - `E2E_SHOTS=1 npm run test:e2e` keeps each test's final screen, plus any `shot(page, name)` (`e2e/state.ts`), under `test-results/<port>/`, one folder per test and width — a way to look at a UI change without touching real prefs.
 
 ## Writing reliable tests
+
+- Tag an e2e test `{ tag: '@any-width' }` only when nothing it checks depends on width, layout or touch: the pre-push hook then skips it at phone width. Untagged, it runs at both.
 
 Each rule comes from a flake it fixed; add one when a fix teaches something new.
 
@@ -79,7 +81,7 @@ Each rule comes from a flake it fixed; add one when a fix teaches something new.
 - `pre-commit` (`.githooks/pre-commit`, enabled by `npm install`): `git diff --cached --check`, then `npm run check`'s steps (each `scripts/check.js` run first stops if `node_modules` is behind `package-lock.json`) in parallel on the staged content (unstaged edits to tracked files are set aside, then restored; untracked files stay, so a commit lacking one can still pass) — typecheck, lint and the CSS check only when `public/`, `e2e/` or a frontend config is staged (`node scripts/setup-facts.js --cost` times it). It blocks the commit on failure. `npm install` also points `git blame` at `.git-blame-ignore-revs`.
 - Every `scripts/check.js` run (both hooks and `npm run check`) logs its step times and failures to `.git/dev-metrics/` (`scripts/dev-metrics.js`: local, shared by worktrees), as does `scripts/backlog-run-log.js` (each backlog-run's review yield and its escapes) — project scripts log there, not in `~/.claude/logs`; `node scripts/setup-facts.js --cost` summarizes them.
 - `pre-merge-commit`: the changelog check on the merge's whole diff — a feature branch's own commits skip the entry requirement, so its merge into `main` must carry them.
-- `pre-push`: what CI runs (`npm run check`, then both widths of e2e) on HEAD; refuses a push of anything else or with untracked files, and sets uncommitted edits to tracked files aside for the checks, then restores them.
+- `pre-push`: what CI runs (`npm run check`, then both widths of e2e, phone without the `@any-width` tests) on HEAD; refuses a push of anything else or with untracked files, and sets uncommitted edits to tracked files aside for the checks, then restores them.
 - Claude Code `PreToolUse` hook (`.claude/settings.json`): `scripts/bash-guard.js` refuses `pkill`, `killall` and `kill $(pgrep …)`, whose pattern matches the agent's own shell (exit 144) and can miss the server, and names the `down` scripts instead; each refusal goes to `.git/dev-metrics/bash-guard.jsonl`.
 - CI (`.github/workflows/ci.yml`): `npm run check` beside the e2e suite in four shards (`--shard=N/4`), on Node 24, on every push to `main` and every PR; the run's summary lists the journey steps the tests lock.
 - A doc reference `check` reports is either stale (fix the doc) or deliberate history (add it to `HISTORY` in `scripts/doc-refs.js`, which reports an entry no doc mentions any more).
