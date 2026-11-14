@@ -1725,7 +1725,7 @@ export function repointLightboxGame(game: ReadonlyGame) {
 }
 
 // Shrinks a still back into the panel hero's picture when it's on screen; else the dialog fades (CSS).
-export function closeLightbox() {
+function closeLightbox() {
   if (!isLightboxOpen()) return; // the `close` event that follows our own close()
   document.body.classList.remove('lb-open'); // the panel rendered again, so its hero can be measured
   const lb = document.getElementById('screenshot-lightbox')!;

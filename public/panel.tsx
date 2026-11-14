@@ -120,7 +120,7 @@ function bundleTierText(b: GameBundle): string {
 }
 
 // The shell's hooks, passed once to initPanel.
-export interface PanelOptions {
+interface PanelOptions {
   onTagClick: (dim: string, val: string) => void;
   tagsFilterable: () => boolean; // false: tags render as plain pills
   isTagActive: (dim: string, val: string) => boolean;

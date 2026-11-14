@@ -23,7 +23,7 @@ export interface Morph {
 const NAME = 'game-art';
 const MORPH_WAIT_MS = 150;
 
-export function canMorph(): boolean {
+function canMorph(): boolean {
   return (
     'startViewTransition' in document &&
     !prefersReducedMotion() &&
