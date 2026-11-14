@@ -37,4 +37,6 @@ Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` — pending.
 
 - **L1b format cache** (P75): a cacheless `npx prettier` (1164 calls for 885 commits in transcripts) deleted the default cache, so the hook's format step re-read the tree. Dedicated `--cache-location`: 14.5 s → 0.85 s CPU, 32–65 s → 1.8–4.5 s at load 45–85 (4 runs each, `npx prettier --write PLAN.md; npm run -s format:check`).
 
+- **L1c eslint cache** (P76): `--cache` (no type-aware rule): 3.3–3.6 s → 0.56–0.61 s CPU, 6.6–11.5 s → 1.6–3.4 s wall at load ~42; one large file touched: 1.24 s CPU.
+
 ## Negative results
