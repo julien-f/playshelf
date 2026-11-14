@@ -5,7 +5,7 @@
 process.env.DB_FILE = '';
 process.env.ITAD_API_KEY = 'test-itad-key';
 
-const { test } = require('node:test');
+const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   getSteamShopId,
@@ -21,6 +21,8 @@ const {
 } = require('../lib/itad');
 const { _reset, isCached } = require('../lib/cache');
 
+beforeEach(() => _reset());
+
 const SHOPS = [
   { id: 2, title: 'AllYouPlay' },
   { id: 61, title: 'Steam' },
@@ -28,7 +30,6 @@ const SHOPS = [
 ];
 
 test('getSteamShopId: finds and caches the Steam entry', async (t) => {
-  _reset();
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     calls++;
@@ -41,7 +42,6 @@ test('getSteamShopId: finds and caches the Steam entry', async (t) => {
 });
 
 test('getSteamShopId: throws when no Steam entry is present', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ id: 2, title: 'AllYouPlay' }] }));
   await assert.rejects(
     () => getSteamShopId(),
@@ -53,7 +53,6 @@ test('getSteamShopId: throws when no Steam entry is present', async (t) => {
 const PAGE = { country: 'US', offset: 0, limit: 20, sort: '-publish', expired: false };
 
 test('getBundles: throws on upstream error', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   await assert.rejects(
     () => getBundles(PAGE),
@@ -62,7 +61,6 @@ test('getBundles: throws on upstream error', async (t) => {
 });
 
 test('getBundles: returns and caches the bundle list', async (t) => {
-  _reset();
   const bundles = [{ id: 1, title: 'Test Bundle' }];
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
@@ -78,7 +76,6 @@ test('getBundles: returns and caches the bundle list', async (t) => {
 });
 
 test('getBundles: replaces a mistyped optional field and keeps the bundle, so the page keeps its length', async (t) => {
-  _reset();
   const warn = t.mock.method(console, 'warn', () => {});
   const good = { id: 1, title: 'A', expiry: null, tiers: [{ games: [{ assets: { banner600: 'u' } }] }] };
   const bad = {
@@ -111,7 +108,6 @@ test('getBundles: a bundle without an id or title fails its page', async (t) => 
 });
 
 test('findBundleById: walks past a full page holding a mistyped bundle (C269)', async (t) => {
-  _reset();
   t.mock.method(console, 'warn', () => {});
   const page1 = Array.from({ length: 50 }, (_, i) => ({ id: i + 1, title: `Active ${i + 1}`, tiers: i ? [] : 'x' }));
   t.mock.method(globalThis, 'fetch', makeBundlesPager({ active: [...page1, { id: 999, title: 'Target' }] }));
@@ -124,7 +120,6 @@ test('findBundleById: walks past a full page holding a mistyped bundle (C269)', 
 // narrative-games bundle). Asserted on the outgoing request rather than the response, since the
 // filtering happens upstream.
 test('getBundles: always asks ITAD to include mature-flagged bundles', async (t) => {
-  _reset();
   let requested = null;
   t.mock.method(globalThis, 'fetch', async (url) => {
     requested = new URL(url);
@@ -148,7 +143,6 @@ function makeBundlesPager({ active = [], expired = [] } = {}) {
 }
 
 test('findBundleById: finds a bundle on the first page of active bundles', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', makeBundlesPager({ active: [{ id: 42, title: 'Found Me' }] }));
   const result = await findBundleById(42, { country: 'US' });
   assert.equal(result?.bundle?.title, 'Found Me');
@@ -157,7 +151,6 @@ test('findBundleById: finds a bundle on the first page of active bundles', async
 });
 
 test('findBundleById: pages through active bundles before falling back to expired ones', async (t) => {
-  _reset();
   const page1 = Array.from({ length: 50 }, (_, i) => ({ id: i + 1, title: `Active ${i + 1}` }));
   const target = { id: 999, title: 'Expired Target' };
   t.mock.method(globalThis, 'fetch', makeBundlesPager({ active: page1, expired: [...page1, target] }));
@@ -170,7 +163,6 @@ test('findBundleById: pages through active bundles before falling back to expire
 // to resolve, not 404 (it used to, and the old comment defending that was circular: the app's own
 // UI couldn't link to one only because the list was hiding them too).
 test('findBundleById: includes mature-flagged bundles in its search', async (t) => {
-  _reset();
   const requested = [];
   const pager = makeBundlesPager({ active: [{ id: 42, title: 'Found Me' }] });
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -183,14 +175,12 @@ test('findBundleById: includes mature-flagged bundles in its search', async (t) 
 });
 
 test('findBundleById: returns null when the id is never found within the search budget', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', makeBundlesPager({ active: [{ id: 1, title: 'Only Bundle' }] }));
   const result = await findBundleById(999999, { country: 'US' });
   assert.equal(result, null);
 });
 
 test('resolveSteamAppIds: resolves, caches, and treats a missing mapping as null', async (t) => {
-  _reset();
   let fetchCalls = 0;
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     fetchCalls++;
@@ -213,7 +203,6 @@ test('resolveSteamAppIds: resolves, caches, and treats a missing mapping as null
 });
 
 test('resolveSteamAppIds: looks gids up in batches of at most 200', async (t) => {
-  _reset();
   const sizes = [];
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => SHOPS };
@@ -248,7 +237,6 @@ function mockBatchConcurrency(t, reply, { fail = () => false } = {}) {
 const ids1000 = (prefix) => Array.from({ length: 1000 }, (_, i) => `${prefix}${i}`);
 
 test('batch lookups send their 200-id chunks 3 at a time, the same number of calls', async (t) => {
-  _reset();
   let stats = mockBatchConcurrency(t, (gids) => Object.fromEntries(gids.map((g) => [g, ['app/1']])));
   assert.equal((await resolveSteamAppIds(ids1000('gid-'))).size, 1000);
   assert.deepEqual(stats, { calls: 5, maxActive: 3 }, 'resolveSteamAppIds');
@@ -264,7 +252,6 @@ test('batch lookups send their 200-id chunks 3 at a time, the same number of cal
 });
 
 test('batch lookups start no chunk after one fails', async (t) => {
-  _reset();
   const stats = mockBatchConcurrency(t, (gids) => gids.map((id) => ({ ...PRICE_ENTRY, id })), {
     fail: (n) => n === 0,
   });
@@ -277,7 +264,6 @@ test('batch lookups start no chunk after one fails', async (t) => {
 });
 
 test('resolveItadIds: a failed chunk keeps the chunks that succeeded', async (t) => {
-  _reset();
   const reply = (keys) => Object.fromEntries(keys.map((k) => [k, `gid-${k}`]));
   const appids = Array.from({ length: 1000 }, (_, i) => i + 1);
   let stats = mockBatchConcurrency(t, reply, { fail: (n) => n === 3 });
@@ -288,7 +274,6 @@ test('resolveItadIds: a failed chunk keeps the chunks that succeeded', async (t)
 });
 
 test('resolveSteamAppIds: a failed chunk keeps the chunks that succeeded', async (t) => {
-  _reset();
   const reply = (gids) => Object.fromEntries(gids.map((g) => [g, ['app/1']]));
   let stats = mockBatchConcurrency(t, reply, { fail: (n) => n === 3 });
   await assert.rejects(() => resolveSteamAppIds(ids1000('gid-')), { isUpstream: true });
@@ -347,7 +332,6 @@ function makeResolveFetch({ shopEntries, steam = {}, info = {} }) {
 }
 
 test('resolveSteamAppIds: a gid listed only as a Steam "sub" (single-item package) expands via Steam\'s own packagedetails', async (t) => {
-  _reset();
   t.mock.method(
     globalThis,
     'fetch',
@@ -361,7 +345,6 @@ test('resolveSteamAppIds: a gid listed only as a Steam "sub" (single-item packag
 });
 
 test('resolveSteamAppIds: a gid listed as a Steam "bundle" spanning several apps resolves to an array', async (t) => {
-  _reset();
   t.mock.method(
     globalThis,
     'fetch',
@@ -375,7 +358,6 @@ test('resolveSteamAppIds: a gid listed as a Steam "bundle" spanning several apps
 });
 
 test("resolveSteamAppIds: falls back to games/info/v2's own appid when the Steam-side sub/bundle expansion comes up empty", async (t) => {
-  _reset();
   t.mock.method(
     globalThis,
     'fetch',
@@ -390,7 +372,6 @@ test("resolveSteamAppIds: falls back to games/info/v2's own appid when the Steam
 });
 
 test('resolveSteamAppIds: the games/info/v2 fallback sends the gid encoded', async (t) => {
-  _reset();
   const gid = 'gid&id=other';
   t.mock.method(
     globalThis,
@@ -406,7 +387,6 @@ test('resolveSteamAppIds: the games/info/v2 fallback sends the gid encoded', asy
 });
 
 test('resolveSteamAppIds: still resolves to null when neither the Steam expansion nor the games/info/v2 fallback has an appid', async (t) => {
-  _reset();
   t.mock.method(
     globalThis,
     'fetch',
@@ -421,7 +401,6 @@ test('resolveSteamAppIds: still resolves to null when neither the Steam expansio
 });
 
 test('resolveSteamAppIds: runs at most 3 games/info/v2 fallbacks at once', async (t) => {
-  _reset();
   const gids = Array.from({ length: 10 }, (_, i) => `gid-sub-${i}`);
   const base = makeResolveFetch({
     shopEntries: Object.fromEntries(gids.map((g, i) => [g, [`sub/${i}`]])),
@@ -441,7 +420,6 @@ test('resolveSteamAppIds: runs at most 3 games/info/v2 fallbacks at once', async
 });
 
 test('resolveSteamAppIds: a games/info/v2 fallback that errored is left out, not cached as "not on Steam"', async (t) => {
-  _reset();
   const base = makeResolveFetch({
     shopEntries: { 'gid-sub-only': ['sub/1234'] },
     steam: { 'sub/1234': { success: false } },
@@ -458,7 +436,6 @@ test('resolveSteamAppIds: a games/info/v2 fallback that errored is left out, not
 });
 
 test('resolveSteamAppIds: a failed Steam-side expansion falls back to games/info/v2 rather than throwing', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     const u = String(url);
     if (u.includes('/api/packagedetails')) throw new Error('network error');
@@ -472,7 +449,6 @@ test('resolveSteamAppIds: a failed Steam-side expansion falls back to games/info
 });
 
 test('resolveSteamAppIds: a games/info/v2 fallback that throws leaves out only that gid', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     if (String(url).includes('/games/info/')) throw new Error('network error');
     return makeResolveFetch({
@@ -486,7 +462,6 @@ test('resolveSteamAppIds: a games/info/v2 fallback that throws leaves out only t
 });
 
 test('resolveSteamAppIds: a gid with no shop entry at all never triggers the games/info/v2 fallback', async (t) => {
-  _reset();
   let infoCalls = 0;
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     if (String(url).includes('/games/info/')) infoCalls++;
@@ -498,7 +473,6 @@ test('resolveSteamAppIds: a gid with no shop entry at all never triggers the gam
 });
 
 test('resolveSteamAppIds: throws when the lookup call fails', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => SHOPS };
     return { ok: false, status: 502 };
@@ -510,7 +484,6 @@ test('resolveSteamAppIds: throws when the lookup call fails', async (t) => {
 });
 
 test('resolveItadIds: resolves, caches, and treats a missing mapping as null', async (t) => {
-  _reset();
   let fetchCalls = 0;
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     fetchCalls++;
@@ -533,7 +506,6 @@ test('resolveItadIds: resolves, caches, and treats a missing mapping as null', a
 });
 
 test('resolveItadIds: throws when the lookup call fails', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => SHOPS };
     return { ok: false, status: 502 };
@@ -568,7 +540,6 @@ const PRICE_ENTRY = {
 };
 
 test('getPrices: fetches, caches per (gid, country), and treats a missing gid as null', async (t) => {
-  _reset();
   let priceCalls = 0;
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('/games/prices/v3')) {
@@ -590,7 +561,6 @@ test('getPrices: fetches, caches per (gid, country), and treats a missing gid as
 });
 
 test('getPrices: force bypasses the cache read and re-fetches', async (t) => {
-  _reset();
   let priceCalls = 0;
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('/games/prices/v3')) {
@@ -611,7 +581,6 @@ test('getPrices: force bypasses the cache read and re-fetches', async (t) => {
 });
 
 test('getPrices: skips a reply entry with no id, leaving its gid absent → null', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => [null, { historyLow: PRICE_ENTRY.historyLow }, { id: 7 }, PRICE_ENTRY],
@@ -629,7 +598,6 @@ test('getPrices: skips a reply entry with no id, leaving its gid absent → null
 });
 
 test('getPrices: throws on upstream error', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   await assert.rejects(
     () => getPrices(['gid-1'], { country: 'US' }),
@@ -683,7 +651,6 @@ test('extractPriceInfo: all fields null for a missing entry or a shop with no St
 });
 
 test('getBundles: { force: true } bypasses the cache and re-fetches', async (t) => {
-  _reset();
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     calls++;
@@ -697,7 +664,6 @@ test('getBundles: { force: true } bypasses the cache and re-fetches', async (t) 
 });
 
 test('getGameBundles: fetches per (gid, country), caches, and honours force', async (t) => {
-  _reset();
   const urls = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
     urls.push(String(url));
@@ -712,7 +678,6 @@ test('getGameBundles: fetches per (gid, country), caches, and honours force', as
 });
 
 test('getGameBundles: throws on upstream error', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   await assert.rejects(
     () => getGameBundles('g1'),

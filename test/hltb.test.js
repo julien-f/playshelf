@@ -1,10 +1,12 @@
 'use strict';
 
-const { test } = require('node:test');
+const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
 const { ageCache } = require('./ageCache');
 const { levenshtein, stringSimilarity, getHLTB, buildSearchTerms, _resetAuth } = require('../lib/hltb');
 const { _reset, getCached, setCache } = require('../lib/cache');
+
+beforeEach(() => _reset());
 const { db } = require('../lib/db');
 const { MISS_CACHE_TTL_MS } = require('../lib/config');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
@@ -143,7 +145,6 @@ for (const [label, name, type] of [
 }
 
 test('getHLTB: a skipped game keeps an existing entry, unless forced', async () => {
-  _reset();
   const real = [{ game_id: 42, game_name: 'Portal OST', comp_main: 3600 }];
   setCache('hltb:1', real);
   await getHLTB(1, 'Portal OST', { type: 'music' });
@@ -153,7 +154,6 @@ test('getHLTB: a skipped game keeps an existing entry, unless forced', async () 
 });
 
 test('getHLTB: returns main and extra hours on match', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('search/site/init')) return makeInitResponse();
@@ -167,7 +167,6 @@ test('getHLTB: returns main and extra hours on match', async (t) => {
 });
 
 test('getHLTB: returns completionist and all-playstyles hours when present', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('search/site/init')) return makeInitResponse();
@@ -182,7 +181,6 @@ test('getHLTB: returns completionist and all-playstyles hours when present', asy
 });
 
 test('getHLTB: strips trademark symbols from query', async (t) => {
-  _reset();
   _resetAuth();
   let capturedBody;
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
@@ -196,7 +194,6 @@ test('getHLTB: strips trademark symbols from query', async (t) => {
 });
 
 test('getHLTB: returns null when best match is below 0.35 similarity', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('search/site/init')) return makeInitResponse();
@@ -229,7 +226,6 @@ for (const [label, body] of [
 }
 
 test('getHLTB: a failed lookup holds that game off for 10 minutes, unless forced', async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   t.mock.method(console, 'warn', () => {});
@@ -259,7 +255,6 @@ test('getHLTB: a failed lookup holds that game off for 10 minutes, unless forced
 });
 
 test("getHLTB: a client's budget refusal doesn't hold the game off for others", async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   let refuse = true;
@@ -279,7 +274,6 @@ test("getHLTB: a client's budget refusal doesn't hold the game off for others", 
 const badSearchReply = { ok: true, status: 200, json: async () => ({ data: 'blocked' }) };
 
 test('getHLTB: a 200 with a malformed body does not mark the token accepted', async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   t.mock.method(console, 'warn', () => {});
@@ -300,7 +294,6 @@ test('getHLTB: a 200 with a malformed body does not mark the token accepted', as
 });
 
 test('getHLTB: a 200 with a malformed body does not reset the breaker streak', async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   t.mock.method(console, 'warn', () => {});
@@ -319,7 +312,6 @@ test('getHLTB: a 200 with a malformed body does not reset the breaker streak', a
 });
 
 test('getHLTB: returns null when no results', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('search/site/init')) return makeInitResponse();
@@ -331,7 +323,6 @@ test('getHLTB: returns null when no results', async (t) => {
 });
 
 test('getHLTB: a 401 on a token searches already accepted (expired) re-inits at once, no cooldown', async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   t.mock.method(console, 'warn', () => {});
@@ -355,7 +346,6 @@ test('getHLTB: a 401 on a token searches already accepted (expired) re-inits at 
 });
 
 test('getHLTB: a 401 on a fresh token (no search accepted it) holds off re-init like a 403', async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   t.mock.method(console, 'warn', () => {});
@@ -382,7 +372,6 @@ test('getHLTB: a 401 on a fresh token (no search accepted it) holds off re-init 
 });
 
 test('getHLTB: two fresh-token 401s in a row open the circuit like 403s', async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   t.mock.method(console, 'warn', () => {});
@@ -402,7 +391,6 @@ test('getHLTB: two fresh-token 401s in a row open the circuit like 403s', async 
 });
 
 test('getHLTB: a search 403 (a block, unlike an expired-token 401) holds off re-init for the retry window', async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   let initCalls = 0;
@@ -423,7 +411,6 @@ test('getHLTB: a search 403 (a block, unlike an expired-token 401) holds off re-
 });
 
 test('getHLTB: two search 403s in a row open the circuit for 5 minutes, failing fast without a request', async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   t.mock.method(console, 'warn', () => {});
@@ -447,7 +434,6 @@ test('getHLTB: two search 403s in a row open the circuit for 5 minutes, failing 
 });
 
 test('getHLTB: searches already queued when the circuit opens never reach HLTB', async (t) => {
-  _reset();
   _resetAuth();
   _resetCircuitBreakers();
   t.after(_resetAuth);
@@ -478,7 +464,6 @@ test('getHLTB: searches already queued when the circuit opens never reach HLTB',
 });
 
 test('getHLTB: throttles the "[HLTB] search failed" warning to once per 30s window', async (t) => {
-  _reset();
   _resetAuth();
   // `now` must be passed explicitly — mock timers otherwise start the mocked clock at epoch 0,
   // which would make _hltbSearchWarnedAt's own "0 means never" sentinel
@@ -506,7 +491,6 @@ test('getHLTB: throttles the "[HLTB] search failed" warning to once per 30s wind
 });
 
 test('getHLTB: an error the throttle held back is marked logged only if it repeats the warned one', async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
@@ -533,7 +517,6 @@ test('getHLTB: an error the throttle held back is marked logged only if it repea
 });
 
 test('getHLTB: throws when init fails', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
 
@@ -544,7 +527,6 @@ test('getHLTB: throws when init fails', async (t) => {
 });
 
 test('getHLTB: skips init retry within 30s cooldown after failed init', async (t) => {
-  _reset();
   _resetAuth();
   let initCalls = 0;
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -565,7 +547,6 @@ test('getHLTB: skips init retry within 30s cooldown after failed init', async (t
 });
 
 test('getHLTB: an init answering without a token also holds off re-init within the cooldown', async (t) => {
-  _reset();
   _resetAuth();
   let initCalls = 0;
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -583,7 +564,6 @@ test('getHLTB: an init answering without a token also holds off re-init within t
 });
 
 test('getHLTB: picks the best match by similarity, not first result', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('search/site/init')) return makeInitResponse();
@@ -707,7 +687,6 @@ test('getHLTB: a search already waiting out a pause waits for a longer one that 
 });
 
 test('getHLTB: searches queued on a fresh token that 401s count as one block, not a trip', async (t) => {
-  _reset();
   _resetAuth();
   _resetCircuitBreakers();
   t.after(_resetAuth);
@@ -731,7 +710,6 @@ test('getHLTB: searches queued on a fresh token that 401s count as one block, no
 });
 
 test("getHLTB: the search warning keeps a network failure's cause", async (t) => {
-  _reset();
   _resetAuth();
   t.after(_resetAuth);
   t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
@@ -766,7 +744,6 @@ test('getHLTB: an expired match is served when its refetch fails, and while that
 
 // "Unreleased" is inferred (a coming-soon browse item and no reviews), so it never hides or wipes times already cached.
 test('getHLTB: an unreleased game serves cached times, and a forced one searches instead of wiping them', async (t) => {
-  _reset();
   _resetAuth();
   const real = [{ game_id: 42, game_name: 'Portal', comp_main: 3600 }];
   setCache('hltb:1', real);

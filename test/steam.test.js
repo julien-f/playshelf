@@ -47,7 +47,10 @@ const { db, migrate, MIGRATIONS } = require('../lib/db');
 const { MISS_CACHE_TTL_MS, META_CACHE_TTL_MS, EMPTY_CACHE_TTL_MS } = require('../lib/config');
 
 // The tag-name map's failure hold-off outlives _reset(), which only empties the cache.
-beforeEach(_resetTagNameMap);
+beforeEach(() => {
+  _resetTagNameMap();
+  _reset();
+});
 
 function makeReviewResponse(total, positive, desc = 'Very Positive') {
   return {
@@ -59,14 +62,12 @@ function makeReviewResponse(total, positive, desc = 'Very Positive') {
 }
 
 test('steam-store circuit breaker: blockedUntil is 0 when the circuit has never tripped', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   assert.equal(getCircuitBreakers()['steam-store'].blockedUntil, 0);
 });
 
 test('steam-store circuit breaker: trips (blockedUntil in the future) after 2 consecutive 403s, and blocks further calls without hitting fetch', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 403 }));
@@ -91,7 +92,6 @@ test('steam-store circuit breaker: trips (blockedUntil in the future) after 2 co
 });
 
 test('steam-store circuit breaker: requests already queued when it trips never reach Steam', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 403 }));
@@ -104,7 +104,6 @@ test('steam-store circuit breaker: requests already queued when it trips never r
 });
 
 test('fetchStoreJson: the circuit-open error is marked isLogged so callers can skip re-logging it', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 403 }));
@@ -118,7 +117,6 @@ test('fetchStoreJson: the circuit-open error is marked isLogged so callers can s
 });
 
 test('steam-store circuit breaker: logs a [circuit-breaker] warning exactly once at the moment it trips, not on every blocked call after', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   const warnMock = t.mock.method(console, 'warn', () => {});
@@ -139,7 +137,6 @@ test('steam-store circuit breaker: logs a [circuit-breaker] warning exactly once
 });
 
 test('steam-store circuit breaker: tripCount increments on trip and stays 0 until then', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   assert.equal(getCircuitBreakers()['steam-store'].tripCount, 0);
@@ -152,7 +149,6 @@ test('steam-store circuit breaker: tripCount increments on trip and stays 0 unti
 });
 
 test('fetchStoreJson: a 429 holds every queued store request until Retry-After has passed', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
@@ -184,7 +180,6 @@ test('fetchStoreJson: a 429 holds every queued store request until Retry-After h
 });
 
 test("a store details 429 doesn't pause the store's other calls", async (t) => {
-  _reset();
   t.after(_resetPauses);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
   const flush = async () => {
@@ -258,7 +253,6 @@ for (const [group, refused, queued, ok] of [
 }
 
 test('steam-store circuit breaker: consecutive403s exposes pre-trip state and resets on success', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   assert.equal(getCircuitBreakers()['steam-store'].consecutive403s, 0);
@@ -277,7 +271,6 @@ test('steam-store circuit breaker: consecutive403s exposes pre-trip state and re
 });
 
 test('getUpstreamStats: reports each semaphore under its group, live active/queued and a lifetime queue-depth high-water mark', async (t) => {
-  _reset();
   const releases = [];
   // tagLimit (concurrency 3, no minIntervalMs cooldown, unlike storeLimit's 500ms one — see
   // its own comment in lib/steam.js) backs getStoreBrowseItem, so contention here resolves
@@ -352,7 +345,6 @@ test('createSemaphore: rejected counts calls turned away once maxQueue is hit, a
 });
 
 test('getGameRating: throws when fetch fails', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
   await assert.rejects(
     () => getGameRating(400),
@@ -361,14 +353,12 @@ test('getGameRating: throws when fetch fails', async (t) => {
 });
 
 test('getGameRating: returns null when there are no reviews', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeReviewResponse(0, 0));
   const result = await getGameRating(400);
   assert.equal(result, null);
 });
 
 test('getGameRating: asks GetAppReviews for every language and purchase type', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => makeReviewResponse(10, 9));
   await getGameRating(620);
   const url = new URL(fetchMock.mock.calls[0].arguments[0]);
@@ -382,13 +372,11 @@ test('getGameRating: asks GetAppReviews for every language and purchase type', a
 });
 
 test('getGameRating: returns null for an empty response (unknown appid)', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ response: {} }) }));
   assert.equal(await getGameRating(999999999), null);
 });
 
 test("getGameRating: 403s don't trip the store's circuit breaker", async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 403 }));
@@ -398,7 +386,6 @@ test("getGameRating: 403s don't trip the store's circuit breaker", async (t) => 
 });
 
 test('getGameRating: returns correct shape', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeReviewResponse(1000, 900, 'Very Positive'));
   const result = await getGameRating(400);
   assert.equal(typeof result.score, 'number');
@@ -417,14 +404,12 @@ test('getGameRating: Wilson score is lower than raw ratio', async (t) => {
 });
 
 test('getGameRating: score is within valid range', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeReviewResponse(1000, 900, 'Very Positive'));
   const result = await getGameRating(400);
   assert.ok(result.score >= 0 && result.score <= 100, `score out of range: ${result.score}`);
 });
 
 test('getGameRating: higher positive ratio yields higher score', async (t) => {
-  _reset();
   let callCount = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     callCount++;
@@ -460,7 +445,6 @@ test('getGameRating: more reviews tightens the confidence interval', async (t) =
 // ── resolveSteamId ────────────────────────────────────────────────────────────
 
 test('resolveSteamId: returns Steam64 ID directly without fetching', async (t) => {
-  _reset();
   let fetchCalled = false;
   t.mock.method(globalThis, 'fetch', async () => {
     fetchCalled = true;
@@ -472,7 +456,6 @@ test('resolveSteamId: returns Steam64 ID directly without fetching', async (t) =
 });
 
 test('resolveSteamId: resolves vanity URL via Steam API', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ response: { success: 1, steamid: '76561198000000001' } }),
@@ -483,7 +466,6 @@ test('resolveSteamId: resolves vanity URL via Steam API', async (t) => {
 });
 
 test('resolveSteamId: resolves the name or Steam64 id inside a steamcommunity.com profile URL', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ response: { success: 1, steamid: '76561198000000001' } }),
@@ -498,7 +480,6 @@ test('resolveSteamId: resolves the name or Steam64 id inside a steamcommunity.co
 });
 
 test('resolveSteamId: caches resolved ID — second call skips fetch', async (t) => {
-  _reset();
   let fetchCount = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     fetchCount++;
@@ -511,7 +492,6 @@ test('resolveSteamId: caches resolved ID — second call skips fetch', async (t)
 });
 
 test('resolveSteamId: throws with isUpstream when Steam API returns non-ok', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
 
   await assert.rejects(
@@ -521,7 +501,6 @@ test('resolveSteamId: throws with isUpstream when Steam API returns non-ok', asy
 });
 
 test('resolveSteamId: throws user error when account is not found', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ response: { success: 42 } }),
@@ -536,7 +515,6 @@ test('resolveSteamId: throws user error when account is not found', async (t) =>
 // ── getOwnedGames ─────────────────────────────────────────────────────────────
 
 test('getOwnedGames: fetches and returns game list', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ response: { games: [{ appid: 400, name: 'Portal' }] } }),
@@ -548,7 +526,6 @@ test('getOwnedGames: fetches and returns game list', async (t) => {
 });
 
 test('getOwnedGames: caches result — second call skips fetch', async (t) => {
-  _reset();
   let fetchCount = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     fetchCount++;
@@ -561,7 +538,6 @@ test('getOwnedGames: caches result — second call skips fetch', async (t) => {
 });
 
 test('getOwnedGames: throws with isUpstream when Steam API returns non-ok', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
 
   await assert.rejects(
@@ -571,7 +547,6 @@ test('getOwnedGames: throws with isUpstream when Steam API returns non-ok', asyn
 });
 
 test('getOwnedGames: throws user error when library is private', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ response: {} }), // no `games` field
@@ -584,7 +559,6 @@ test('getOwnedGames: throws user error when library is private', async (t) => {
 });
 
 test('resolveSteamId and getOwnedGames: a reply of another shape is an upstream error, not cached', async (t) => {
-  _reset();
   let calls = 0;
   // ResolveVanityURL documents 1 (found) and 42 (no match); any other code is a failure.
   const bodies = [{}, { response: { success: 1 } }, { response: { success: 2 } }, {}, { response: { games: {} } }];
@@ -600,7 +574,6 @@ test('resolveSteamId and getOwnedGames: a reply of another shape is an upstream 
 // ── getWishlist ───────────────────────────────────────────────────────────────
 
 test('getWishlist: fetches and returns wishlist items', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ response: { items: [{ appid: 400, priority: 1, date_added: 1433965886 }] } }),
@@ -613,7 +586,6 @@ test('getWishlist: fetches and returns wishlist items', async (t) => {
 
 // The endpoint answers the same without a key, so the key isn't sent to an undocumented service.
 test('getWishlist: sends no API key', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ response: {} }),
@@ -626,7 +598,6 @@ test('getWishlist: sends no API key', async (t) => {
 });
 
 test('getWishlist: caches result — second call skips fetch', async (t) => {
-  _reset();
   let fetchCount = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     fetchCount++;
@@ -639,7 +610,6 @@ test('getWishlist: caches result — second call skips fetch', async (t) => {
 });
 
 test('getWishlist: throws with isUpstream when Steam API returns non-ok', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
 
   await assert.rejects(
@@ -665,7 +635,6 @@ test('getWishlist: returns empty array (does not throw) when response has no ite
 // ── getFriendList ─────────────────────────────────────────────────────────────
 
 test('getFriendList: fetches and returns friend steamids', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({
@@ -678,7 +647,6 @@ test('getFriendList: fetches and returns friend steamids', async (t) => {
 });
 
 test('getFriendList: caches result — second call skips fetch', async (t) => {
-  _reset();
   let fetchCount = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     fetchCount++;
@@ -691,7 +659,6 @@ test('getFriendList: caches result — second call skips fetch', async (t) => {
 });
 
 test('getFriendList: returns null (does not throw) on 401 — private friends list', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 401 }));
   const unexpected = () => getMetrics().sinceRestart.outbound['steam-api']?.getFriendList?.unexpected ?? 0;
   const before = unexpected();
@@ -702,7 +669,6 @@ test('getFriendList: returns null (does not throw) on 401 — private friends li
 });
 
 test('getFriendList: throws with isUpstream when Steam API returns non-ok', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
 
   await assert.rejects(
@@ -714,7 +680,6 @@ test('getFriendList: throws with isUpstream when Steam API returns non-ok', asyn
 // ── getPlayerSummaries ────────────────────────────────────────────────────────
 
 test('getPlayerSummaries: fetches and returns player list', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ response: { players: [{ steamid: '76561198000000001', personaname: 'Alice' }] } }),
@@ -726,7 +691,6 @@ test('getPlayerSummaries: fetches and returns player list', async (t) => {
 });
 
 test('getPlayerSummaries: caches result — second call skips fetch', async (t) => {
-  _reset();
   let fetchCount = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     fetchCount++;
@@ -744,7 +708,6 @@ test('getPlayerSummaries: caches result — second call skips fetch', async (t) 
 });
 
 test('getPlayerSummaries: a concurrent call joins the in-flight fetch for an id instead of re-fetching it', async (t) => {
-  _reset();
   const ID_A = '76561198000000011';
   const ID_B = '76561198000000012';
   const requested = [];
@@ -768,7 +731,6 @@ test('getPlayerSummaries: a concurrent call joins the in-flight fetch for an id 
 });
 
 test("getPlayerSummaries: asks for at most 100 ids per call, Steam's documented limit", async (t) => {
-  _reset();
   const batches = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
     const ids = new URL(url).searchParams.get('steamids').split(',');
@@ -790,7 +752,6 @@ test("getPlayerSummaries: asks for at most 100 ids per call, Steam's documented 
 });
 
 test('getPlayerSummaries: sends its chunks 3 at a time, the same number of calls', async (t) => {
-  _reset();
   let calls = 0;
   let active = 0;
   let maxActive = 0;
@@ -808,7 +769,6 @@ test('getPlayerSummaries: sends its chunks 3 at a time, the same number of calls
 });
 
 test('getPlayerSummaries: a chunk refused by a spent budget keeps the names its sibling chunks fetch', async (t) => {
-  _reset();
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (calls++ === 1) throw Object.assign(new Error('budget'), { isBudgetExhausted: true });
@@ -825,7 +785,6 @@ test('getPlayerSummaries: a chunk refused by a spent budget keeps the names its 
 });
 
 test('getPlayerSummaries: returns placeholder players when API fails, does not cache', async (t) => {
-  _reset();
   let fetchCount = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     fetchCount++;
@@ -845,7 +804,6 @@ test('getPlayerSummaries: returns placeholder players when API fails, does not c
 });
 
 test('getPlayerSummaries: a failed call warns [steam] and yields placeholders instead of rejecting', async (t) => {
-  _reset();
   const warn = t.mock.method(console, 'warn', () => {});
   for (const fetchImpl of [
     async () => ({ ok: false, status: 503 }),
@@ -867,7 +825,6 @@ test('getPlayerSummaries: a failed call warns [steam] and yields placeholders in
 });
 
 test('getPlayerSummaries: a forced call that fails falls back to the cached player, not a placeholder', async (t) => {
-  _reset();
   t.mock.method(console, 'warn', () => {});
   const cached = { steamid: '76561198000000010', personaname: 'User10', profileurl: 'u', avatar: 'a.jpg' };
   setCache('player:76561198000000010', cached);
@@ -877,7 +834,6 @@ test('getPlayerSummaries: a forced call that fails falls back to the cached play
 });
 
 test('getPlayerSummaries: cache key is order-independent', async (t) => {
-  _reset();
   let fetchCount = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     fetchCount++;
@@ -912,7 +868,6 @@ function make429Response() {
 }
 
 test('getAppDetails: throws when fetch fails', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
   await assert.rejects(
     () => getAppDetails(400),
@@ -921,7 +876,6 @@ test('getAppDetails: throws when fetch fails', async (t) => {
 });
 
 test('getGameRating: retries on 429 and succeeds on third attempt', async (t) => {
-  _reset();
   let callCount = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     callCount++;
@@ -933,7 +887,6 @@ test('getGameRating: retries on 429 and succeeds on third attempt', async (t) =>
 });
 
 test('getGameRating: throws isUpstream after exhausting 429 retries', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => make429Response());
   await assert.rejects(
     () => getGameRating(400),
@@ -942,7 +895,6 @@ test('getGameRating: throws isUpstream after exhausting 429 retries', async (t) 
 });
 
 test('fetchStoreJson: a redirect fails with its target instead of being followed', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: false,
     status: 302,
@@ -956,7 +908,6 @@ test('fetchStoreJson: a redirect fails with its target instead of being followed
 });
 
 test('getAppDetails: retries on 429 and succeeds on third attempt', async (t) => {
-  _reset();
   let callCount = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     callCount++;
@@ -975,13 +926,11 @@ test('getAppDetails: retries on 429 and succeeds on third attempt', async (t) =>
 });
 
 test('getAppDetails: returns null when success is false', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, null));
   assert.equal(await getAppDetails(400), null);
 });
 
 test('getAppDetails: a page that is not an object is an upstream error, not cached', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, 'oops'));
   await assert.rejects(() => getAppDetails(400), { isUpstream: true });
   assert.equal(getCachedAt('appdetails:400'), undefined);
@@ -1018,7 +967,6 @@ const FULL_PAGE = {
 
 // The details load reads a trimmed row; the whole page stays cached beside it (C211).
 test('getAppDetails: caches the whole page and a trimmed row read back to the same details', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, FULL_PAGE));
   const fetched = await getAppDetails(400);
   const row = (key) => db.prepare('SELECT value, ts, expires FROM cache_meta WHERE key = ?').get(key);
@@ -1035,7 +983,6 @@ test('getAppDetails: caches the whole page and a trimmed row read back to the sa
 
 // Migration 13 froze a copy of trimAppDetails to fill the rows cached before it.
 test("getAppDetails: the trimmed row matches migration 13's frozen trim", async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, FULL_PAGE));
   await getAppDetails(400);
   const trimmedValue = (from) =>
@@ -1054,7 +1001,6 @@ test("getAppDetails: the trimmed row matches migration 13's frozen trim", async 
 });
 
 test('getAppDetails: a page miss writes both rows on the miss expiry', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, null));
   await getAppDetails(400);
   const rows = db.prepare("SELECT key, value, ts, expires FROM cache_meta WHERE key LIKE '%:400' ORDER BY key").all();
@@ -1070,7 +1016,6 @@ test('getAppDetails: a page miss writes both rows on the miss expiry', async (t)
 });
 
 test('getAppDetails: accepts an entry keyed under another appid when its steam_appid matches', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(3290770, { steam_appid: 1656930, name: 'Coridden' }),
   );
@@ -1078,7 +1023,6 @@ test('getAppDetails: accepts an entry keyed under another appid when its steam_a
 });
 
 test('getAppDetails: ignores an entry keyed under another appid whose steam_appid differs', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(3290770, { steam_appid: 3290770, name: 'Other' }),
   );
@@ -1086,7 +1030,6 @@ test('getAppDetails: ignores an entry keyed under another appid whose steam_appi
 });
 
 test('getAppDetails: returns genres, categories, developers and publishers', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       genres: [
@@ -1132,7 +1075,6 @@ test('getAppDetails: dedupes genres/categories that share the same label but dif
 });
 
 test('getAppDetails: handles missing optional fields with empty arrays', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   assert.deepEqual(await getAppDetails(400), {
     name: null,
@@ -1162,7 +1104,6 @@ test('getAppDetails: handles missing optional fields with empty arrays', async (
 });
 
 test('getAppDetails: requests the US region so price_overview is always USD', async (t) => {
-  _reset();
   let requestedUrl;
   t.mock.method(globalThis, 'fetch', async (url) => {
     requestedUrl = url;
@@ -1173,21 +1114,18 @@ test('getAppDetails: requests the US region so price_overview is always USD', as
 });
 
 test('getAppDetails: extracts isFree from is_free', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, { is_free: true }));
   const result = await getAppDetails(400);
   assert.equal(result.isFree, true);
 });
 
 test('getAppDetails: isFree defaults to false when is_free is absent', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   const result = await getAppDetails(400);
   assert.equal(result.isFree, false);
 });
 
 test('getAppDetails: extracts priceInitial (undiscounted launch price, in cents) from price_overview', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       price_overview: { currency: 'USD', initial: 5999, final: 2999, discount_percent: 50 },
@@ -1198,28 +1136,24 @@ test('getAppDetails: extracts priceInitial (undiscounted launch price, in cents)
 });
 
 test('getAppDetails: priceInitial is null when price_overview is absent (free game or no price data)', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   const result = await getAppDetails(400);
   assert.equal(result.priceInitial, null);
 });
 
 test('getAppDetails: extracts dlc appid list', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, { dlc: [123, 456] }));
   const result = await getAppDetails(400);
   assert.deepEqual(result.dlc, [123, 456]);
 });
 
 test('getAppDetails: dlc defaults to empty array when field is not an array', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, { dlc: 'not-an-array' }));
   const result = await getAppDetails(400);
   assert.deepEqual(result.dlc, []);
 });
 
 test('getAppDetails: extracts fullgame (a DLC app pointing back at its base game)', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(500, { fullgame: { appid: '400', name: 'Portal' } }),
   );
@@ -1228,42 +1162,36 @@ test('getAppDetails: extracts fullgame (a DLC app pointing back at its base game
 });
 
 test('getAppDetails: fullgame is null when absent (a base game, not DLC)', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   const result = await getAppDetails(400);
   assert.equal(result.fullgame, null);
 });
 
 test('getAppDetails: extracts type', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, { type: 'music' }));
   const result = await getAppDetails(400);
   assert.equal(result.type, 'music');
 });
 
 test('getAppDetails: type is null when absent', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   const result = await getAppDetails(400);
   assert.equal(result.type, null);
 });
 
 test('getAppDetails: extracts website field', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, { website: 'https://example.com' }));
   const result = await getAppDetails(400);
   assert.equal(result.website, 'https://example.com');
 });
 
 test('getAppDetails: website is null when absent', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   const result = await getAppDetails(400);
   assert.equal(result.website, null);
 });
 
 test('getAppDetails: extracts achievementCount from achievements.total', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       achievements: { total: 42, highlighted: [{ name: 'ACH_1', path: 'i1' }] },
@@ -1274,7 +1202,6 @@ test('getAppDetails: extracts achievementCount from achievements.total', async (
 });
 
 test('getAppDetails: achievementCount is 0 (not null) when Steam reports zero achievements', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, { achievements: { total: 0, highlighted: [] } }),
   );
@@ -1283,14 +1210,12 @@ test('getAppDetails: achievementCount is 0 (not null) when Steam reports zero ac
 });
 
 test('getAppDetails: achievementCount is null when the achievements field is absent', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   const result = await getAppDetails(400);
   assert.equal(result.achievementCount, null);
 });
 
 test('getAppDetails: extracts platforms as an array of supported OS names', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       platforms: { windows: true, mac: false, linux: true },
@@ -1301,14 +1226,12 @@ test('getAppDetails: extracts platforms as an array of supported OS names', asyn
 });
 
 test('getAppDetails: platforms is empty array when the field is absent', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   const result = await getAppDetails(400);
   assert.deepEqual(result.platforms, []);
 });
 
 test('getAppDetails: parses supported_languages into a clean array of names', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       supported_languages:
@@ -1320,21 +1243,18 @@ test('getAppDetails: parses supported_languages into a clean array of names', as
 });
 
 test('getAppDetails: languages is empty array when supported_languages is absent', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   const result = await getAppDetails(400);
   assert.deepEqual(result.languages, []);
 });
 
 test('getAppDetails: extracts name field', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, { name: 'Portal' }));
   const result = await getAppDetails(400);
   assert.equal(result.name, 'Portal');
 });
 
 test('getAppDetails: uses capsule_imagev5 when present', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       capsule_imagev5: 'https://cdn.akamai.steamstatic.com/steam/apps/400/capsule_184x69.jpg',
@@ -1346,7 +1266,6 @@ test('getAppDetails: uses capsule_imagev5 when present', async (t) => {
 });
 
 test('getAppDetails: the table thumbnail is capsule_image, the 231×87 capsule', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       capsule_imagev5: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/400/capsule_184x69.jpg',
@@ -1365,7 +1284,6 @@ test('getAppDetails: the table thumbnail is capsule_image, the 231×87 capsule',
 });
 
 test('getAppDetails: comingSoon reflects release_date.coming_soon', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       release_date: { coming_soon: true, date: 'Oct 14, 2026' },
@@ -1377,7 +1295,6 @@ test('getAppDetails: comingSoon reflects release_date.coming_soon', async (t) =>
 });
 
 test('getAppDetails: falls back to capsule_image when capsule_imagev5 is absent', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       capsule_image: 'https://cdn.akamai.steamstatic.com/steam/apps/400/capsule_231x87.jpg',
@@ -1388,14 +1305,12 @@ test('getAppDetails: falls back to capsule_image when capsule_imagev5 is absent'
 });
 
 test('getAppDetails: falls back to constructed sm_120 URL when no capsule fields present', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   const result = await getAppDetails(400);
   assert.equal(result.capsule, 'https://cdn.akamai.steamstatic.com/steam/apps/400/capsule_sm_120.jpg');
 });
 
 test('getAppDetails: uses header_image for the panel hero banner when present', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       header_image: 'https://cdn.akamai.steamstatic.com/steam/apps/400/header_real.jpg',
@@ -1406,14 +1321,12 @@ test('getAppDetails: uses header_image for the panel hero banner when present', 
 });
 
 test('getAppDetails: falls back to constructed header.jpg URL when header_image is absent', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => makeAppDetailsResponse(400, {}));
   const result = await getAppDetails(400);
   assert.equal(result.banner, 'https://cdn.akamai.steamstatic.com/steam/apps/400/header.jpg');
 });
 
 test('getAppDetails: extracts movies with hls field', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       movies: [
@@ -1437,7 +1350,6 @@ test('getAppDetails: extracts movies with hls field', async (t) => {
 });
 
 test('getAppDetails: caps movies at 5', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () =>
     makeAppDetailsResponse(400, {
       movies: Array.from({ length: 8 }, (_, i) => ({
@@ -1499,7 +1411,6 @@ function mockTagEndpoints(
 }
 
 test('resolveSteamTags: returns every tag in weight order, resolved via the name map (no display cap)', async (t) => {
-  _reset();
   const tagids = Array.from({ length: 30 }, (_, i) => 100 + i); // already weight-ordered
   const nameMap = Object.fromEntries(tagids.map((id) => [id, `Tag${id}`]));
   mockTagEndpoints(t, { tagids, nameMap });
@@ -1511,7 +1422,6 @@ test('resolveSteamTags: returns every tag in weight order, resolved via the name
 });
 
 test('resolveSteamTags: weights each tag relative to the top one', async (t) => {
-  _reset();
   mockTagEndpoints(t, {
     tagids: [1, 2, 3],
     tags: [
@@ -1530,14 +1440,12 @@ test('resolveSteamTags: weights each tag relative to the top one', async (t) => 
 });
 
 test('resolveSteamTags: a null weight when the item has no tag weights', async (t) => {
-  _reset();
   mockTagEndpoints(t, { tagids: [1], nameMap: { 1: 'Action' } });
 
   assert.deepEqual(await steamTags(400), [{ name: 'Action', weight: null }]);
 });
 
 test('resolveSteamTags: returns empty array when the app has no tagids', async (t) => {
-  _reset();
   mockTagEndpoints(t, { tagids: [] });
 
   const result = await steamTags(400);
@@ -1545,7 +1453,6 @@ test('resolveSteamTags: returns empty array when the app has no tagids', async (
 });
 
 test('resolveSteamTags: returns empty array when the store item lookup is unsuccessful', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('IStoreBrowseService')) {
       return { ok: true, json: async () => ({ response: { store_items: [{ success: 0 }] } }) };
@@ -1558,7 +1465,6 @@ test('resolveSteamTags: returns empty array when the store item lookup is unsucc
 });
 
 test('resolveSteamTags: drops tagids with no matching name in the map', async (t) => {
-  _reset();
   mockTagEndpoints(t, { tagids: [1, 2, 3], nameMap: { 1: 'Action', 3: 'Indie' } });
 
   const result = await steamTags(400);
@@ -1569,7 +1475,6 @@ test('resolveSteamTags: drops tagids with no matching name in the map', async (t
 });
 
 test('resolveSteamTags: throws isUpstream when the tagid fetch fails', async (t) => {
-  _reset();
   mockTagEndpoints(t, { browseOk: false });
   await assert.rejects(
     () => steamTags(400),
@@ -1578,7 +1483,6 @@ test('resolveSteamTags: throws isUpstream when the tagid fetch fails', async (t)
 });
 
 test('resolveSteamTags: throws isUpstream when the tag name map fetch fails', async (t) => {
-  _reset();
   mockTagEndpoints(t, { tagids: [1], namesOk: false });
   await assert.rejects(
     () => steamTags(400),
@@ -1591,7 +1495,6 @@ test('resolveSteamTags: throws isUpstream when the tag name map fetch fails', as
 // Destructuring straight off that would throw an opaque TypeError instead of a clean,
 // caller-recognizable upstream error.
 test('resolveSteamTags: throws isUpstream (not a raw TypeError) when the tag name map response body is null', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('IStoreBrowseService')) {
       return { ok: true, json: async () => ({ response: { store_items: [{ success: 1, tagids: [1] }] } }) };
@@ -1623,7 +1526,6 @@ for (const body of [{}, { tags: [] }, { tags: 'x' }, { tags: [null] }, { tags: [
 }
 
 test('resolveSteamTags: holds off refetching the tag name map briefly after a failure', async (t) => {
-  _reset();
   t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
   let ok = false;
   const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
@@ -1642,7 +1544,6 @@ test('resolveSteamTags: holds off refetching the tag name map briefly after a fa
 });
 
 test('extractDemoAppid: returns the demo appid from related_items.demo_appid', async (t) => {
-  _reset();
   mockTagEndpoints(t, { tagids: [], nameMap: {}, demoAppid: 1714800 });
 
   const result = await gameDemo(1634360);
@@ -1650,7 +1551,6 @@ test('extractDemoAppid: returns the demo appid from related_items.demo_appid', a
 });
 
 test('extractDemoAppid: returns null when the game has no demo', async (t) => {
-  _reset();
   mockTagEndpoints(t, { tagids: [], nameMap: {} });
 
   const result = await gameDemo(400);
@@ -1658,7 +1558,6 @@ test('extractDemoAppid: returns null when the game has no demo', async (t) => {
 });
 
 test('extractDemoAppid: returns null when the store item lookup is unsuccessful', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('IStoreBrowseService')) {
       return { ok: true, json: async () => ({ response: { store_items: [{ success: 0 }] } }) };
@@ -1672,7 +1571,6 @@ test('extractDemoAppid: returns null when the store item lookup is unsuccessful'
 
 // A stream resolves tags for every game against the same ~430-entry map.
 test('resolveSteamTags: parses the tag name map once while its row is live', async (t) => {
-  _reset();
   mockTagEndpoints(t, { nameMap: { 1: 'Action' } });
   await resolveSteamTags(Promise.resolve({ tagids: [1] }));
 
@@ -1682,7 +1580,6 @@ test('resolveSteamTags: parses the tag name map once while its row is live', asy
 });
 
 test('resolveSteamTags: fetches the tag name map alongside a pending store browse item', async (t) => {
-  _reset();
   let releaseBrowse;
   const urls = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -1725,7 +1622,6 @@ test('resolveSteamTags: a tag name map row cached for a year expires within a mo
 
 // Steam adds tags meanwhile: the map lives a month, not the meta tier's year.
 test('resolveSteamTags: a fetched tag name map expires within a month', async (t) => {
-  _reset();
   mockTagEndpoints(t);
   await resolveSteamTags(Promise.resolve({ tagids: [1] }));
   const { expires } = db.prepare("SELECT expires FROM cache_meta WHERE key = 'tagnames:all'").get();
@@ -1757,7 +1653,6 @@ test('resolveSteamTags: does not pair a map with a row rewritten while it was be
 // ── resolveSteamPackageAppids / resolveSteamBundleAppids ────────────────────────
 
 test('resolveSteamPackageAppids: returns the single appid a Steam "sub" (package) contains', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     assert.ok(String(url).includes('packageids=776544'));
     return {
@@ -1771,7 +1666,6 @@ test('resolveSteamPackageAppids: returns the single appid a Steam "sub" (package
 });
 
 test('resolveSteamPackageAppids: returns null and caches the miss when the package does not exist', async (t) => {
-  _reset();
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     calls++;
@@ -1785,7 +1679,6 @@ test('resolveSteamPackageAppids: returns null and caches the miss when the packa
 });
 
 test('resolveSteamPackageAppids: throws isUpstream on a non-ok response', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   await assert.rejects(
     () => resolveSteamPackageAppids(1),
@@ -1794,7 +1687,6 @@ test('resolveSteamPackageAppids: throws isUpstream on a non-ok response', async 
 });
 
 test('resolveSteamBundleAppids: returns every appid a Steam bundle spans', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     assert.ok(String(url).includes('bundleids=4995'));
     return { ok: true, json: async () => [{ bundleid: 4995, appids: [396750, 688700, 709150] }] };
@@ -1805,7 +1697,6 @@ test('resolveSteamBundleAppids: returns every appid a Steam bundle spans', async
 });
 
 test('resolveSteamBundleAppids: returns null and caches the miss when the bundle id is unknown', async (t) => {
-  _reset();
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     calls++;
@@ -1821,7 +1712,6 @@ test('resolveSteamBundleAppids: returns null and caches the miss when the bundle
 // ── getProtonDbStatus ──────────────────────────────────────────────────────────
 
 test('getProtonDbStatus: returns tier, confidence and total', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({
@@ -1840,7 +1730,6 @@ test('getProtonDbStatus: returns tier, confidence and total', async (t) => {
 
 // "Unreleased" is inferred (a coming-soon browse item and no reviews), so a forced refresh asks rather than wipe a summary.
 test('getProtonDbStatus: a forced lookup of an unreleased game asks ProtonDB instead of wiping its cached summary', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   setCache('protondb:401', { tier: 'gold', confidence: 'good', total: 9 });
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
@@ -1860,7 +1749,6 @@ test('getProtonDbStatus: a forced lookup of an unreleased game asks ProtonDB ins
 // A 404 means "ProtonDB has no reports for this appid" — not an upstream failure —
 // same treatment as getGameRating's "no reviews yet" case.
 test('getProtonDbStatus: two 403s in a row (a blanket bot-block) open the circuit, failing fast without a request', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   t.mock.method(console, 'warn', () => {});
@@ -1874,7 +1762,6 @@ test('getProtonDbStatus: two 403s in a row (a blanket bot-block) open the circui
 });
 
 test('getProtonDbStatus: requests already queued when the circuit opens never reach ProtonDB', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   t.mock.method(console, 'warn', () => {});
@@ -1888,7 +1775,6 @@ test('getProtonDbStatus: requests already queued when the circuit opens never re
 });
 
 test('getProtonDbStatus: returns null on 404 (no reports for this appid)', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 404 }));
   const result = await getProtonDbStatus(999999999);
   assert.equal(result, null);
@@ -1900,7 +1786,6 @@ test('getProtonDbStatus: returns null on 404 (no reports for this appid)', async
 // guess beats showing nothing (confirmed live: an appid with 3 real reports showed no data
 // at all here before this, despite protondb.com itself showing those 3 reports).
 test('getProtonDbStatus: a "pending" tier with a provisionalTier is surfaced as pending', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ tier: 'pending', provisionalTier: 'platinum', confidence: 'inadequate', total: 3 }),
@@ -1912,7 +1797,6 @@ test('getProtonDbStatus: a "pending" tier with a provisionalTier is surfaced as 
 // No provisionalTier at all (ProtonDB has nothing to guess from) still collapses to null —
 // there's no lesser value worth surfacing at that point.
 test('getProtonDbStatus: a "pending" tier with no provisionalTier returns null', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ tier: 'pending', confidence: 'low', total: 2 }),
@@ -1922,7 +1806,6 @@ test('getProtonDbStatus: a "pending" tier with no provisionalTier returns null',
 });
 
 test('getProtonDbStatus: throws isUpstream for a non-404 error', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503, text: async () => '' }));
   await assert.rejects(
     () => getProtonDbStatus(400),
@@ -1931,7 +1814,6 @@ test('getProtonDbStatus: throws isUpstream for a non-404 error', async (t) => {
 });
 
 test('getProtonDbStatus: caches result — second call skips fetch', async (t) => {
-  _reset();
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     calls++;
@@ -1944,7 +1826,6 @@ test('getProtonDbStatus: caches result — second call skips fetch', async (t) =
 });
 
 test('getProtonDbStatus: caches the null result of a 404 too', async (t) => {
-  _reset();
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     calls++;
@@ -1959,7 +1840,6 @@ test('getProtonDbStatus: caches the null result of a 404 too', async (t) => {
 // ── searchStoreGames ──────────────────────────────────────────────────────────
 
 test('searchStoreGames: extracts appid, name and tinyImage, capped at 10', async (t) => {
-  _reset();
   const items = Array.from({ length: 12 }, (_, i) => ({
     id: 400 + i,
     name: `Game ${i}`,
@@ -1973,13 +1853,11 @@ test('searchStoreGames: extracts appid, name and tinyImage, capped at 10', async
 });
 
 test('searchStoreGames: returns empty array when items field is missing', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({}) }));
   assert.deepEqual(await searchStoreGames('xyz'), []);
 });
 
 test('searchStoreGames: drops an item whose id is not a positive integer, so it never reaches the cache', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({
@@ -1994,7 +1872,6 @@ test('searchStoreGames: drops an item whose id is not a positive integer, so it 
 });
 
 test('searchStoreGames: tinyImage is null when absent', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ items: [{ id: 400, name: 'Portal' }] }),
@@ -2003,7 +1880,6 @@ test('searchStoreGames: tinyImage is null when absent', async (t) => {
 });
 
 test('searchStoreGames: caches result — second call skips fetch', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ items: [{ id: 400, name: 'Portal' }] }),
@@ -2014,7 +1890,6 @@ test('searchStoreGames: caches result — second call skips fetch', async (t) =>
 });
 
 test('searchStoreGames: cache key is case-insensitive', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ items: [{ id: 400, name: 'Portal' }] }),
@@ -2044,7 +1919,6 @@ function mockSearchWithBrowse(t, browse) {
 }
 
 test('searchStoreGames: drops demos in one batched store browse call', async (t) => {
-  _reset();
   const fetchMock = mockSearchWithBrowse(t, (url) => {
     const { ids } = JSON.parse(decodeURIComponent(url.split('input_json=')[1]));
     assert.deepEqual(ids, [{ appid: 4338750 }, { appid: 4645100 }]);
@@ -2065,7 +1939,6 @@ test('searchStoreGames: drops demos in one batched store browse call', async (t)
 });
 
 test('searchStoreGames: keeps demos, briefly cached, when the store browse call fails', async (t) => {
-  _reset();
   const warnMock = t.mock.method(console, 'warn', () => {});
   mockSearchWithBrowse(t, () => ({ ok: false, status: 500 }));
   const results = await searchStoreGames('stack order');
@@ -2079,7 +1952,6 @@ test('searchStoreGames: keeps demos, briefly cached, when the store browse call 
 });
 
 test('searchStoreGames: throws isUpstream when fetch fails', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
   await assert.rejects(
     () => searchStoreGames('portal'),
@@ -2092,7 +1964,6 @@ test('searchStoreGames: throws isUpstream when fetch fails', async (t) => {
 const creatorRow = (key, appids = key.slice(4)) => `<a href="x" data-ds-appid="${appids}" data-ds-itemkey="${key}">`;
 
 test('searchCreatorGames: keeps App_ rows only, deduped, and asks for one page of games by exact name', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({
@@ -2115,7 +1986,6 @@ test('searchCreatorGames: keeps App_ rows only, deduped, and asks for one page o
 });
 
 test('searchCreatorGames: capped once Steam has more than one page', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ total_count: 101, start: 0, results_html: creatorRow('App_10') }),
@@ -2124,7 +1994,6 @@ test('searchCreatorGames: capped once Steam has more than one page', async (t) =
 });
 
 test('searchCreatorGames: cache key keeps the case, as Steam matches it', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ total_count: 1, start: 0, results_html: creatorRow('App_10') }),
@@ -2136,7 +2005,6 @@ test('searchCreatorGames: cache key keeps the case, as Steam matches it', async 
 });
 
 test('searchCreatorGames: force bypasses the cache', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ total_count: 1, start: 0, results_html: creatorRow('App_10') }),
@@ -2147,7 +2015,6 @@ test('searchCreatorGames: force bypasses the cache', async (t) => {
 });
 
 test('searchCreatorGames: no match is an empty list on the short miss expiry', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ total_count: 0, start: -1, results_html: '' }),
@@ -2158,7 +2025,6 @@ test('searchCreatorGames: no match is an empty list on the short miss expiry', a
 });
 
 test('searchCreatorGames: an unexpected reply shape throws isUpstream and caches nothing', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ success: 1 }) }));
   await assert.rejects(
     () => searchCreatorGames('developer', 'Foo'),
@@ -2169,7 +2035,6 @@ test('searchCreatorGames: an unexpected reply shape throws isUpstream and caches
 });
 
 test('searchCreatorGames: throws isUpstream when fetch fails', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
   await assert.rejects(
     () => searchCreatorGames('developer', 'Foo'),
@@ -2180,7 +2045,6 @@ test('searchCreatorGames: throws isUpstream when fetch fails', async (t) => {
 // ── getGameSchema ─────────────────────────────────────────────────────────────
 
 test('getGameSchema: extracts the game name and achievement fields', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({
@@ -2221,7 +2085,6 @@ const LEGACY_ICON = 'https://steamcdn-a.akamaihd.net/steamcommunity/public/image
 const NEW_ICON = 'https://shared.fastly.steamstatic.com/community_assets/images/apps/400/abc.jpg';
 
 test('getGameSchema: moves legacy-CDN icons to the host that has them, leaving other values alone', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({
@@ -2243,7 +2106,6 @@ test('getGameSchema: moves legacy-CDN icons to the host that has them, leaving o
 });
 
 test('getGameSchema: fixes legacy-CDN icons already in the cache without refetching', async (t) => {
-  _reset();
   setCache('gameschema:400', {
     name: 'X',
     achievements: [
@@ -2262,13 +2124,11 @@ test('getGameSchema: fixes legacy-CDN icons already in the cache without refetch
 });
 
 test('getGameSchema: returns no name and no achievements for an empty schema', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ game: {} }) }));
   assert.deepEqual(await getGameSchema(400), { name: null, achievements: [] });
 });
 
 test('getGameSchema: caches result — second call skips fetch', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ game: {} }) }));
   await getGameSchema(400);
   await getGameSchema(400);
@@ -2276,7 +2136,6 @@ test('getGameSchema: caches result — second call skips fetch', async (t) => {
 });
 
 test('getGameSchema: throws isUpstream when fetch fails', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
   await assert.rejects(
     () => getGameSchema(400),
@@ -2285,7 +2144,6 @@ test('getGameSchema: throws isUpstream when fetch fails', async (t) => {
 });
 
 test('getGameSchema: returns no achievements (not throw) on a 403 with a JSON body — no schema published for this appid', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: false,
     status: 403,
@@ -2298,7 +2156,6 @@ test('getGameSchema: returns no achievements (not throw) on a 403 with a JSON bo
 });
 
 test('getGameSchema: throws isUpstream on a 403 with an HTML body — a rejected key, not a missing schema', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: false,
     status: 403,
@@ -2313,7 +2170,6 @@ test('getGameSchema: throws isUpstream on a 403 with an HTML body — a rejected
 // ── getPlayerAchievements ─────────────────────────────────────────────────────
 
 test('getPlayerAchievements: extracts achieved state and unlocktime', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({
@@ -2334,19 +2190,16 @@ test('getPlayerAchievements: extracts achieved state and unlocktime', async (t) 
 });
 
 test('getPlayerAchievements: returns null (not throw) on 400 — game has no stats', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 400 }));
   assert.equal(await getPlayerAchievements('7656119123456789', 400), null);
 });
 
 test('getPlayerAchievements: returns null (not throw) on 403 — private profile', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 403 }));
   assert.equal(await getPlayerAchievements('7656119123456789', 400), null);
 });
 
 test('getPlayerAchievements: returns null when success is false', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ playerstats: { success: false } }),
@@ -2355,7 +2208,6 @@ test('getPlayerAchievements: returns null when success is false', async (t) => {
 });
 
 test('getPlayerAchievements: throws isUpstream for a non-400/403 error', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
   await assert.rejects(
     () => getPlayerAchievements('7656119123456789', 400),
@@ -2364,7 +2216,6 @@ test('getPlayerAchievements: throws isUpstream for a non-400/403 error', async (
 });
 
 test('getPlayerAchievements: caches result — second call skips fetch', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ playerstats: { success: true, achievements: [] } }),
@@ -2377,7 +2228,6 @@ test('getPlayerAchievements: caches result — second call skips fetch', async (
 // ── getGlobalAchievementPercentages ──────────────────────────────────────────
 
 test('getGlobalAchievementPercentages: maps apiname to percent as a number', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({
@@ -2394,7 +2244,6 @@ test('getGlobalAchievementPercentages: maps apiname to percent as a number', asy
 });
 
 test('getGlobalAchievementPercentages: returns null (not throw) on 403 — no stats or unknown appid', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 403 }));
   assert.equal(await getGlobalAchievementPercentages(400), null);
   assert.equal(await getGlobalAchievementPercentages(400), null);
@@ -2402,7 +2251,6 @@ test('getGlobalAchievementPercentages: returns null (not throw) on 403 — no st
 });
 
 test('getGlobalAchievementPercentages: throws isUpstream for a non-403 error', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
   await assert.rejects(
     () => getGlobalAchievementPercentages(400),
@@ -2411,7 +2259,6 @@ test('getGlobalAchievementPercentages: throws isUpstream for a non-403 error', a
 });
 
 test('getGlobalAchievementPercentages: caches result — second call skips fetch', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ achievementpercentages: { achievements: [] } }),
@@ -2424,7 +2271,6 @@ test('getGlobalAchievementPercentages: caches result — second call skips fetch
 // ── getGameNews ────────────────────────────────────────────────────────────────
 
 test('getGameNews: extracts title, url, date and feedLabel, capped at 20', async (t) => {
-  _reset();
   const newsitems = Array.from({ length: 25 }, (_, i) => ({
     gid: String(i),
     title: `Update ${i}`,
@@ -2450,7 +2296,6 @@ test('getGameNews: extracts title, url, date and feedLabel, capped at 20', async
 });
 
 test('getGameNews: filters out syndicated third-party press, keeping only steam_community_announcements', async (t) => {
-  _reset();
   const newsitems = [
     {
       title: 'Пресса на русском',
@@ -2485,7 +2330,6 @@ test('getGameNews: filters out syndicated third-party press, keeping only steam_
 });
 
 test('getGameNews: returns empty array when newsitems is missing', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ appnews: { appid: 400, count: 0 } }),
@@ -2494,7 +2338,6 @@ test('getGameNews: returns empty array when newsitems is missing', async (t) => 
 });
 
 test('getGameNews: a reply of another shape is an upstream error, not cached', async (t) => {
-  _reset();
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     calls++;
@@ -2505,7 +2348,6 @@ test('getGameNews: a reply of another shape is an upstream error, not cached', a
 });
 
 test('getGameNews: feedLabel is null when absent', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({
@@ -2521,7 +2363,6 @@ test('getGameNews: feedLabel is null when absent', async (t) => {
 });
 
 test('getGameNews: throws isUpstream when fetch fails', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
   await assert.rejects(
     () => getGameNews(400),
@@ -2530,7 +2371,6 @@ test('getGameNews: throws isUpstream when fetch fails', async (t) => {
 });
 
 test('getGameNews: caches result — second call skips fetch', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ appnews: { newsitems: [] } }),
@@ -2541,7 +2381,6 @@ test('getGameNews: caches result — second call skips fetch', async (t) => {
 });
 
 test('resolveSteamId: caches a failed lookup and re-throws it without a second upstream call', async (t) => {
-  _reset();
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     calls++;
@@ -2593,7 +2432,6 @@ test('gameBasics: an unconfirmed type and a coming-soon date short of a full one
 });
 
 test('gameBasics: an item cached before basics were requested falls back to cached appdetails, never fetching', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => {
     throw new Error('should not fetch');
   });
@@ -2665,7 +2503,6 @@ for (const [label, call, body] of [
 
 // Steam's answers for an unknown or delisted app, which stay cached misses.
 test('an empty reviews `response`, a browse item without success and an empty GetItems `response` stay cached misses', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => ({
     ok: true,
     json: async () =>
@@ -2699,7 +2536,6 @@ function mockBatchedBrowse(t, reply = (ids) => ids.map((id) => batchItem(id))) {
 }
 
 test('prefetchStoreBrowseItems: sends uncached ids 50 per call, in order, and caches one row each', async (t) => {
-  _reset();
   setCache('browse:1005', { tagids: [] });
   const calls = mockBatchedBrowse(t);
   const appids = Array.from({ length: 120 }, (_, i) => 1000 + i);
@@ -2718,7 +2554,6 @@ test('prefetchStoreBrowseItems: sends uncached ids 50 per call, in order, and ca
 });
 
 test('prefetchStoreBrowseItems: an unknown app is a cached miss, an id left out of the reply stays uncached', async (t) => {
-  _reset();
   const calls = mockBatchedBrowse(t, (ids) =>
     ids.filter((id) => id !== 2002).map((id) => batchItem(id, { unknown: id === 2001 })),
   );
@@ -2731,7 +2566,6 @@ test('prefetchStoreBrowseItems: an unknown app is a cached miss, an id left out 
 });
 
 test('prefetchStoreBrowseItems: a reply without store_items caches nothing', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ response: {} }) }));
   await prefetchStoreBrowseItems([2100, 2101]);
   assert.equal(getCachedAt('browse:2100'), undefined);
@@ -2739,7 +2573,6 @@ test('prefetchStoreBrowseItems: a reply without store_items caches nothing', asy
 });
 
 test('prefetchStoreBrowseItems: a failed chunk starts no further chunk and leaves its ids to their games', async (t) => {
-  _reset();
   const warn = t.mock.method(console, 'warn', () => {});
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => (++calls, { ok: false, status: 503 }));
@@ -2750,7 +2583,6 @@ test('prefetchStoreBrowseItems: a failed chunk starts no further chunk and leave
 });
 
 test('prefetchStoreBrowseItems: shouldStop() starts no further chunk', async (t) => {
-  _reset();
   const calls = mockBatchedBrowse(t);
   await prefetchStoreBrowseItems(
     Array.from({ length: 200 }, (_, i) => 2400 + i),
@@ -2760,7 +2592,6 @@ test('prefetchStoreBrowseItems: shouldStop() starts no further chunk', async (t)
 });
 
 test('getStoreBrowseItem: an unforced read joins a started chunk; a forced one, or one after a failed chunk, calls alone', async (t) => {
-  _reset();
   const warn = t.mock.method(console, 'warn', () => {});
   const calls = [];
   let release;
@@ -2797,7 +2628,6 @@ test('getStoreBrowseItem: an unforced read joins a started chunk; a forced one, 
 });
 
 test('searchStoreGames still drops demos from a batched GetItems reply', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => ({
     ok: true,
     json: async () =>

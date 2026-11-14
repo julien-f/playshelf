@@ -38,6 +38,7 @@ const { getUpstreamStats } = require('../lib/upstream');
 beforeEach(() => {
   _resetTagNameMap();
   _resetPickAndMix();
+  _reset();
 });
 
 const api = supertest(app);
@@ -231,7 +232,6 @@ test('GET / and /lists/owned: the app shell carries Open Graph tags with an abso
 });
 
 test('GET /game/:appid/ and /Game/:appid: a trailing slash or other letter case gets the same preview', async () => {
-  _reset();
   setCache('appdetails:620', { name: 'Portal 2', header_image: null, short_description: null });
   for (const route of ['/game/620/', '/Game/620', '/lists/OWNED/?game=620']) {
     const res = await api.get(route);
@@ -240,7 +240,6 @@ test('GET /game/:appid/ and /Game/:appid: a trailing slash or other letter case 
 });
 
 test('GET /game/:appid: the preview names and describes a cached game and shows its header image, without fetching', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => assert.fail('no upstream request'));
   setCache('appdetails:620', {
     name: 'Portal <2> & "co"',
@@ -504,7 +503,6 @@ test('GET /api/metrics: times inbound requests per route pattern, never per URL'
 });
 
 test('GET /api/metrics: includes semaphore, cache hit/entry, rate-limiter, and dedup stats', async (t) => {
-  _reset();
   const GAME = { appid: 400, name: 'Portal' };
   t.mock.method(globalThis, 'fetch', makeLibraryFetch([GAME], []));
   await api.post('/api/common-games').send({ members: [ID1, ID2] });
@@ -544,7 +542,6 @@ test('GET /api/metrics: includes semaphore, cache hit/entry, rate-limiter, and d
 });
 
 test('GET /api/metrics: a details stream records how its list loaded', async (t) => {
-  _reset();
   _resetAuth();
   setCache('rating:1001', { total_reviews: 10, total_positive: 9, review_score_desc: 'Positive' });
   setCache('hltb:1001', []);
@@ -578,7 +575,6 @@ test('GET /api/metrics: a details stream records how its list loaded', async (t)
 });
 
 test('GET /api/metrics: counts HLTB lookups its failed-lookup hold answered', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(console, 'warn', () => {});
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -633,7 +629,6 @@ test('POST /api/common-games: 400 when members exceeds MAX_USERS', async () => {
 // ── POST /api/common-games — happy path ──────────────────────────────────────
 
 test('POST /api/common-games: 200 with the full library and player of a single account', async (t) => {
-  _reset();
   const GAME = { appid: 400, name: 'Portal' };
   t.mock.method(globalThis, 'fetch', makeLibraryFetch([GAME], []));
 
@@ -646,7 +641,6 @@ test('POST /api/common-games: 200 with the full library and player of a single a
 });
 
 test("POST /api/common-games: games is the alphabetical union of a Family's libraries, playtime covers every owned game", async (t) => {
-  _reset();
   const SHARED = { appid: 400, name: 'Portal', playtime_forever: 10 };
   const ONLY1 = { appid: 440, name: 'TF2', playtime_forever: 20 };
   const ONLY2 = { appid: 220, name: 'Half-Life 2', playtime_forever: 30 };
@@ -671,7 +665,6 @@ test("POST /api/common-games: games is the alphabetical union of a Family's libr
 });
 
 test('POST /api/common-games: lastPlayed carries rtime_last_played per account, 0 when absent', async (t) => {
-  _reset();
   const GAME1 = { appid: 400, name: 'Portal', rtime_last_played: 1751846400 };
   const GAME2 = { appid: 400, name: 'Portal' }; // no rtime_last_played from this account
   t.mock.method(globalThis, 'fetch', makeLibraryFetch([GAME1], [GAME2]));
@@ -683,7 +676,6 @@ test('POST /api/common-games: lastPlayed carries rtime_last_played per account, 
 });
 
 test('POST /api/common-games: recentPlaytime carries playtime_2weeks per account, only where played', async (t) => {
-  _reset();
   const GAME1 = { appid: 400, name: 'Portal', playtime_2weeks: 90 };
   const GAME2 = { appid: 400, name: 'Portal' }; // not played lately: Steam leaves the field out
   t.mock.method(globalThis, 'fetch', makeLibraryFetch([GAME1], [GAME2]));
@@ -694,7 +686,6 @@ test('POST /api/common-games: recentPlaytime carries playtime_2weeks per account
 });
 
 test('POST /api/common-games: recentPlaytime leaves out a library cached over 14 days ago, whose two weeks are long gone', async (t) => {
-  _reset();
   t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 0, 1) });
   t.mock.method(globalThis, 'fetch', makeLibraryFetch([{ appid: 400, name: 'Portal', playtime_2weeks: 90 }]));
   await api.post('/api/common-games').send({ members: [ID1] });
@@ -710,7 +701,6 @@ test('POST /api/common-games: recentPlaytime leaves out a library cached over 14
 // ── POST /api/common-games — upstream / user errors ──────────────────────────
 
 test('POST /api/common-games: 502 when Steam API returns a server error', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
 
   const res = await api.post('/api/common-games').send({ members: [ID1, ID2] });
@@ -718,7 +708,6 @@ test('POST /api/common-games: 502 when Steam API returns a server error', async 
 });
 
 test('POST /api/common-games: 502 when GetOwnedGames answers {}', async (t) => {
-  _reset();
   t.mock.method(console, 'error', () => {});
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('GetPlayerSummaries')) return { ok: true, json: async () => ({ response: { players: [] } }) };
@@ -729,7 +718,6 @@ test('POST /api/common-games: 502 when GetOwnedGames answers {}', async (t) => {
 });
 
 test('POST /api/common-games: 400 when a library is private', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('GetPlayerSummaries')) {
       return { ok: true, json: async () => ({ response: { players: [] } }) };
@@ -764,7 +752,6 @@ function mockLibraries(t, { privateIds = [], downIds = [], summariesDown = false
 }
 
 test('POST /api/common-games: a private library is named, with where Steam sets it', async (t) => {
-  _reset();
   mockLibraries(t, { privateIds: [ID2] });
   const res = await api.post('/api/common-games').send({ members: [ID1, ID2] });
   assert.equal(res.status, 400);
@@ -777,7 +764,6 @@ test('POST /api/common-games: a private library is named, with where Steam sets 
 });
 
 test('POST /api/common-games: every private library is named', async (t) => {
-  _reset();
   mockLibraries(t, { privateIds: [ID1, ID2] });
   const res = await api.post('/api/common-games').send({ members: [ID1, ID2] });
   assert.equal(res.status, 400);
@@ -786,7 +772,6 @@ test('POST /api/common-games: every private library is named', async (t) => {
 });
 
 test('POST /api/common-games: a private library is named by id when player summaries fail', async (t) => {
-  _reset();
   mockLibraries(t, { privateIds: [ID2], summariesDown: true });
   const res = await api.post('/api/common-games').send({ members: [ID1, ID2] });
   assert.equal(res.status, 400);
@@ -795,7 +780,6 @@ test('POST /api/common-games: a private library is named by id when player summa
 });
 
 test("POST /api/common-games: an upstream failure isn't hidden behind a private library", async (t) => {
-  _reset();
   mockLibraries(t, { privateIds: [ID1], downIds: [ID2] });
   const res = await api.post('/api/common-games').send({ members: [ID1, ID2] });
   assert.equal(res.status, 502);
@@ -846,7 +830,6 @@ function makeWishlistFetch(items1 = [], items2 = []) {
 }
 
 test('POST /api/wishlist: 200 with items for a single account', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', makeWishlistFetch([{ appid: 400, priority: 1, date_added: 1433965886 }]));
 
   const res = await api.post('/api/wishlist').send({ members: [ID1] });
@@ -860,7 +843,6 @@ test('POST /api/wishlist: 200 with items for a single account', async (t) => {
 });
 
 test('POST /api/wishlist: unions two accounts, dedupes shared appid keeping first-seen', async (t) => {
-  _reset();
   t.mock.method(
     globalThis,
     'fetch',
@@ -882,7 +864,6 @@ test('POST /api/wishlist: unions two accounts, dedupes shared appid keeping firs
 });
 
 test('POST /api/wishlist: an account with no items field contributes nothing', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('GetPlayerSummaries')) return { ok: true, json: async () => ({ response: { players: [] } }) };
     if (url.includes(ID1)) return { ok: true, json: async () => ({ response: {} }) }; // private/empty
@@ -901,7 +882,6 @@ test('POST /api/wishlist: an account with no items field contributes nothing', a
 });
 
 test('POST /api/wishlist: 502 when Steam API returns a server error', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
 
   const res = await api.post('/api/wishlist').send({ members: [ID1] });
@@ -973,7 +953,6 @@ function makeFriendsFetch(friendIds1 = [], friendIds2 = []) {
 }
 
 test('POST /api/friends: 200 with friends for a single account', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', makeFriendsFetch([FRIEND1]));
 
   const res = await api.post('/api/friends').send({ members: [ID1] });
@@ -987,7 +966,6 @@ test('POST /api/friends: 200 with friends for a single account', async (t) => {
 });
 
 test('POST /api/friends: unions two accounts, dedupes a shared friend', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', makeFriendsFetch([FRIEND1], [FRIEND1, '76561198000000098']));
 
   const res = await api.post('/api/friends').send({ members: [ID1, ID2] });
@@ -996,7 +974,6 @@ test('POST /api/friends: unions two accounts, dedupes a shared friend', async (t
 });
 
 test('POST /api/friends: reports a private friends list as unavailable rather than empty', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('GetFriendList') && url.includes(ID1)) return { ok: false, status: 401 };
     if (url.includes('GetFriendList') && url.includes(ID2))
@@ -1016,7 +993,6 @@ test('POST /api/friends: reports a private friends list as unavailable rather th
 });
 
 test('POST /api/friends: 502 when Steam API returns a server error', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
 
   const res = await api.post('/api/friends').send({ members: [ID1] });
@@ -1043,7 +1019,6 @@ test('GET /api/game-details/-1: 400 for negative appid', async () => {
 // ── GET /api/game-details/:appid — happy path ────────────────────────────────
 
 test('GET /api/game-details/:appid: 200 from cache without fetching', async (t) => {
-  _reset();
   setCache('rating:400', { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' });
   setCache('hltb:400', [{ game_id: 42, game_name: 'Portal', comp_main: 36000, comp_plus: 54000 }]);
   setCache('appdetails:400', {
@@ -1084,7 +1059,6 @@ test('GET /api/game-details/:appid: 200 from cache without fetching', async (t) 
 });
 
 test('GET /api/game-details/:appid: a warm request reads each cached meta-tier row once', async (t) => {
-  _reset();
   for (const appid of [403, 404]) {
     setCache(`hltb:${appid}`, []);
     setCache(`appdetails:${appid}`, { name: 'X' });
@@ -1116,7 +1090,6 @@ test('GET /api/game-details/:appid: a warm request reads each cached meta-tier r
 
 // A browse row cached before basics were requested takes them from the store page the store part reads anyway (C315).
 test('GET /api/game-details/:appid: a browse row without basics reads the store page once', async (t) => {
-  _reset();
   setCache('hltb:405', []);
   setCache('appdetails:405', { name: 'X', type: 'game' });
   setCache('browse:405', { tagids: TAG_IDS });
@@ -1136,7 +1109,6 @@ test('GET /api/game-details/:appid: a browse row without basics reads the store 
 });
 
 test('GET /api/game-details/:appid: dates each source separately, and fetchedAt is the oldest of them', async (t) => {
-  _reset();
   // Deliberately staggered: the panel's ↻ shows one figure for five sources cached under tiers
   // of 90-180 days, so an old store page dating the whole readout is the normal case — the
   // per-source breakdown behind it is what makes that figure interpretable.
@@ -1165,7 +1137,6 @@ test('GET /api/game-details/:appid: dates each source separately, and fetchedAt 
 });
 
 test('GET /api/game-details/:appid: 200 fetching fresh rating, HLTB, meta and tags', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', makeDetailsFetch());
 
@@ -1191,7 +1162,6 @@ test('GET /api/game-news/abc: 400 for non-numeric appid', async () => {
 });
 
 test('GET /api/game-news/:appid: 200 with recent news items', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', makeDetailsFetch());
 
   const res = await api.get('/api/game-news/407');
@@ -1202,7 +1172,6 @@ test('GET /api/game-news/:appid: 200 with recent news items', async (t) => {
 });
 
 test('GET /api/game-news/:appid: 200 from cache without fetching', async (t) => {
-  _reset();
   setCache('news:408', []);
   let fetchCalled = false;
   t.mock.method(globalThis, 'fetch', async () => {
@@ -1216,7 +1185,6 @@ test('GET /api/game-news/:appid: 200 from cache without fetching', async (t) => 
 });
 
 test('GET /api/game-news/:appid: ?refresh=1 re-fetches despite the cache', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', makeDetailsFetch());
 
   await api.get('/api/game-news/409').expect(200);
@@ -1231,7 +1199,6 @@ test('GET /api/game-news/:appid: ?refresh=1 re-fetches despite the cache', async
 });
 
 test("GET /api/game-details/:appid: a soundtrack isn't searched on HLTB, and reads as no data, not failed", async (t) => {
-  _reset();
   _resetAuth();
   const fetchMock = t.mock.method(globalThis, 'fetch', makeDetailsFetch({ type: 'music' }));
 
@@ -1243,7 +1210,6 @@ test("GET /api/game-details/:appid: a soundtrack isn't searched on HLTB, and rea
 });
 
 test("GET /api/game-details/:appid: a soundtrack's skipped HLTB lookup is cached as a short-lived miss, so it has an age", async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', makeDetailsFetch({ type: 'music' }));
 
@@ -1256,7 +1222,6 @@ test("GET /api/game-details/:appid: a soundtrack's skipped HLTB lookup is cached
 });
 
 test('GET /api/game-details/:appid: a delisted game takes its name from the achievement schema, and HLTB searches it', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', makeDetailsFetch({ delisted: true }));
 
@@ -1268,7 +1233,6 @@ test('GET /api/game-details/:appid: a delisted game takes its name from the achi
 });
 
 test('GET /api/game-details/:appid: 200 with null rating when reviews fetch fails', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', makeDetailsFetch({ ratingOk: false }));
 
@@ -1280,7 +1244,6 @@ test('GET /api/game-details/:appid: 200 with null rating when reviews fetch fail
 });
 
 test('GET /api/game-details/:appid: 200 with null meta when appdetails fetch fails', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', makeDetailsFetch({ metaOk: false }));
 
@@ -1292,7 +1255,6 @@ test('GET /api/game-details/:appid: 200 with null meta when appdetails fetch fai
 });
 
 test('GET /api/game-details/:appid: a failed store browse item logs once, for tags, not again for the demo', async (t) => {
-  _reset();
   _resetAuth();
   const detailsFetch = makeDetailsFetch();
   t.mock.method(globalThis, 'fetch', async (url) =>
@@ -1310,7 +1272,6 @@ test('GET /api/game-details/:appid: a failed store browse item logs once, for ta
 });
 
 test('GET /api/game-details/:appid: names a failed source in `failed`, unlike one with no data', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', makeDetailsFetch({ ratingOk: false }));
   const failing = await api.get('/api/game-details/406');
@@ -1324,7 +1285,6 @@ test('GET /api/game-details/:appid: names a failed source in `failed`, unlike on
 });
 
 test('GET /api/game-details/:appid: 200 with null tags and null demo when the Steam store browse fetch fails (same call backs both)', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', makeDetailsFetch({ tagsOk: false }));
 
@@ -1337,7 +1297,6 @@ test('GET /api/game-details/:appid: 200 with null tags and null demo when the St
 });
 
 test('GET /api/game-details/:appid: only fetches sources not already cached', async (t) => {
-  _reset();
   _resetAuth();
   setCache('rating:405', { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' });
   setCache('appdetails:405', {
@@ -1439,7 +1398,6 @@ const dedupHits = (name) => getMetrics().sinceRestart.dedupHits[name] ?? 0;
 
 // #1 — sequential refresh: second request must be served entirely from cache.
 test('GET /api/game-details/:appid: a repeated request is served from cache, no re-fetch', async (t) => {
-  _reset();
   _resetAuth();
   const counts = { rating: 0, hltb: 0, hltbInit: 0, meta: 0, tags: 0 };
   t.mock.method(globalThis, 'fetch', makeCountingDetailsFetch(counts));
@@ -1464,7 +1422,6 @@ test('GET /api/game-details/:appid: a repeated request is served from cache, no 
 // #2 — concurrent refresh: overlapping in-flight requests for the same appid
 // must collapse onto a single upstream fetch via dedup.
 test('GET /api/game-details/:appid: concurrent requests for the same appid dedup to one fetch', async (t) => {
-  _reset();
   _resetAuth();
   const counts = { rating: 0, hltb: 0, hltbInit: 0, meta: 0, tags: 0 };
   const { promise: gate, resolve: release } = Promise.withResolvers();
@@ -1488,7 +1445,6 @@ test('GET /api/game-details/:appid: concurrent requests for the same appid dedup
 // A forced request never reuses the normal one's result, which can come from cache, but it does
 // share a call to the upstream already under way: that call missed the cache, so it's current.
 test('GET /api/game-details/:appid: ?refresh=1 alongside a normal request shares its in-flight upstream calls', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(console, 'warn', () => {});
   const counts = { rating: 0, hltb: 0, hltbInit: 0, meta: 0, tags: 0 };
@@ -1511,7 +1467,6 @@ test('GET /api/game-details/:appid: ?refresh=1 alongside a normal request shares
 });
 
 test('GET /api/game-details/:appid: ?refresh=1 re-fetches every source despite the cache', async (t) => {
-  _reset();
   _resetAuth();
   const counts = { rating: 0, hltb: 0, hltbInit: 0, meta: 0, tags: 0 };
   t.mock.method(globalThis, 'fetch', makeCountingDetailsFetch(counts));
@@ -1576,7 +1531,6 @@ for (const comingSoon of [true, false]) {
 
 // A young game's reviews, ProtonDB reports and HLTB times settle over weeks: they live half its age at the fetch.
 test("GET /api/game-details/:appid: a 10-day-old game's sources expire in 5 days, an empty one too", async (t) => {
-  _reset();
   _resetAuth();
   const day = 24 * 60 * 60 * 1000;
   const start = Date.now();
@@ -1674,7 +1628,6 @@ for (const [label, { items, reviewsFail = false, capped }] of Object.entries({
 
 // The fast part runs ahead of Steam's store details cap: only a cached store page stands in for missing basics.
 test("GET /api/game-details/:appid: a browse row without basics doesn't hold ProtonDB behind an uncached store page", async (t) => {
-  _reset();
   _resetAuth();
   setCache('browse:780', { tagids: [] });
   setCache('tagnames:all', TAG_NAME_MAP);
@@ -1708,7 +1661,6 @@ test("GET /api/game-details/:appid: a browse row without basics doesn't hold Pro
 
 // A failed forced store fetch still leaves the cached page's basics.
 test('GET /api/game-details/:appid?refresh=1: a failed store refetch keeps the basics of the cached page', async (t) => {
-  _reset();
   _resetAuth();
   setCache('appdetails:781', { name: 'Cached', type: 'game' });
   setCache('tagnames:all', TAG_NAME_MAP);
@@ -1732,7 +1684,6 @@ test('GET /api/game-details/:appid?refresh=1: a failed store refetch keeps the b
 
 // Only a game the browse item calls coming soon waits on its reviews to tell whether it's out.
 test("GET /api/game-details/:appid: a released game's ProtonDB lookup doesn't wait for its reviews", async (t) => {
-  _reset();
   _resetAuth();
   let releaseReviews;
   const reviewsHeld = new Promise((r) => (releaseReviews = r));
@@ -1839,7 +1790,6 @@ for (const [label, { browse, reviews = 0, reviewsFail = false, asked, searched =
 
 // A skip never hides what a source already answered: a DLC's ProtonDB summary cached before the rule stays shown.
 test('GET /api/game-details/:appid: a skipped source still serves a summary it has cached', async (t) => {
-  _reset();
   _resetAuth();
   setCache('protondb:779', { tier: 'silver', confidence: 'low', total: 2 });
   setCache('browse:779', { success: 1, type: 4, name: 'A DLC', basic_info: {}, assets: {}, tagids: [] });
@@ -1857,7 +1807,6 @@ test('GET /api/game-details/:appid: a skipped source still serves a summary it h
 // ── GET /api/game-meta/:appid ─────────────────────────────────────────────────
 
 test('GET /api/game-meta/:appid: store metadata only, one upstream call', async (t) => {
-  _reset();
   _resetAuth();
   const urls = [];
   const detailsFetch = makeDetailsFetch();
@@ -1887,7 +1836,6 @@ test("GET /api/game-meta/:appid: 502 when the store can't be reached or answers 
 });
 
 test('GET /api/game-meta/:appid: 400 for an invalid appid, 502 when the store fails', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.mock.method(console, 'error', () => {});
   t.mock.method(globalThis, 'fetch', makeDetailsFetch({ metaOk: false }));
@@ -1901,7 +1849,6 @@ test('GET /api/game-meta/:appid: 400 for an invalid appid, 502 when the store fa
 // still complete the upstream work and cache it (so the refresh is a cache hit),
 // or is the work stranded (forcing the refresh to re-fetch)?
 test('GET /api/game-details/:appid: a request aborted mid-flight still caches, so refresh does not re-fetch', async (t) => {
-  _reset();
   _resetAuth();
   const counts = { rating: 0, hltb: 0, hltbInit: 0, meta: 0, tags: 0 };
   const { promise: gate, resolve: release } = Promise.withResolvers();
@@ -1941,7 +1888,6 @@ test('GET /api/game-details/:appid: a request aborted mid-flight still caches, s
 });
 
 test('GET /api/game-details/:appid: failed fetch is not cached, held off, then retried', async (t) => {
-  _reset();
   _resetAuth();
   let hltbCalls = 0;
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -1988,7 +1934,6 @@ test('GET /api/game-details/:appid: failed fetch is not cached, held off, then r
 });
 
 test('GET /api/game-details/:appid: a rating whose refetch fails is served from its expired row, with its age', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(console, 'warn', () => {});
   let reviewsOk = true;
@@ -2150,7 +2095,6 @@ test(
 );
 
 test('POST /api/game-details/stream: a cold list fetches its store browse items 50 per call', async (t) => {
-  _reset();
   _resetAuth();
   setCache('tagnames:all', TAG_NAME_MAP);
   const details = makeDetailsFetch();
@@ -2197,7 +2141,6 @@ test('POST /api/game-details/stream: 400 when games list exceeds STREAM_MAX_GAME
 });
 
 test('POST /api/game-details/stream: streams one event per game plus a done event from cache', async (t) => {
-  _reset();
   const rawRating = { total_reviews: 1000, total_positive: 900, review_score_desc: 'Very Positive' };
   const rawHltb = [{ game_id: 42, game_name: 'Portal', comp_main: 36000, comp_plus: 54000 }];
   const rawMeta = {
@@ -2240,7 +2183,6 @@ test('POST /api/game-details/stream: streams one event per game plus a done even
 });
 
 test('POST /api/game-details/stream: fetches fresh details and streams them', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', makeDetailsFetch());
 
@@ -2260,7 +2202,6 @@ test('POST /api/game-details/stream: fetches fresh details and streams them', as
 
 // Appdetails runs under Steam's store details cap: everything else, name and art included, must not wait on it.
 test("POST /api/game-details/stream: a game's fast part arrives while its store details are still pending", async (t) => {
-  _reset();
   _resetAuth();
   const { promise: storeGate, resolve: releaseStore } = Promise.withResolvers();
   t.after(() => releaseStore());
@@ -2336,7 +2277,6 @@ test("POST /api/game-details/stream: a game's fast part arrives while its store 
 });
 
 test('POST /api/game-details/stream: leaves out screenshots and trailers, keeps the banner', async (t) => {
-  _reset();
   _resetAuth();
   t.mock.method(globalThis, 'fetch', makeDetailsFetch({ media: true }));
   const server = app.listen(0);
@@ -2353,7 +2293,6 @@ test('POST /api/game-details/stream: leaves out screenshots and trailers, keeps 
 
 // fetchGameDetails' result is shared with GET /api/game-details through dedupDetails: the stream strips a copy.
 test('POST /api/game-details/stream: a GET /api/game-details sharing its fetch keeps the media', async (t) => {
-  _reset();
   _resetAuth();
   const { promise: released, resolve: release } = Promise.withResolvers();
   const detailsFetch = makeDetailsFetch({ media: true });
@@ -2381,7 +2320,6 @@ test('POST /api/game-details/stream: a GET /api/game-details sharing its fetch k
 });
 
 test('POST /api/game-details/stream: then GET /api/game-meta answers the media from cache', async (t) => {
-  _reset();
   _resetAuth();
   const urls = [];
   const detailsFetch = makeDetailsFetch({ media: true });
@@ -2407,7 +2345,6 @@ test('POST /api/game-details/stream: then GET /api/game-meta answers the media f
 // begin with (GetWishlist returns only appid/priority/date_added) — getHLTB would otherwise
 // short-circuit to null immediately on an empty name (`if (!name) return null`).
 test('POST /api/game-details/stream: resolves HLTB name from store metadata', async (t) => {
-  _reset();
   _resetAuth();
   let hltbSearchCalls = 0;
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -2474,7 +2411,6 @@ test('POST /api/game-details/stream: resolves HLTB name from store metadata', as
 // loop on that one too, since a batch stream is exactly the "hundreds of near-identical lines"
 // scenario the flag exists to prevent.
 test('POST /api/game-details/stream: does not log [game-details] for meta blocked by an already-open circuit', async (t) => {
-  _reset();
   _resetAuth();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
@@ -2567,7 +2503,6 @@ for (const [what, hltbFetch, line] of [
 // ── GET /api/creator-games ────────────────────────────────────────────────────
 
 test('GET /api/creator-games: 400 (no fetch) on a bad role or an empty name', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
     throw new Error('should not fetch');
   });
@@ -2577,7 +2512,6 @@ test('GET /api/creator-games: 400 (no fetch) on a bad role or an empty name', as
 });
 
 test('GET /api/creator-games: 200 with appids, total and fetchedAt; refresh=1 re-fetches', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async (url) => {
     assert.match(url, /search\/results\/\?developer=Foo/);
     return {
@@ -2598,7 +2532,6 @@ test('GET /api/creator-games: 200 with appids, total and fetchedAt; refresh=1 re
 });
 
 test('GET /api/creator-games: 502 when the store search fails', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   const res = await api.get('/api/creator-games?role=publisher&name=Foo');
   assert.equal(res.status, 502);
@@ -2608,7 +2541,6 @@ test('GET /api/creator-games: 502 when the store search fails', async (t) => {
 // ── GET /api/game-pass ───────────────────────────────────────────────────────
 
 test('GET /api/game-pass: 200 with appids, games not on Steam and fetchedAt; refresh=1 re-fetches', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-shop:microsoft store', 48);
   setCache('itad-appid:g1', 10);
@@ -2638,7 +2570,6 @@ test('GET /api/game-pass: 200 with appids, games not on Steam and fetchedAt; ref
 });
 
 test('GET /api/game-pass: 502 when the catalog fails', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   const res = await api.get('/api/game-pass');
@@ -2647,7 +2578,6 @@ test('GET /api/game-pass: 502 when the catalog fails', async (t) => {
 });
 
 test('GET /api/search-games: empty results (no fetch) when q is missing', async (t) => {
-  _reset();
   let fetchCalled = false;
   t.mock.method(globalThis, 'fetch', async () => {
     fetchCalled = true;
@@ -2659,7 +2589,6 @@ test('GET /api/search-games: empty results (no fetch) when q is missing', async 
 });
 
 test('GET /api/search-games: empty results (no fetch) when q is below the minimum length', async (t) => {
-  _reset();
   let fetchCalled = false;
   t.mock.method(globalThis, 'fetch', async () => {
     fetchCalled = true;
@@ -2671,7 +2600,6 @@ test('GET /api/search-games: empty results (no fetch) when q is below the minimu
 });
 
 test('GET /api/search-games: 200 with results shaped for the frontend dropdown', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     assert.match(url, /storesearch/);
     return {
@@ -2685,7 +2613,6 @@ test('GET /api/search-games: 200 with results shaped for the frontend dropdown',
 });
 
 test('GET /api/search-games: a repeated query is served from cache, no re-fetch', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ items: [{ id: 400, name: 'Portal' }] }),
@@ -2697,7 +2624,6 @@ test('GET /api/search-games: a repeated query is served from cache, no re-fetch'
 });
 
 test('GET /api/search-games: ?refresh=1 is ignored — a cached term never re-fetches', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ items: [{ id: 400, name: 'Portal' }] }),
@@ -2709,14 +2635,12 @@ test('GET /api/search-games: ?refresh=1 is ignored — a cached term never re-fe
 });
 
 test('GET /api/search-games: 502 when the store search endpoint errors', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 503 }));
   const res = await api.get('/api/search-games?q=portal');
   assert.equal(res.status, 502);
 });
 
 test('GET /api/search-games: 504 with a [timeout:...] log when the upstream call times out', async (t) => {
-  _reset();
   const errorMock = t.mock.method(console, 'error', () => {});
   t.mock.method(globalThis, 'fetch', async () => {
     throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
@@ -2731,7 +2655,6 @@ test('GET /api/search-games: 504 with a [timeout:...] log when the upstream call
 // (see the one-time [circuit-breaker] warning lib/steam.js logs at the moment it trips), not
 // new information worth repeating once per blocked request.
 test('GET /api/search-games: a request blocked by an open circuit returns 502 without its own [upstream:...] log line', async (t) => {
-  _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
   const errorMock = t.mock.method(console, 'error', () => {});
@@ -2827,7 +2750,6 @@ function makeAchievementsFetch({ achieved = [] } = {}) {
 }
 
 test('GET /api/achievements/:appid: a failed rarity lookup warns and says so, unlike a game with no rarity data', async (t) => {
-  _reset();
   const warn = t.mock.method(console, 'warn', () => {});
   const base = makeAchievementsFetch();
   t.mock.method(globalThis, 'fetch', async (url) =>
@@ -2844,7 +2766,6 @@ test('GET /api/achievements/:appid: a failed rarity lookup warns and says so, un
 });
 
 test('GET /api/achievements/:appid: no steamids returns the achievement list with playerCount 0, no progress claimed', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', makeAchievementsFetch());
 
   const res = await api.get('/api/achievements/400');
@@ -2861,7 +2782,6 @@ test('GET /api/achievements/:appid: no steamids returns the achievement list wit
 });
 
 test('GET /api/achievements/:appid: with steamids returns unlock progress and playerCount', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', makeAchievementsFetch({ achieved: ['ACH_1'] }));
 
   const res = await api.get(`/api/achievements/400?steamids=${ID1}`);
@@ -2875,7 +2795,6 @@ test('GET /api/achievements/:appid: with steamids returns unlock progress and pl
 });
 
 test("GET /api/achievements/:appid: unlocked counts only the schema's achievements, not ones added since it was cached", async (t) => {
-  _reset();
   const base = makeAchievementsFetch({ achieved: ['ACH_1'] });
   t.mock.method(globalThis, 'fetch', async (url) => {
     const res = await base(url);
@@ -2926,7 +2845,6 @@ test('GET /api/achievements/:appid: a member with a real unlock time wins over o
 });
 
 test('GET /api/achievements/:appid: ?refresh=1 re-fetches the schema, rarity and player progress', async (t) => {
-  _reset();
   const achievementsFetch = makeAchievementsFetch();
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -2945,7 +2863,6 @@ test('GET /api/achievements/:appid: ?refresh=1 re-fetches the schema, rarity and
 });
 
 test('GET /api/achievements/:appid: private/no-data account is distinguished from no steamids at all', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('GetSchemaForGame')) {
       return {
@@ -2973,7 +2890,6 @@ test('GET /api/achievements/:appid: private/no-data account is distinguished fro
 });
 
 test('GET /api/achievements/:appid: short-circuits on appdetails-confirmed zero achievements — schema/rarity/player calls are never made', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('appdetails')) {
       return {
@@ -2992,7 +2908,6 @@ test('GET /api/achievements/:appid: short-circuits on appdetails-confirmed zero 
 });
 
 test('GET /api/achievements/:appid: appdetails failure falls back to the schema fetch instead of erroring', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('appdetails')) return { ok: false, status: 503 };
     return makeAchievementsFetch()(url);
@@ -3004,7 +2919,6 @@ test('GET /api/achievements/:appid: appdetails failure falls back to the schema 
 });
 
 test('GET /api/achievements/:appid: schema-confirmed zero achievements skips rarity/per-player calls', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (url.includes('appdetails')) {
       // achievementCount unknown (field absent) — forces the route to actually ask the schema.
@@ -3024,7 +2938,6 @@ test('GET /api/achievements/:appid: schema-confirmed zero achievements skips rar
 });
 
 test('GET /api/achievements/:appid: an unreleased game (schema 403, no achievements field in appdetails) answers empty instead of 502', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', async (url) => {
     // Exactly what a pre-order page returns: no `achievements` key at all, so the route's
     // achievementCount short-circuit can't fire and the schema fetch is what has to cope.
@@ -3077,7 +2990,6 @@ test('POST /api/bundles/resolve: 503 when ITAD_API_KEY is not configured', async
 });
 
 test('GET /api/bundles: 200 with bundle list, defaults applied', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   const bundles = [{ id: 1, title: 'Test Bundle' }];
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -3098,7 +3010,6 @@ test('GET /api/bundles: 200 with bundle list, defaults applied', async (t) => {
 });
 
 test('POST /api/prices: reports fetchedAt for the batch', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => [{ id: 61, title: 'Steam' }] };
@@ -3110,7 +3021,6 @@ test('POST /api/prices: reports fetchedAt for the batch', async (t) => {
 });
 
 test('GET /api/bundles: clamps limit and validates country', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url) => {
     assert.match(url, /country=US/); // invalid country falls back to default
@@ -3122,7 +3032,6 @@ test('GET /api/bundles: clamps limit and validates country', async (t) => {
 });
 
 test('GET /api/bundles: 502 when the upstream call fails', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   const res = await api.get('/api/bundles');
@@ -3130,7 +3039,6 @@ test('GET /api/bundles: 502 when the upstream call fails', async (t) => {
 });
 
 test('GET /api/bundles and /api/game-bundles: a non-array 200 is a 502, refetched next time', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(console, 'error', () => {});
   setCache('itad-gid:400', 'gid-1');
@@ -3147,7 +3055,6 @@ test('GET /api/bundles and /api/game-bundles: a non-array 200 is a 502, refetche
 });
 
 test('an unexpected error answers 500 with a generic message, an unreadable reply 502 without quoting it', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   const logged = t.mock.method(console, 'error', () => {});
   t.mock.method(globalThis, 'fetch', async () => ({
@@ -3188,7 +3095,6 @@ test('GET /api/game-bundles/abc: 400 for non-numeric appid', async () => {
 });
 
 test('GET /api/game-bundles/:appid: empty without an ITAD listing, no bundle lookup', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:400', null);
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
@@ -3199,7 +3105,6 @@ test('GET /api/game-bundles/:appid: empty without an ITAD listing, no bundle loo
 });
 
 test('GET /api/game-bundles/:appid: 200 with the bundles the game is in', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:400', 'gid-1');
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -3235,7 +3140,6 @@ test('GET /api/game-bundles/:appid: 200 with the bundles the game is in', async 
 });
 
 test('GET /api/game-bundles/:appid: ?refresh=1 re-fetches the bundles despite the cache', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:402', 'gid-2');
   const fetchMock = t.mock.method(globalThis, 'fetch', async (url) => {
@@ -3251,7 +3155,6 @@ test('GET /api/game-bundles/:appid: ?refresh=1 re-fetches the bundles despite th
 });
 
 test('GET /api/game-bundles/:appid: adds Fanatical pick-and-mix tiers to a null-price bundle', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:400', 'gid-1');
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -3282,7 +3185,6 @@ test('GET /api/game-bundles/:appid: adds Fanatical pick-and-mix tiers to a null-
 });
 
 test('GET /api/game-bundles/:appid: 502 when the upstream call fails', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:400', 'gid-1');
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
@@ -3291,7 +3193,6 @@ test('GET /api/game-bundles/:appid: 502 when the upstream call fails', async (t)
 });
 
 test("GET /api/bundles: a Fanatical pick-and-mix ITAD expired early is appended to the active list, with Fanatical's end date", async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   const killer = {
     id: 16542,
@@ -3425,7 +3326,6 @@ test('GET /api/bundles?refresh=1: a forced expired page that fails falls back to
 });
 
 test('GET /api/game-bundles/:appid: a bundle ITAD expired early is added from the cached list pages', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:400', 'gid-k');
   const killer = {
@@ -3479,7 +3379,6 @@ test('GET /api/bundles/abc: 400 for non-numeric id', async () => {
 });
 
 test('GET /api/bundles/:id: 200 with the matching bundle', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url) => {
     const u = new URL(url);
@@ -3492,7 +3391,6 @@ test('GET /api/bundles/:id: 200 with the matching bundle', async (t) => {
 });
 
 test('GET /api/bundles/:id: adds Fanatical pick-and-mix tiers and product names to a null-price bundle', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   const bundle = {
     id: 43,
@@ -3524,7 +3422,6 @@ test('GET /api/bundles/:id: adds Fanatical pick-and-mix tiers and product names 
 });
 
 test('GET /api/bundles/:id: 404 when the id is never found', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [] }));
   const res = await api.get('/api/bundles/999999');
@@ -3538,7 +3435,6 @@ test('POST /api/bundles/resolve: 400 without gids', async () => {
 });
 
 test('POST /api/bundles/resolve: 200 with resolved appids map', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => [{ id: 61, title: 'Steam' }] };
@@ -3552,7 +3448,6 @@ test('POST /api/bundles/resolve: 200 with resolved appids map', async (t) => {
 });
 
 test('POST /api/bundles/resolve: a gid whose Steam expansion errored is reported as failed, not as no Steam listing', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     const u = String(url);
@@ -3594,7 +3489,6 @@ test('POST /api/prices: 400 with both gids and appids', async () => {
 });
 
 test('POST /api/prices: 200 with Steam regular price and historical lows, by gids', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => [{ id: 61, title: 'Steam' }] };
@@ -3636,7 +3530,6 @@ test('POST /api/prices: 200 with Steam regular price and historical lows, by gid
 });
 
 test('POST /api/prices: refresh=1 bypasses the price cache and re-fetches, without re-resolving gids', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   let priceCalls = 0;
   let resolveCalls = 0;
@@ -3691,7 +3584,6 @@ test('POST /api/prices: 400 with appids that are not positive integers', async (
 });
 
 test('POST /api/prices: 200 by appids — resolves to gids first, then prices, keyed back by appid', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => [{ id: 61, title: 'Steam' }] };
@@ -3811,7 +3703,6 @@ for (const path of ['/api/bundles/resolve', '/api/prices']) {
 }
 
 test('POST /api/common-games: 400 for a 90 KB vanity name, nothing fetched or cached', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ response: { success: 42 } }),
@@ -3824,7 +3715,6 @@ test('POST /api/common-games: 400 for a 90 KB vanity name, nothing fetched or ca
 });
 
 test('GET /api/achievements/:appid: 400 for a steamids value that is no Steam account, nothing fetched or cached', async (t) => {
-  _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
     json: async () => ({ response: { success: 42 } }),
@@ -3861,7 +3751,6 @@ for (const member of [
 }
 
 test('GET /api/bundles: a country outside the region list falls back to US', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   const urls = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -3876,7 +3765,6 @@ test('GET /api/bundles: a country outside the region list falls back to US', asy
 });
 
 test('GET /api/bundles: an unknown sort falls back to the default, offset is an integer', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   const urls = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -3889,7 +3777,6 @@ test('GET /api/bundles: an unknown sort falls back to the default, offset is an 
 });
 
 test('GET /api/bundles: a non-finite offset reads as 0, a fractional limit clamps to 1', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   const urls = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
@@ -3905,7 +3792,6 @@ test('GET /api/bundles: a non-finite offset reads as 0, a fractional limit clamp
 
 // Load more stops at an empty page: a clamped offset would serve the cap's page again and again.
 test('GET /api/bundles: an empty page past the offset cap, without an upstream call', async (t) => {
-  _reset();
   process.env.ITAD_API_KEY = 'test-itad-key';
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ id: 1 }] }));
   const res = await api.get('/api/bundles?offset=1e9').expect(200);
@@ -3917,7 +3803,6 @@ test('GET /api/bundles: an empty page past the offset cap, without an upstream c
 // ── fetchedAt (how old the served data is) ────────────────────────────────────
 
 test('POST /api/common-games: fetchedAt is null on a fresh fetch, then the cache write time', async (t) => {
-  _reset();
   const GAME = { appid: 400, name: 'Portal' };
   t.mock.method(globalThis, 'fetch', makeLibraryFetch([GAME], []));
 
@@ -3932,7 +3817,6 @@ test('POST /api/common-games: fetchedAt is null on a fresh fetch, then the cache
 });
 
 test('POST /api/common-games: fetchedAt reports the OLDEST member', async (t) => {
-  _reset();
   const old = Date.now() - 60 * 60 * 1000;
   _reset([
     [`games:${ID1}`, { value: [{ appid: 400, name: 'Portal', playtime_forever: 0 }], ts: old }],
@@ -3948,7 +3832,6 @@ test('POST /api/common-games: fetchedAt reports the OLDEST member', async (t) =>
 });
 
 test('POST /api/wishlist: fetchedAt comes from the wishlist entries', async (t) => {
-  _reset();
   t.mock.method(globalThis, 'fetch', makeWishlistFetch([{ appid: 400, priority: 1 }], []));
   const res = await api.post('/api/wishlist').send({ members: [ID1] });
   assert.equal(res.status, 200);
@@ -3956,7 +3839,6 @@ test('POST /api/wishlist: fetchedAt comes from the wishlist entries', async (t) 
 });
 
 test('POST /api/game-details/stream: caps in-flight appids and stops fetching once the client disconnects', async (t) => {
-  _reset();
   const concurrency = Number(process.env.STREAM_CONCURRENCY);
   // Every appid queues one reviews call on its semaphore (3 at a time): active + queued counts the appids in flight.
   const reviewsPending = () => {
@@ -4021,7 +3903,6 @@ test('POST /api/game-details/stream: caps in-flight appids and stops fetching on
 });
 
 test('POST /api/game-details/stream: fully cached games come first, ahead of uncached ones listed before them', async (t) => {
-  _reset();
   _resetAuth();
   const cached = [1001, 1002, 1003, 1004, 1005];
   for (const appid of cached) {
