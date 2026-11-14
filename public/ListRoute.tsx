@@ -2263,7 +2263,7 @@ export default function ListRoute() {
 
   // The saved or shared list on screen, with the lookup its sources resolve through.
   function definedList(): { list: GameList; get: (id: string) => GameList | undefined } | null {
-    const list = kind === 'shared' ? compareList() : kind === 'user' ? userList() : null;
+    const list = kind === 'shared' ? compareList() : userList();
     return list ? { list, get: kind === 'shared' ? sharedGetList : getList } : null;
   }
   // Wishlist prices, by appid: the Wishlist itself, and a saved or shared list built from one, a bundle or a developer/publisher.
@@ -2294,11 +2294,11 @@ export default function ListRoute() {
   }
   // A /lists/<id> link only opens here; a dynamic list's 🔗 Share list replaces Share layout outright.
   function isDynamicList(): boolean {
-    return kind === 'user' && userList()?.kind === 'dynamic';
+    return userList()?.kind === 'dynamic';
   }
   function shareViewFailure(): string | null {
     const list = userList();
-    if (kind !== 'user' || !list || list.kind === 'dynamic') return null;
+    if (!list || list.kind === 'dynamic') return null;
     return `${list.kind === 'ranked' ? 'Ranked' : 'Manual'} lists can't be shared yet: their link only opens in this browser`;
   }
   function handleShareView(btn: HTMLElement): void {
@@ -4105,7 +4105,7 @@ export default function ListRoute() {
         {/* userList() is still null at mount (set once load() resolves it below), so this has to be
           a reactive Show rather than a plain `kind === 'user' && ...` check — the latter would
           freeze at "no list yet" forever, since heroActions itself is only built once. */}
-        <Show when={kind === 'user' && userList()?.kind === 'dynamic'}>
+        <Show when={isDynamicList()}>
           {/* Stays "Edit sources" while open: the form's own Cancel is the one way out it names. */}
           <button
             type="button"
@@ -4128,7 +4128,7 @@ export default function ListRoute() {
             <Link /> Share list
           </button>
         </Show>
-        <Show when={kind === 'user' && userList()?.kind === 'ranked'}>
+        <Show when={userList()?.kind === 'ranked'}>
           <button
             type="button"
             class="btn btn-primary"
@@ -4502,21 +4502,23 @@ export default function ListRoute() {
           (HomeRoute.tsx), pre-filled from this list's own op/sources, saving in place via
           updateDynamicList (same id/folder position — see docs/dev/lists-and-accounts.md). Name
           isn't editable here (renaming is Home's Rename action; updateDynamicList takes no name). */}
-      <Show when={kind === 'user' && userList()?.kind === 'dynamic' && editingSources()}>
-        <CombineForm
-          initialOp={userList()!.op}
-          initialSources={userList()!.sources}
-          excludeListId={userList()!.id}
-          showName={false}
-          submitLabel="Save sources"
-          onCancel={() => {
-            setEditingSources(false);
-            editSourcesBtn?.focus();
-          }}
-          onSubmit={handleUpdateDynamicList}
-        />
+      <Show when={editingSources() && userList()?.kind === 'dynamic' && userList()}>
+        {(list) => (
+          <CombineForm
+            initialOp={list().op}
+            initialSources={list().sources}
+            excludeListId={list().id}
+            showName={false}
+            submitLabel="Save sources"
+            onCancel={() => {
+              setEditingSources(false);
+              editSourcesBtn?.focus();
+            }}
+            onSubmit={handleUpdateDynamicList}
+          />
+        )}
       </Show>
-      <Show when={kind === 'user' && userList()?.kind === 'ranked' && editingRankedSource()}>
+      <Show when={userList()?.kind === 'ranked' && editingRankedSource()}>
         <div class="combine-form">
           <label>
             Rank the games of{' '}
@@ -4738,12 +4740,12 @@ export default function ListRoute() {
           >
             Add
           </button>
-          <Show when={kind === 'user' && userList()?.kind === 'manual'}>
+          <Show when={userList()?.kind === 'manual'}>
             <button type="button" onClick={handleRemoveSelectedFromList}>
               Remove from this list
             </button>
           </Show>
-          <Show when={kind === 'user' && userList()?.kind === 'ranked'}>
+          <Show when={userList()?.kind === 'ranked'}>
             <button
               type="button"
               disabled={!selectedUnranked().length}
