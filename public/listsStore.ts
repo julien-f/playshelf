@@ -14,7 +14,7 @@
 // source-scanning logic) to decide whether removing a recent account must soft-remove instead;
 // this file calls its sweepRemovedAccounts() back from sweepDeletedLists().
 import { getPref, setPref } from './prefs.ts';
-import { union, subtract } from './combine.ts';
+import { union, subtract, isCombineOp } from './combine.ts';
 import { EMPTY_RANKING, type RankingState } from './ranking.ts';
 import { getBundleSnapshot, pruneBundleSnapshots } from './bundleSnapshots.ts';
 import { sweepRemovedAccounts } from './accountsStore.ts';
@@ -23,18 +23,6 @@ import type { Folder, GameList, ListRef, CombineOp } from './types.ts';
 
 const LISTS_KEY = 'lists';
 const FOLDERS_KEY = 'folders';
-
-const COMBINE_OPS: Record<CombineOp, true> = {
-  union: true,
-  intersect: true,
-  subtract: true,
-  'group-by-membership': true,
-};
-
-// Own keys only: `in` would let `?op=constructor` through.
-export function isCombineOp(raw: string): raw is CombineOp {
-  return Object.hasOwn(COMBINE_OPS, raw);
-}
 
 function genId(): string {
   return crypto.randomUUID();

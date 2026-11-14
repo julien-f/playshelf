@@ -5,6 +5,19 @@
 // list's resolve.
 import type { CombineOp } from './types.ts';
 
+// Short form — a chip/label on its own, where surrounding context already says it's a combine.
+export const OP_LABELS: Record<CombineOp, string> = {
+  union: 'Union',
+  intersect: 'Intersect',
+  subtract: 'Subtract',
+  'group-by-membership': 'Grouped by membership',
+};
+
+// Own keys only: `in` would let `?op=constructor` through.
+export function isCombineOp(raw: string): raw is CombineOp {
+  return Object.hasOwn(OP_LABELS, raw);
+}
+
 export interface LabeledSet {
   key: string; // an identifier for the source (e.g. a ListRef's own key/label) — only used by
   // group-by-membership, where a game's group is which combination of keys it's in

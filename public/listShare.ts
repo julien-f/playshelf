@@ -23,7 +23,7 @@
 // `{ kind: 'user', listId }` — so resolveListWithSources/listLabels.ts need no changes at all,
 // only a ListResolveFetchers.getList/ListNaming.list that check this map first.
 import type { CombineOp, GameList, ListRef } from './types.ts';
-import { isCombineOp } from './listsStore.ts';
+import { isCombineOp } from './combine.ts';
 
 const MAX_DEPTH = 50; // mirrors listResolve.ts's own backstop — not expected to bite in practice
 

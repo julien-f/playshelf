@@ -16,14 +16,7 @@ import { membersFromAccountId } from './accountData.ts';
 import { getBundleSnapshot } from './bundleSnapshots.ts';
 import { creatorListPath, creatorTitle } from './creatorData.ts';
 import { GAME_PASS_PATH, GAME_PASS_TITLE } from './gamePassData.ts';
-
-// Short form — a chip/label on its own, where surrounding context already says it's a combine.
-export const OP_LABELS: Record<CombineOp, string> = {
-  union: 'Union',
-  intersect: 'Intersect',
-  subtract: 'Subtract',
-  'group-by-membership': 'Grouped by membership',
-};
+import { OP_LABELS } from './combine.ts';
 
 // What each op actually does, for a picker where the reader may be meeting them for the first
 // time (Home's combine form appends this to the label above).

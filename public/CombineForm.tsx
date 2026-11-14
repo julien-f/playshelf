@@ -7,7 +7,8 @@ import ChevronDown from 'lucide-solid/icons/chevron-down';
 import ChevronUp from 'lucide-solid/icons/chevron-up';
 import { getRecentAccounts } from './accountsStore.ts';
 import { getLists } from './listsStore.ts';
-import { describeListRef, createDefaultNaming, formatCombine, OP_LABELS, OP_DESCRIPTIONS } from './listLabels.ts';
+import { describeListRef, createDefaultNaming, formatCombine, OP_DESCRIPTIONS } from './listLabels.ts';
+import { OP_LABELS } from './combine.ts';
 import type { ListRef, CombineOp } from './types.ts';
 
 export interface SourceOption {

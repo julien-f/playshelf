@@ -8,10 +8,10 @@ const {
   formatFormula,
   listDisplayName,
   opLabel,
-  OP_LABELS,
   OP_SYMBOLS,
   OP_DESCRIPTIONS,
 } = require('../public/listLabels.ts');
+const { OP_LABELS } = require('../public/combine.ts');
 
 // The injected half of ListNaming (see listLabels.ts) — the real one reads accountsStore.ts/
 // listsStore.ts, which is exactly what these tests don't want to need.

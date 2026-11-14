@@ -273,7 +273,6 @@ import {
   createDefaultNaming,
   listDisplayName,
   opLabel,
-  OP_LABELS,
   OP_SYMBOLS,
   type RefDescription,
   type ListNaming,
@@ -300,7 +299,6 @@ import {
   listHasBundleSource,
   listHasGamePassSource,
   rankingsOf,
-  isCombineOp,
   listDeps,
 } from './listsStore.ts';
 import { ranks, progress, pendingFocus, rerank, exclude, type RankingState, type RankingProgress } from './ranking.ts';
@@ -312,7 +310,7 @@ import {
   type ResolvedSource,
 } from './listResolve.ts';
 import { CombineForm, sourceOptions, refKey, type SourceOption } from './CombineForm.tsx';
-import type { MembershipGroup } from './combine.ts';
+import { OP_LABELS, isCombineOp, type MembershipGroup } from './combine.ts';
 import { peekMyOwnership, trackMyOwnership } from './myOwnership.ts';
 import { creatorListPath, creatorTitle, fetchCreatorGames, steamSearchUrl, type CreatorRole } from './creatorData.ts';
 import { fetchGamePass, GAME_PASS_TITLE, xboxStoreUrl, type GamePassData } from './gamePassData.ts';
