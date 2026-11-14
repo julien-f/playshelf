@@ -1,0 +1,38 @@
+# Dev workflow speed (branch `dev-workflow-speed`) — delete before the merge
+
+Goal: fastest, most reliable dev workflow; stop when the three best remaining levers each gain < 5 % on their target, or wait on a user decision. Active time only (in-process timings, step counts), load noted with each measure.
+
+## Baseline (2026-11-14)
+
+Sources: `.git/dev-metrics/checks.jsonl` (hook runs since 2026-10-25), transcripts since 2026-10-25 (287 files), `gh run list`, own runs. Machine: 12 cores.
+
+| Target                   | Measure                                             | Baseline                                                                               |
+| ------------------------ | --------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| pre-commit, UI commit    | checks.jsonl `commit` rows with `e2e`, slowest step | p50 68 s, p90 116 s (e2e desktop; 253 runs)                                            |
+| pre-commit, other commit | slowest non-e2e step                                | p50 6.4 s, p90 12.7 s (format p50 5.8, test 5.2)                                       |
+| UI commit, agent side    | CLAUDE.md: phone e2e by hand before each UI commit  | + ~60 s per UI commit                                                                  |
+| full `npm run test:e2e`  | `setup-facts.js --cost`                             | 122 s at load 0.6; ~8 min at load ~50 (P63)                                            |
+| CI                       | `gh run view`                                       | e2e job 7 min 14 s (test step 6 min 37 s, 2 workers); check job 47 s                   |
+| E2E_DEFER                | transcripts, `E2E_DEFER=1 … git commit`             | 202 of 880 commits, 19 sessions                                                        |
+| hook bypass              | `--no-verify`                                       | 1                                                                                      |
+| hook e2e failures        | transcripts, `✗ e2e` in commit/merge/push output    | 14                                                                                     |
+| bash-guard refusals      | `.git/dev-metrics/bash-guard.jsonl`                 | 0 since 2026-11-02                                                                     |
+| permission denials       | `setup-facts.js --transcripts`                      | 0 by the classifier (11 AskUserQuestion rejections: ~/.claude, P65)                    |
+| volume                   | git                                                 | 784 commits since 2026-10-13 for 57 pushes (~14/push); 204 UI commits since 2026-10-25 |
+
+Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` — pending.
+
+## Levers (estimated gain / cost)
+
+1. **pre-commit e2e → pre-push** (S): UI commit hook 68 s → ~6 s, phone-by-hand rule dropped, E2E_DEFER deleted (202 commits). Loses: e2e per intermediate commit; still caught by pre-push (both widths on HEAD) and CI.
+2. **CI e2e sharded** (S): 7.2 min → ~3 min.
+3. **Local Playwright workers** (S): measure 6 (default) vs 8/12 at real load.
+4. **Flakes found by the baseline run** (S–M each): root-cause fixes.
+5. **P64 phone subset** (L): up to −45 % of pre-push and CI e2e; triage of ~450 tests, risk of missing a phone regression.
+6. **format on staged files** (S): non-UI commit 6.4 s → ~5.2 s (test bound).
+
+## Done
+
+- **L1 pre-commit e2e → pre-push** (P74): UI commit hook 68 s p50 (253 runs) → 13–20 s slowest step at load ~40 (3 runs, `node scripts/check.js --staged=HEAD~1` on a UI commit), the unit suite now the long pole. Re-measure at normal load.
+
+## Negative results

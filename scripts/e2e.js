@@ -3,7 +3,7 @@
 // `npm run test:e2e`: builds the frontend once, then runs Playwright against it. A full passing run
 // records, per project, a hash of everything the suite can see (the build minus its sourcemaps, e2e/, the Playwright
 // config, the lockfile, Node's version); with --if-changed (the hooks), projects already passed on that hash are
-// skipped, since they would test exactly what passed: a push after the pre-commit desktop run runs only phone. With --since=<ref> (a fix-batch lane), a
+// skipped, since they would test exactly what passed. With --since=<ref> (a fix-batch lane), a
 // branch whose commits since <ref> touch nothing the suite covers (check.js's UI files) skips it.
 // A port another run holds or something listens on is skipped for the next free one, unless E2E_PORT sets it.
 // Each --if-changed run logs the projects asked for and those run (dev-metrics `e2e-runs`).
