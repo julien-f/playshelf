@@ -48,7 +48,7 @@ export function PlayerAvatar(props: { url?: string; label: string; index: number
 const pct = (weight: number) => `${Math.round(weight * 100)}%`;
 
 // Each tag a filter button carrying its weight as a bar; the % is said, not only drawn.
-export function TagBars(props: {
+function TagBars(props: {
   tags: PlayedTag[];
   isActive: (tag: string) => boolean;
   onTag: (tag: string) => void;
