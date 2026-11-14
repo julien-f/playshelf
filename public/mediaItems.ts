@@ -1,5 +1,5 @@
-import type { GameMeta } from './types.ts';
-import { steamAppAsset } from './utils.ts';
+import type { GameDetails, GameMeta } from './types.ts';
+import { metaOrBasics, steamAppAsset } from './utils.ts';
 
 export interface MediaItem {
   type: 'image' | 'video';
@@ -36,6 +36,10 @@ export function buildMediaItems(
     ...screenshots.map((s) => ({ type: 'image' as const, main: s.full, thumb: s.thumbnail, shotId: `s${s.id}` })),
   ];
 }
+
+// A game's media, from whichever of its store page or browse item has arrived.
+export const gameMediaItems = (game: { appid: number; details: GameDetails | null }): MediaItem[] =>
+  buildMediaItems(game.appid, metaOrBasics(game.details));
 
 export function resolveShotIndex(shots: MediaItem[], idxOrShotId: number | string): number {
   if (typeof idxOrShotId === 'string') {

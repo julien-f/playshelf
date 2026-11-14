@@ -1,8 +1,7 @@
 // The main window's side of the presentation window (PresentationView.tsx): opens it and sends it what to
 // show, over a BroadcastChannel tagged with this window's id (docs/dev/presentation.md).
 import { createSignal } from 'solid-js';
-import { metaOrBasics } from './utils.ts';
-import { buildMediaItems, mediaLabel } from './mediaItems.ts';
+import { gameMediaItems, mediaLabel } from './mediaItems.ts';
 import type { ReadonlyGame } from './types.ts';
 import { PRESENTATION_CHANNEL, HEARTBEAT_MS } from './presentationProtocol.ts';
 import type { Control, FromPresentation, OnAir, Playback, ToPresentation } from './presentationProtocol.ts';
@@ -169,7 +168,7 @@ export function present(
   // The linked lightbox says it on its own status line (the shell's is inert under its modal).
   { silent = false } = {},
 ): void {
-  const items = buildMediaItems(game.appid, metaOrBasics(game.details));
+  const items = gameMediaItems(game);
   const i = items.findIndex((s) => s.shotId === shotId);
   if (i < 0) return;
   const wasPresenting = presented() != null;

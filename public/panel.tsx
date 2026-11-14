@@ -25,7 +25,7 @@ import { animate, durationToken, easeOut, prefersReducedMotion } from './motion.
 import { sampleArtTint } from './artTint.ts';
 import { decideSwipeAxis, type SwipeAxis } from './lightboxSwipe.ts';
 import { pushOverlayEntry, popOverlayEntry } from './overlayHistory.ts';
-import { buildMediaItems, mediaLabel, resolveShotIndex } from './mediaItems.ts';
+import { gameMediaItems, mediaLabel, resolveShotIndex } from './mediaItems.ts';
 import type { MediaItem } from './mediaItems.ts';
 import { getMyOwnershipStatus, getOwnersFor, myOwnershipVersion } from './myOwnership.ts';
 import type { OwnershipStatus } from './myOwnership.ts';
@@ -709,7 +709,7 @@ function panelGoBack() {
 
 function getPanelItems() {
   const g = panelGame();
-  return g ? buildMediaItems(g.appid, metaOrBasics(g.details)) : [];
+  return g ? gameMediaItems(g) : [];
 }
 
 // dir: -1 (previous) or 1 (next). wrap: true for keyboard arrow navigation
