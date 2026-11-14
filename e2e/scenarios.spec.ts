@@ -8581,9 +8581,21 @@ test.describe('with motion on', () => {
       await page.getByRole('button', { name: 'Open in lightbox' }).click();
       await expect(page.locator('#screenshot-lightbox')).toHaveCSS('opacity', '1');
       await expect(page.locator('.lb-img')).not.toHaveClass(/lb-anim/);
+      // Recorded as they happen: the ghost and the entry class live only as long as the animation, which load can outrun.
+      await page.evaluate(() => {
+        const w = window as unknown as { seen: string[] };
+        w.seen = [];
+        const img = document.querySelector('.lb-img')!;
+        new MutationObserver(() => w.seen.push(img.className)).observe(img, { attributeFilter: ['class'] });
+        new MutationObserver((records) => {
+          for (const r of records)
+            for (const n of r.addedNodes) if ((n as Element).classList?.contains('lb-ghost')) w.seen.push('ghost');
+        }).observe(document.querySelector('.lb-surface')!, { childList: true });
+      });
       await page.keyboard.press('ArrowRight');
-      await expect(page.locator('.lb-ghost')).toHaveCount(1);
-      await expect(page.locator('.lb-img')).toHaveClass(/lb-anim-right/);
+      const seen = () => page.evaluate(() => (window as unknown as { seen: string[] }).seen);
+      await expect.poll(seen).toContain('ghost');
+      await expect.poll(seen).toContainEqual(expect.stringMatching(/lb-anim-right/));
       await expect(page.locator('.lb-ghost')).toHaveCount(0); // gone once faded
       await expect(page.locator('.lb-img')).not.toHaveClass(/lb-anim/);
       await page.evaluate(() => {
