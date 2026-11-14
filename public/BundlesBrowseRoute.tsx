@@ -423,10 +423,6 @@ export default function BundlesBrowseRoute() {
   // Oldest page write time across this load (a load pulls several pages); undefined = nothing
   // loaded yet, which renders no readout rather than a premature "just now".
   const [fetchedAt, setFetchedAt] = createSignal<number | null | undefined>(undefined);
-  function noteFetchedAt(at: number | null): void {
-    setFetchedAt((prev) => oldestFetchedAt(prev, at));
-  }
-
   async function fetchPage(refresh = false): Promise<BundleListItem[]> {
     const { bundles, fetchedAt: at } = await fetchBundlePage({
       country: currentRegion(),
@@ -436,7 +432,7 @@ export default function BundlesBrowseRoute() {
       limit: PAGE_SIZE,
       refresh,
     });
-    noteFetchedAt(at);
+    setFetchedAt((prev) => oldestFetchedAt(prev, at));
     return bundles;
   }
 
