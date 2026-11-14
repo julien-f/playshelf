@@ -1760,12 +1760,12 @@ test('C8.5: the nav chip plays, pauses, mutes and replays the TV, and shows how 
   await expect(status).toBeAttached();
 
   await chip.getByRole('button', { name: 'Pause the TV' }).click();
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', true);
   await chip.getByRole('button', { name: 'Play on the TV' }).click();
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
+  await expect(tv).toHaveJSProperty('paused', false);
 
   await chip.getByRole('button', { name: 'Mute the TV' }).click();
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.muted)).toBe(true);
+  await expect(tv).toHaveJSProperty('muted', true);
   // Unmuted before a click there, Chrome would pause it: the TV waits, and the chip says why.
   await chip.getByRole('button', { name: 'Unmute the TV' }).click();
   const waiting = chip.getByRole('button', { name: 'Unmute the TV' });
@@ -1799,7 +1799,7 @@ test("C8 edge: the host's mute holds from one media to the next on the TV", asyn
   const chip = page.getByRole('group', { name: /^Presenting Hades/ });
   await chip.getByRole('button', { name: 'Mute the TV' }).click();
   const tv = shown.locator('video.pres-media');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.muted)).toBe(true);
+  await expect(tv).toHaveJSProperty('muted', true);
   // A screenshot, then the trailer again: still muted.
   await page.getByRole('button', { name: 'Screenshot 1 of 3' }).click();
   await page.keyboard.press('p');
@@ -1824,16 +1824,16 @@ test('C8 edge: Space and M on the focused chip pause and mute the TV, without sc
   await page.getByRole('button', { name: 'Trailer 1 of 1' }).click();
   const shown = await startPresenting(page);
   const tv = shown.locator('video.pres-media');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', false);
   const chip = page.getByRole('group', { name: /^Presenting Hades/ });
   await chip.focus();
   const scroll = () => page.evaluate(() => [scrollY, document.querySelector('.app-scroll')?.scrollTop ?? 0]);
   const before = await scroll();
   await page.keyboard.press(' ');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', true);
   expect(await scroll()).toEqual(before);
   await page.keyboard.press('m');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.muted)).toBe(true);
+  await expect(tv).toHaveJSProperty('muted', true);
 });
 
 test('C8 edge: P on what failed on the TV tries it again', async ({ page }, testInfo) => {
@@ -1914,14 +1914,14 @@ test("C8 edge: the keyboard's play/pause key pauses the TV's trailer from anywhe
   await page.getByRole('button', { name: 'Trailer 1 of 1' }).click();
   const shown = await startPresenting(page);
   const tv = shown.locator('video.pres-media');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', false);
   expect(await shown.evaluate(() => navigator.mediaSession.metadata?.title)).toBe('Hades');
   type Keys = { mediaKeys: Record<string, (() => void) | null> };
   const press = (key: string) => shown.evaluate((k) => (window as unknown as Keys).mediaKeys[k]!(), key);
   await press('pause');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', true);
   await press('play'); // still the TV's through the pause
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
+  await expect(tv).toHaveJSProperty('paused', false);
   // Ended: the keys go back to whatever else plays.
   await tv.evaluate((v: HTMLVideoElement) => v.dispatchEvent(new Event('ended')));
   await expect.poll(() => shown.evaluate(() => navigator.mediaSession.metadata)).toBeNull();
@@ -1937,7 +1937,7 @@ test("C8 edge: the keyboard's play/pause key pauses the TV's trailer from anywhe
     .click();
   await expect.poll(() => shown.evaluate(() => navigator.mediaSession.metadata?.title)).toBe('Hades');
   await press('pause');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', true);
 });
 
 test("C8 edge: the TV's lower third says the game and media a while, not on a mouse move; its title and labels too", async ({
@@ -1978,11 +1978,11 @@ test('C8 edge: on the TV, Space and M play and mute a trailer; a stall spins, an
   const shown = await startPresenting(page);
   const tv = shown.locator('video.pres-media');
   await shown.locator('.pres').click(); // the first click: fullscreen and sound
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', false);
   await shown.keyboard.press(' ');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', true);
   await shown.keyboard.press('m');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.muted)).toBe(true);
+  await expect(tv).toHaveJSProperty('muted', true);
   await tv.evaluate((v: HTMLVideoElement) => v.dispatchEvent(new Event('waiting')));
   await expect(shown.locator('.pres')).toHaveClass(/pres--loading/);
   // Under reduced motion (the tests' default), the spinner stands still, still after a moment.
@@ -2323,7 +2323,7 @@ test("C8 edge: a linked trailer's controls drive the TV, showing one state at a 
   await expect(lightbox.locator('.lb-caption-text')).toHaveText('Hades'); // opened: P is now the lightbox's
   const shown = await startPresenting(page);
   const tv = shown.locator('video.pres-media');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', false);
   // One overlay at a time: failed > buffering > paused or ended > playing.
   const overlays = () =>
     lightbox.evaluate((lb) =>
@@ -2337,14 +2337,14 @@ test("C8 edge: a linked trailer's controls drive the TV, showing one state at a 
 
   await reachForControls(page);
   await lightbox.getByRole('button', { name: 'Pause the TV' }).click();
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', true);
   await expect.poll(overlays).toEqual(['.lb-bigplay']);
   await lightbox.getByRole('button', { name: 'Play trailer on the TV' }).click();
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', false);
 
   await reachForControls(page);
   await lightbox.getByRole('button', { name: 'Mute the TV' }).click();
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.muted)).toBe(true);
+  await expect(tv).toHaveJSProperty('muted', true);
   // Unmuted before a click there, the TV waits for one, and the lightbox says so.
   await lightbox.getByRole('button', { name: 'Unmute the TV' }).click();
   await expect(lightbox.locator('.lb-vc-mute')).toHaveAttribute('aria-disabled', 'true');
@@ -2356,11 +2356,11 @@ test("C8 edge: a linked trailer's controls drive the TV, showing one state at a 
   await lightbox.locator('.lb-surface').focus();
   await page.keyboard.press('Shift+ArrowRight');
   await page.keyboard.press('l');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.currentTime)).toBe(45);
+  await expect(tv).toHaveJSProperty('currentTime', 45);
   const scrub = lightbox.getByRole('slider', { name: 'Seek on the TV' });
   await scrub.focus();
   await page.keyboard.press('Home');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.currentTime)).toBe(0);
+  await expect(tv).toHaveJSProperty('currentTime', 0);
 
   await shown.evaluate(() => (window as unknown as { presTest: PresTest }).presTest.stall());
   await expect(lightbox).toHaveClass(/lb--buffering/);
@@ -2416,7 +2416,7 @@ test('C8 edge: a linked trailer goes back to the lightbox paused where the TV wa
   const shown = await startPresenting(page);
   await page.clock.install(); // after the TV opens: its windows below run on it too
   const tv = shown.locator('video.pres-media');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', false);
   await tv.evaluate((v: HTMLVideoElement) => (v.currentTime = 30));
   // Private: the local trailer waits for a press, from where the TV was.
   await page.keyboard.press('p');
@@ -2430,7 +2430,7 @@ test('C8 edge: a linked trailer goes back to the lightbox paused where the TV wa
   // Back on the TV: it moves to where the host got to, the trailer already being on it.
   await local.evaluate((v: HTMLVideoElement) => (v.currentTime = 42));
   await page.keyboard.press('p');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => v.currentTime)).toBe(42);
+  await expect(tv).toHaveJSProperty('currentTime', 42);
   await expect(local).toHaveCount(0);
   // The TV gone: no sound starting here by itself.
   await shown.close();
@@ -2576,10 +2576,10 @@ test('C8 edge: private, a trailer played here stops when a step lands on another
   await page.keyboard.press('p'); // private
   const local = lightbox.locator('video');
   await page.keyboard.press(' ');
-  await expect.poll(() => local.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(local).toHaveJSProperty('paused', false);
   await page.keyboard.press('ArrowDown'); // Terraria, landing on its trailer
   await expect(lightbox.locator('.lb-caption-text')).toHaveText('Terraria');
-  await expect.poll(() => local.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await expect(local).toHaveJSProperty('paused', true);
   expect(await local.evaluate((v: HTMLVideoElement) => v.getAttribute('src'))).toBeNull(); // unloaded
   await page.keyboard.press(' ');
   await expect
@@ -2599,7 +2599,7 @@ test("C8 edge: a linked trailer's scrubber seeks the TV once when let go; a canc
   await expect(lightbox.locator('.lb-caption-text')).toHaveText('Hades'); // opened: P is now the lightbox's
   const shown = await startPresenting(page);
   const tv = shown.locator('video.pres-media');
-  await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(tv).toHaveJSProperty('paused', false);
   await reachForControls(page);
   const scrub = lightbox.getByRole('slider', { name: 'Seek on the TV' });
   const box = await visibleBox(scrub);
@@ -2722,7 +2722,7 @@ test('C8 edge: a trailer the browser lets play with sound starts with it, no pil
   await page.getByRole('button', { name: 'Trailer 1 of 1' }).click();
   const shown = await startPresenting(page);
   const video = shown.locator('video.pres-media');
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(video).toHaveJSProperty('paused', false);
   expect(await video.evaluate((v: HTMLVideoElement) => v.muted)).toBe(false);
   await expect(shown.getByText('Click for sound')).toBeHidden();
 });
@@ -2762,7 +2762,7 @@ test("C8 edge: P on what's already up doesn't restart it; on an ended trailer, i
   const shown = await startPresenting(page);
   await page.clock.install(); // after the TV opens: its windows below run on it too
   const video = shown.locator('video.pres-media');
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(video).toHaveJSProperty('paused', false);
   await video.evaluate((v: HTMLVideoElement) => {
     const w = window as unknown as { plays: number; ghosts: number };
     w.plays = w.ghosts = 0;
@@ -2801,7 +2801,7 @@ test('C8 edge: P on a lightbox trailer carries on where it was on the TV', async
   });
   const shown = await startPresenting(page);
   const video = shown.locator('video.pres-media');
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime)).toBe(42);
+  await expect(video).toHaveJSProperty('currentTime', 42);
   expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
 });
 
@@ -2813,14 +2813,14 @@ test('C8 edge: the TV seeks where it is told and reports seeks and stalls at onc
   await page.getByRole('button', { name: 'Trailer 1 of 1' }).click();
   const shown = await startPresenting(page);
   const video = shown.locator('video.pres-media');
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(video).toHaveJSProperty('paused', false);
   await video.evaluate((v: HTMLVideoElement) => (v.currentTime = 30));
   // Presses add up on the TV's own position, not on a report main may not have yet.
   await tellTv(page, { type: 'control', control: { seekBy: 10 } });
   await tellTv(page, { type: 'control', control: { seekBy: 10 } });
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime)).toBe(50);
+  await expect(video).toHaveJSProperty('currentTime', 50);
   await tellTv(page, { type: 'control', control: { seekTo: 5 } });
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime)).toBe(5);
+  await expect(video).toHaveJSProperty('currentTime', 5);
   // Within the 1 s the time reports wait: the seek's own report.
   await expect.poll(() => lastPlayback(shown)).toMatchObject({ t: 5 });
   await shown.evaluate(() => (window as unknown as { presTest: PresTest }).presTest.stall());
@@ -2837,7 +2837,7 @@ test('C8 edge: a handover on the trailer already on the TV moves it there', asyn
   await page.getByRole('button', { name: 'Trailer 1 of 1' }).click();
   const shown = await startPresenting(page);
   const video = shown.locator('video.pres-media');
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => !v.paused)).toBe(true);
+  await expect(video).toHaveJSProperty('paused', false);
   const onAir = await shown.evaluate(
     () => (window as unknown as { presTest: PresTest }).presTest.heard.findLast((m) => m.type === 'state')!.onAir,
   );
