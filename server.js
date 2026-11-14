@@ -176,8 +176,9 @@ const STEAM_PROFILE_URL_RE =
 const isSteamIdentifier = (u) =>
   typeof u === 'string' && (STEAM_NAME_RE.test(u.trim()) || STEAM_PROFILE_URL_RE.test(u.trim()));
 const isMemberList = (members) => Array.isArray(members) && members.every(isSteamIdentifier);
-// The 400 message for the first entry of `members` that isn't a Steam account, or null.
-function invalidMemberError(members) {
+// The 400 message for too many `members`, or for the first that isn't a Steam account; null if valid.
+function memberListError(members) {
+  if (members.length > MAX_USERS) return `Too many users — maximum is ${MAX_USERS}`;
   const invalid = members.find((u) => !isSteamIdentifier(u));
   return invalid === undefined ? null : `Not a Steam account: "${String(invalid).slice(0, 40)}"`;
 }
@@ -397,15 +398,7 @@ app.param('appid', (req, res, next, raw) => {
 // when invalid.
 function parseMembers(req, res) {
   const { members } = req.body;
-  if (!Array.isArray(members) || members.length < 1) {
-    res.status(400).json({ error: 'Provide at least 1 player' });
-    return null;
-  }
-  if (members.length > MAX_USERS) {
-    res.status(400).json({ error: `Too many users — maximum is ${MAX_USERS}` });
-    return null;
-  }
-  const error = invalidMemberError(members);
+  const error = !Array.isArray(members) || members.length < 1 ? 'Provide at least 1 player' : memberListError(members);
   if (error) {
     res.status(400).json({ error });
     return null;
@@ -1270,11 +1263,8 @@ app.get(
     // in the response below, which the frontend uses to distinguish "no player was asked about"
     // from "a player was asked about but their data is unavailable" (private:true).
     const rawIds = parseSteamIdsQuery(req);
-    if (rawIds.length > MAX_USERS) {
-      return res.status(400).json({ error: `Too many users — maximum is ${MAX_USERS}` });
-    }
-    const invalidIds = invalidMemberError(rawIds);
-    if (invalidIds) return res.status(400).json({ error: invalidIds });
+    const error = memberListError(rawIds);
+    if (error) return res.status(400).json({ error });
 
     const force = isForceRefresh(req);
     const steamIds = await resolveSteamIds(rawIds);
