@@ -1014,8 +1014,9 @@ export default function ListRoute() {
   function chosenProgress(): RankingProgress | null {
     const source = rankedSource();
     const state = ranking();
-    const focus = source && state ? pendingFocus(state, source) : undefined;
-    return focus ? progress(state!, source!, { focus }) : null;
+    if (!source || !state) return null;
+    const focus = pendingFocus(state, source);
+    return focus ? progress(state, source, { focus }) : null;
   }
   // Rewrites the Rank column in place rather than reloading — nothing else about the rows changed.
   function applyRanking(state: RankingState): void {
@@ -1809,7 +1810,7 @@ export default function ListRoute() {
     if (!isValidAppid(appid)) return;
     // No `App <appid>` placeholder in the data — panel.tsx's own title renders that fallback, so
     // the empty name here stays honest ("not resolved yet") for everything else that reads it.
-    setStandaloneRows(appid, { appid, name: '', loading: true, details: null, standalone: true } as Game);
+    setStandaloneRows(appid, { appid, name: '', loading: true, details: null, standalone: true });
     const game = standaloneRows[appid];
     openGame(game);
     try {
@@ -1913,7 +1914,7 @@ export default function ListRoute() {
       const hadName = !!rowStore.getRow(event.appid)?.name;
       const row = rowStore.mutateRow(event.appid, (draft) => applyDetailsEvent(draft, event));
       if (!row) return;
-      const capsule = (row as { capsule?: string | null }).capsule ?? null;
+      const capsule = row.capsule ?? null;
       // Recorded once it has a name, or nothing more is coming to give it one.
       if (pendingRecentFocus === event.appid && (row.name || !row.pendingSources?.includes('meta'))) {
         addRecentGame(row.appid, row.name, capsule);
@@ -3973,7 +3974,7 @@ export default function ListRoute() {
   // The games Play next lists, by its own predicate so the two agree.
   const unplayed = createMemo(() => {
     const rows = profileRows();
-    return rows && !playtimeHidden() ? rows.filter((g) => isPlayNextCandidate(g as Game, ownStatus(g))).length : 0;
+    return rows && !playtimeHidden() ? rows.filter((g) => isPlayNextCandidate(g, ownStatus(g))).length : 0;
   });
   const backlogShown = () => activeView()?.template === PLAY_NEXT;
   // Opens the Play next view (created the first time), or back to All games when it's open.
