@@ -497,6 +497,16 @@ export default function BundlesBrowseRoute() {
   // no derived stats beyond the one below, since the Ends/Shop columns already group and filter.
   function heroTiles(): HeroTile[] {
     const tiles: HeroTile[] = [];
+    // A count that filters the table to its rows when clicked; kept while its filter is on even at zero, so the
+    // control that emptied the table doesn't vanish with its last row.
+    const filterTile = (tile: HeroTile & { value: number; sub: string; title: string; active: boolean }) => {
+      if (tile.value > 0 || tile.active)
+        tiles.push({
+          ...tile,
+          sub: tile.active ? `${tile.sub} · only these` : tile.sub,
+          title: tile.active ? 'Showing only these — click to clear' : tile.title,
+        });
+    };
     // Always rendered, unlike the other tiles: this one *is* the ↻ Refresh control now (the
     // button that used to sit in the actions row did exactly what clicking it does), so it has to
     // be there on the paths that have no age to report — mid-load, and after a load that failed
@@ -520,17 +530,15 @@ export default function BundlesBrowseRoute() {
     // nothing counted it. Same rules as that one throughout (processedData, absent at zero unless
     // its own filter is what emptied it).
     const fresh = table.processedData().filter((row) => NEW_WINDOW.includes(bundleAge(row.publish))).length;
-    if (fresh > 0 || newOnly()) {
-      tiles.push({
-        label: 'New',
-        value: fresh,
-        valueColor: scoreColor(80),
-        sub: newOnly() ? 'in the last 7 days · only these' : 'in the last 7 days',
-        title: newOnly() ? 'Showing only these — click to clear' : 'Show only the bundles published in the last 7 days',
-        active: newOnly(),
-        onClick: toggleNewOnly,
-      });
-    }
+    filterTile({
+      label: 'New',
+      value: fresh,
+      valueColor: scoreColor(80),
+      sub: 'in the last 7 days',
+      title: 'Show only the bundles published in the last 7 days',
+      active: newOnly(),
+      onClick: toggleNewOnly,
+    });
     // The one thing this page can say that nothing else does at a glance: the Ends column shows
     // each row's own countdown, but finding the ones about to go means sorting by it first — which
     // is also why this tile is the one that clicks (toggleEndingSoonOnly).
@@ -540,34 +548,26 @@ export default function BundlesBrowseRoute() {
     // Counted off processedData like the tiles around it; absent without an account or wishlisted game.
     const acct = account();
     const wished = table.processedData().filter((row) => (ownershipOf(row)?.wishlist ?? 0) > 0).length;
-    if (acct && (wished > 0 || wishlistOnly())) {
-      tiles.push({
+    if (acct)
+      filterTile({
         label: 'Wishlist',
         value: wished,
         valueColor: 'var(--wishlisted)',
-        sub: wishlistOnly() ? 'bundles with wishlisted games · only these' : 'bundles with wishlisted games',
-        title: wishlistOnly()
-          ? 'Showing only these — click to clear'
-          : `Show only the bundles holding games on ${accountDisplayLabel(acct)}'s wishlist`,
+        sub: 'bundles with wishlisted games',
+        title: `Show only the bundles holding games on ${accountDisplayLabel(acct)}'s wishlist`,
         active: wishlistOnly(),
         onClick: toggleWishlistOnly,
       });
-    }
     const endingSoon = table.processedData().filter((row) => bundleUrgency(row.expiry)?.tier === 'urgent').length;
-    // Kept on screen while its own filter is on even at a count of zero — otherwise the last
-    // urgent bundle expiring (or a reload dropping it) leaves the table filtered down to nothing
-    // with the control that filtered it gone.
-    if (endingSoon > 0 || endingSoonOnly()) {
-      tiles.push({
-        label: 'Ending soon',
-        value: endingSoon,
-        valueColor: scoreColor(20),
-        sub: endingSoonOnly() ? 'within 48h · only these' : 'within 48h',
-        title: endingSoonOnly() ? 'Showing only these — click to clear' : 'Show only the bundles ending within 48h',
-        active: endingSoonOnly(),
-        onClick: toggleEndingSoonOnly,
-      });
-    }
+    filterTile({
+      label: 'Ending soon',
+      value: endingSoon,
+      valueColor: scoreColor(20),
+      sub: 'within 48h',
+      title: 'Show only the bundles ending within 48h',
+      active: endingSoonOnly(),
+      onClick: toggleEndingSoonOnly,
+    });
     return tiles;
   }
 
