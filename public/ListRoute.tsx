@@ -3948,7 +3948,6 @@ export default function ListRoute() {
     const rows = profileRows();
     return rows ? topPlayedTags(rows, PLAYS_MOSTLY_SHOWN) : { tags: [], played: 0 };
   });
-  const playsMostly = () => playsMostlyProfile().tags;
   const ownStatus = (g: { appid: number }) => (showingMyAccount() ? getStatus(g.appid) : null);
   // Steam's "keep my playtime private" lists every game at 0 h, which reads like an unplayed library.
   const playtimeHidden = createMemo(() => {
@@ -3993,7 +3992,7 @@ export default function ListRoute() {
     return (
       <OwnedProfile
         archetype={archetype()}
-        tags={playsMostly()}
+        tags={playsMostlyProfile().tags}
         played={playsMostlyProfile().played}
         styleSentence={profileFacts().style ? STYLE_SENTENCES[profileFacts().style!] : null}
         story={profileFacts().story}
