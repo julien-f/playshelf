@@ -14,6 +14,7 @@ import { isSyncedPrefKey } from './syncedPrefKeys.ts';
 import { getMyAccount, setMyAccount, getCurrentAccount, setCurrentAccount } from './accountsStore.ts';
 import { resolveAccountSlot } from './accountData.ts';
 import { announce } from './announce.ts';
+import { storageGet, storageSet } from './safeStorage.ts';
 
 export interface AuthUser {
   steamid: string;
@@ -30,20 +31,11 @@ export function getAuthUser(): AuthUser | null {
 const SIGNED_IN_AS_KEY = 'steam.isonoe.net:signed-in-as';
 
 function readSignedInAs(): string | null {
-  try {
-    return localStorage.getItem(SIGNED_IN_AS_KEY);
-  } catch {
-    return null;
-  }
+  return storageGet('localStorage', SIGNED_IN_AS_KEY);
 }
 
 function writeSignedInAs(steamid: string | null): void {
-  try {
-    if (steamid) localStorage.setItem(SIGNED_IN_AS_KEY, steamid);
-    else localStorage.removeItem(SIGNED_IN_AS_KEY);
-  } catch {
-    /* unavailable storage */
-  }
+  storageSet('localStorage', SIGNED_IN_AS_KEY, steamid || null);
 }
 
 const [sessionExpired, setSessionExpired] = createSignal(false);
@@ -88,11 +80,7 @@ function hasSyncedBefore(steamid: string): boolean {
 }
 
 function markSyncedBefore(steamid: string): void {
-  try {
-    localStorage.setItem(SYNCED_FLAG_PREFIX + steamid, '1');
-  } catch {
-    /* unavailable storage */
-  }
+  storageSet('localStorage', SYNCED_FLAG_PREFIX + steamid, '1');
 }
 
 // Merges this device's local prefs against the account's server-side ones. Run on every sign-in

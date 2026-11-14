@@ -1,5 +1,6 @@
 // Which screen the presentation window goes to, where the browser can tell (the Window Management API,
 // Chromium only): remembered here, read by the main window to open it straight there next time.
+import { storageSet } from './safeStorage.ts';
 
 // The parts of the API used, declared here: not every TypeScript DOM library has them.
 export interface ScreenDetailed {
@@ -49,11 +50,8 @@ export async function targetScreen(): Promise<ScreenDetailed | null> {
 
 export function remember(s: ScreenDetailed): void {
   const { label, left, top, availLeft, availTop, availWidth, availHeight } = s;
-  try {
-    localStorage.setItem(KEY, JSON.stringify({ label, left, top, availLeft, availTop, availWidth, availHeight }));
-  } catch {
-    // Storage refused: placed this once, not remembered.
-  }
+  // Refused: placed this once, not remembered.
+  storageSet('localStorage', KEY, JSON.stringify({ label, left, top, availLeft, availTop, availWidth, availHeight }));
 }
 
 export function remembered(): ScreenDetailed | null {

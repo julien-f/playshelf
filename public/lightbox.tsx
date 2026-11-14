@@ -40,6 +40,7 @@ import Volume2 from 'lucide-solid/icons/volume-2';
 import VolumeX from 'lucide-solid/icons/volume-x';
 import X from 'lucide-solid/icons/x';
 import ZoomIn from 'lucide-solid/icons/zoom-in';
+import { storageGet, storageSet } from './safeStorage.ts';
 
 // ── State ──────────────────────────────────────────────────────────────────
 // Converted from plain module-level variables to Solid signals for
@@ -711,11 +712,7 @@ function syncLbTime(vc: HTMLElement, at: number, duration: number) {
 function setLbMuted(muted: boolean) {
   lbVideoEl.muted = muted;
   document.getElementById('screenshot-lightbox')?.classList.remove('lb--automuted');
-  try {
-    localStorage.setItem(LB_MUTED_KEY, muted ? '1' : '0');
-  } catch {
-    // storage refused: the choice lasts this trailer
-  }
+  storageSet('localStorage', LB_MUTED_KEY, muted ? '1' : '0'); // refused: the choice lasts this trailer
 }
 
 // Also called right after a render sets `muted`: a just-attached <video> may not report it in `volumechange`.
@@ -726,11 +723,7 @@ function syncLbMuteBtn(lb: HTMLElement) {
 }
 
 function lbMutedChoice(): boolean {
-  try {
-    return localStorage.getItem(LB_MUTED_KEY) === '1';
-  } catch {
-    return false;
-  }
+  return storageGet('localStorage', LB_MUTED_KEY) === '1';
 }
 
 // ── Chrome (toolbar/nav/video-controls) idle-hide ──────────────────────────
@@ -800,12 +793,8 @@ function flashLbCounter(lb: HTMLElement, gameChanged: boolean) {
 
 // The one hint at what the hidden controls do, on this device's first open; any action, or 4 s, ends it.
 function showLbHint(lb: HTMLElement) {
-  try {
-    if (localStorage.getItem(LB_HINT_KEY)) return;
-    localStorage.setItem(LB_HINT_KEY, '1');
-  } catch {
-    return; // storage refused: better no hint than one on every open
-  }
+  // Refused storage: better no hint than one on every open.
+  if (storageGet('localStorage', LB_HINT_KEY) || !storageSet('localStorage', LB_HINT_KEY, '1')) return;
   const hint = lb.querySelector<HTMLElement>('.lb-hint')!;
   const touch = matchMedia('(pointer: coarse)').matches;
   const games = untrack(() => _getGamePosition()) ? (touch ? 'swipe ↕ games · ' : '↑↓ games · ') : '';

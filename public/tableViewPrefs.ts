@@ -9,6 +9,7 @@ import { getPref, setPref } from './prefs.ts';
 import { diffViewLabels, stripTransientViewFields } from './tableViewSync.ts';
 import { urlWithParams } from './urlState.ts';
 import { copyWithFeedback } from './clipboard.ts';
+import { storageSet } from './safeStorage.ts';
 
 // Where a table's own view is kept: a prefs.ts key, or a user list's own tableView.
 export interface ViewStore {
@@ -86,12 +87,7 @@ function readDraft(id: string): TableViewState | null {
 }
 
 function writeDraft(id: string, view: TableViewState | null): void {
-  try {
-    if (view) sessionStorage.setItem(DRAFT_PREFIX + id, JSON.stringify(view));
-    else sessionStorage.removeItem(DRAFT_PREFIX + id);
-  } catch {
-    /* unavailable storage: the draft lives only on screen */
-  }
+  storageSet('sessionStorage', DRAFT_PREFIX + id, view && JSON.stringify(view)); // refused: the draft lives on screen
 }
 
 // What a route manages itself, kept out of the layout: `cols` entirely (a similarity sort), `ranges`

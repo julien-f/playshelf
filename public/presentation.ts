@@ -7,6 +7,7 @@ import { PRESENTATION_CHANNEL, HEARTBEAT_MS } from './presentationProtocol.ts';
 import type { Control, FromPresentation, OnAir, Playback, ToPresentation } from './presentationProtocol.ts';
 import { announce } from './announce.ts';
 import { remembered } from './presentationScreen.ts';
+import { storageGet, storageSet } from './safeStorage.ts';
 
 const MISSED_BEATS = 3;
 // A hidden window's throttled timers beat about once a minute: its silence means less.
@@ -27,12 +28,7 @@ export { presented, playback, privateMode };
 
 export function setPrivateMode(on: boolean): void {
   setPrivate(on);
-  try {
-    if (on) sessionStorage.setItem(PRIVATE_KEY, '1');
-    else sessionStorage.removeItem(PRIVATE_KEY);
-  } catch {
-    // Private browsing: it just won't survive a reload.
-  }
+  storageSet('sessionStorage', PRIVATE_KEY, on ? '1' : null); // refused: it just won't survive a reload
 }
 
 let mainId: string | null = null;
@@ -52,11 +48,7 @@ let relayedKey: ((key: string, up: boolean) => void) | undefined;
 let byeTimer: ReturnType<typeof setTimeout> | undefined;
 
 function storedId(): string | null {
-  try {
-    return sessionStorage.getItem(ID_KEY);
-  } catch {
-    return null;
-  }
+  return storageGet('sessionStorage', ID_KEY);
 }
 
 function post(msg: ToPresentation) {
@@ -149,11 +141,7 @@ function connect(id: string) {
 const resumedId = storedId();
 if (resumedId) {
   connect(resumedId);
-  try {
-    setPrivate(sessionStorage.getItem(PRIVATE_KEY) === '1');
-  } catch {
-    // Private browsing: nothing kept.
-  }
+  setPrivate(storageGet('sessionStorage', PRIVATE_KEY) === '1');
 }
 // Going: the window closes unless `main` follows (a reload), or this page comes back from the bfcache.
 addEventListener('pagehide', () => mainId && post({ main: mainId, type: 'bye' }));
@@ -187,11 +175,7 @@ export function present(
     return;
   }
   const id = storedId() ?? crypto.randomUUID();
-  try {
-    sessionStorage.setItem(ID_KEY, id);
-  } catch {
-    // Private mode: presenting still works, it just won't survive a reload of this window.
-  }
+  storageSet('sessionStorage', ID_KEY, id); // refused: presenting still works, but not across a reload
   connect(id);
   const url = `/present.html?main=${encodeURIComponent(id)}`;
   // Blocked: P or a click is a user gesture, so browsers seldom do.
@@ -233,9 +217,5 @@ export function stopPresenting(): void {
   forget();
   recentlyLost = null;
   mainId = null;
-  try {
-    sessionStorage.removeItem(ID_KEY);
-  } catch {
-    // Private mode: nothing was stored.
-  }
+  storageSet('sessionStorage', ID_KEY, null);
 }
