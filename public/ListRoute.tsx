@@ -306,6 +306,7 @@ import {
   resolveListWithSources,
   flattenCombineResult,
   createDefaultFetchers,
+  type DefaultFetchersOptions,
   type ListResolveFetchers,
   type ResolvedSource,
 } from './listResolve.ts';
@@ -1235,7 +1236,7 @@ export default function ListRoute() {
   // are "the unsaved dynamic list currently on screen", and everything reading combineList()
   // already treats them identically. What listShare.ts's decode step inlined as synthetic
   // GameLists (any `user` source in the shared formula) is kept only long enough to resolve/name
-  // them and to reconstruct real saved lists on "Save as a list" — see sharedFetchers/
+  // them and to reconstruct real saved lists on "Save as a list" — see sharedGetList/
   // sharedNaming/handleSaveShared below.
   const [sharedSynthetic, setSharedSynthetic] = createSignal<Map<string, GameList>>(new Map());
   // The formula's bundle sources as last fetched, for a link back to each.
@@ -1252,9 +1253,6 @@ export default function ListRoute() {
   // kind === 'game-pass': the last catalog read, for its note, its games not on Steam and its failures.
   const [gamePass, setGamePass] = createSignal<GamePassData | null>(null);
   const sharedGetList = (id: string): GameList | undefined => sharedSynthetic().get(id) ?? getList(id);
-  function sharedFetchers(base: ListResolveFetchers): ListResolveFetchers {
-    return { ...base, getList: sharedGetList };
-  }
   function sharedNaming(): ListNaming {
     const base = createDefaultNaming();
     return {
@@ -2456,6 +2454,16 @@ export default function ListRoute() {
         return null;
       }
     };
+    // A saved or shared formula's sources report what they left out, and a bundle's its Tier Price.
+    const formulaFetchers = (extra: Pick<DefaultFetchersOptions, 'onBundleGames' | 'onPlayers'>) =>
+      createDefaultFetchers({
+        refresh,
+        onFetchedAt,
+        onBundleLeftOut: noteLeftOut,
+        onGamePassLeftOut: (n) => (gamePassLeftOut = n),
+        onCreatorCapped: noteCapped,
+        ...extra,
+      });
     const describeWithLeftOut =
       (list: GameList, naming: ListNaming) =>
       (sources: ResolvedSource[]): ReturnType<typeof listSources> => {
@@ -2587,12 +2595,7 @@ export default function ListRoute() {
       setStatusText('Resolving list…');
       const resolved = await resolveRows(
         list,
-        createDefaultFetchers({
-          refresh,
-          onFetchedAt,
-          onBundleLeftOut: noteLeftOut,
-          onGamePassLeftOut: (n) => (gamePassLeftOut = n),
-          onCreatorCapped: noteCapped,
+        formulaFetchers({
           onBundleGames: (_bundleId, _bundle, games) => {
             if (!loadGuard.isStale(gen)) collectTiers(games);
           },
@@ -2617,7 +2620,7 @@ export default function ListRoute() {
       // Another dynamic list's formula, decoded straight from ?f= (listShare.ts) — same "resolve
       // an in-memory dynamic list through the normal listResolve.ts/listLabels.ts path" idea
       // `compare` above uses, just built from a URL-encoded formula instead of account slots. See
-      // this file's own header comment on the sharedSynthetic/sharedFetchers/sharedNaming trio.
+      // this file's own header comment on the sharedSynthetic/sharedGetList/sharedNaming trio.
       const decoded = decodeListFormula(sharedFormulaParam() ?? '');
       if (!decoded) {
         setStatusText("This link isn't a valid shared list.");
@@ -2631,13 +2634,8 @@ export default function ListRoute() {
       setStatusText('Resolving shared list…');
       const resolved = await resolveRows(
         list,
-        sharedFetchers(
-          createDefaultFetchers({
-            refresh,
-            onFetchedAt,
-            onBundleLeftOut: noteLeftOut,
-            onGamePassLeftOut: (n) => (gamePassLeftOut = n),
-            onCreatorCapped: noteCapped,
+        {
+          ...formulaFetchers({
             onBundleGames: (bundleId, bundle, games) => {
               if (loadGuard.isStale(gen)) return;
               setSharedBundles((prev) =>
@@ -2646,7 +2644,8 @@ export default function ListRoute() {
               collectTiers(games);
             },
           }),
-        ),
+          getList: sharedGetList,
+        },
         describeWithLeftOut(list, sharedNaming()),
       );
       if (!resolved) return;
