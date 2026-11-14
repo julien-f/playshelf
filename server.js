@@ -282,6 +282,15 @@ function sendRouteError(res, route, err) {
   res.status(status).json({ error, ...(status === 400 && err.accounts && { accounts: err.accounts }) });
 }
 
+// Every API route's errors go through sendRouteError, tagged with the route's name.
+const catchRouteError = (route, handler) => async (req, res) => {
+  try {
+    await handler(req, res);
+  } catch (err) {
+    sendRouteError(res, route, err);
+  }
+};
+
 const app = express();
 if (TRUST_PROXY) app.set('trust proxy', TRUST_PROXY);
 // One string per param (the last), so a repeated `?q=a&q=b` can't hand a route an array.
@@ -688,16 +697,18 @@ const gameBundlesLimit = namedRateLimit('gameBundles', {
 
 const RECENT_PLAYTIME_MS = 14 * 24 * 60 * 60 * 1000; // GetOwnedGames' playtime_2weeks
 
-app.post('/api/common-games', searchLimit, async (req, res) => {
-  const members = parseMembers(req, res);
-  if (!members) return;
+app.post(
+  '/api/common-games',
+  searchLimit,
+  catchRouteError('common-games', async (req, res) => {
+    const members = parseMembers(req, res);
+    if (!members) return;
 
-  // Explicit refresh (a user-clicked "↻ Refresh", not a normal search) bypasses the
-  // library-tier cache (owned games + player summaries) so a just-bought game or a
-  // changed display name shows up immediately, without waiting out the TTL.
-  const refresh = isForceRefresh(req);
+    // Explicit refresh (a user-clicked "↻ Refresh", not a normal search) bypasses the
+    // library-tier cache (owned games + player summaries) so a just-bought game or a
+    // changed display name shows up immediately, without waiting out the TTL.
+    const refresh = isForceRefresh(req);
 
-  try {
     const ids = await resolveSteamIds(members);
     const [summaries, ...owned] = await Promise.allSettled([
       getPlayerSummaries(ids, { force: refresh }),
@@ -764,21 +775,21 @@ app.post('/api/common-games', searchLimit, async (req, res) => {
       recentPlaytime,
       fetchedAt: oldestCachedAt(ids.map(ownedGamesCacheKey)),
     });
-  } catch (err) {
-    sendRouteError(res, 'common-games', err);
-  }
-});
+  }),
+);
 
 // Wishlist has no "family" concept in Steam itself — this just unions the
 // wishlists of whichever accounts the Library Explorer page has loaded,
 // same as it unions their owned-game libraries.
-app.post('/api/wishlist', searchLimit, async (req, res) => {
-  const members = parseMembers(req, res);
-  if (!members) return;
+app.post(
+  '/api/wishlist',
+  searchLimit,
+  catchRouteError('wishlist', async (req, res) => {
+    const members = parseMembers(req, res);
+    if (!members) return;
 
-  const refresh = isForceRefresh(req);
+    const refresh = isForceRefresh(req);
 
-  try {
     const ids = await resolveSteamIds(members);
     const [playerList, lists] = await Promise.all([
       getPlayerSummaries(ids, { force: refresh }),
@@ -807,22 +818,22 @@ app.post('/api/wishlist', searchLimit, async (req, res) => {
     }));
 
     res.json({ items, players, fetchedAt: oldestCachedAt(ids.map(wishlistCacheKey)) });
-  } catch (err) {
-    sendRouteError(res, 'wishlist', err);
-  }
-});
+  }),
+);
 
 // Friends have no "family" concept in Steam either — unions each member's own friends list,
 // same convention as /api/wishlist. A member whose friends list is private is silently
 // excluded from the union (reported separately in `unavailable`) rather than failing the
 // whole request.
-app.post('/api/friends', friendsLimit, async (req, res) => {
-  const members = parseMembers(req, res);
-  if (!members) return;
+app.post(
+  '/api/friends',
+  friendsLimit,
+  catchRouteError('friends', async (req, res) => {
+    const members = parseMembers(req, res);
+    if (!members) return;
 
-  const refresh = isForceRefresh(req);
+    const refresh = isForceRefresh(req);
 
-  try {
     const ids = await resolveSteamIds(members);
     const lists = await Promise.all(ids.map((id) => getFriendList(id, { force: refresh })));
 
@@ -841,10 +852,8 @@ app.post('/api/friends', friendsLimit, async (req, res) => {
     }));
 
     res.json({ friends, unavailable, fetchedAt: oldestCachedAt(ids.map(friendsCacheKey)) });
-  } catch (err) {
-    sendRouteError(res, 'friends', err);
-  }
-});
+  }),
+);
 
 // A result that one client's spent share left short (`limited`) is fetched again for another client.
 const dedupDetails = createDedup('details', { isRefused: (details) => !!details.limited });
@@ -1000,36 +1009,39 @@ async function fetchGameDetails(appid, options) {
 // Backs the "look up any game" search box (both pages) — resolves a typed name to a short
 // list of candidate appids, independent of anyone's library/wishlist. See lib/steam.js's
 // searchStoreGames for the upstream endpoint and docs/dev/integrations.md's trust tiers.
-app.get('/api/search-games', gameSearchLimit, async (req, res) => {
-  const term = normalizeSearchTerm(req.query.q);
-  if (term.length < 2) return res.json({ results: [] });
-  try {
+app.get(
+  '/api/search-games',
+  gameSearchLimit,
+  catchRouteError('search-games', async (req, res) => {
+    const term = normalizeSearchTerm(req.query.q);
+    if (term.length < 2) return res.json({ results: [] });
     const results = await searchStoreGames(term);
     res.json({ results });
-  } catch (err) {
-    sendRouteError(res, 'search-games', err);
-  }
-});
+  }),
+);
 
 // A developer's or publisher's games, by exact name — see lib/steam.js's searchCreatorGames.
-app.get('/api/creator-games', creatorGamesLimit, async (req, res) => {
-  const { role, name } = parseCreatorQuery(req);
-  if (!role) return res.status(400).json({ error: 'role must be developer or publisher' });
-  if (!name) return res.status(400).json({ error: 'Missing name' });
-  try {
+app.get(
+  '/api/creator-games',
+  creatorGamesLimit,
+  catchRouteError('creator-games', async (req, res) => {
+    const { role, name } = parseCreatorQuery(req);
+    if (!role) return res.status(400).json({ error: 'role must be developer or publisher' });
+    if (!name) return res.status(400).json({ error: 'Missing name' });
     const { appids, total, capped } = await searchCreatorGames(role, name, { force: isForceRefresh(req) });
     res.json({ appids, total, capped, fetchedAt: getCachedAt(creatorGamesCacheKey(role, name)) ?? null });
-  } catch (err) {
-    sendRouteError(res, 'creator-games', err);
-  }
-});
+  }),
+);
 
 // Backs the Bundles page's bundle list — a thin, cached proxy over ITAD's GET /bundles/v1.
 // See lib/itad.js and docs/dev/bundles-and-prices.md and docs/dev/data.md.
-app.get('/api/bundles', bundlesListLimit, requireItad, async (req, res) => {
-  const { country, offset, limit, sort, expired } = parseBundlesQuery(req);
-  if (offset > MAX_BUNDLES_OFFSET) return res.json({ bundles: [], offset, limit, fetchedAt: null });
-  try {
+app.get(
+  '/api/bundles',
+  bundlesListLimit,
+  requireItad,
+  catchRouteError('bundles', async (req, res) => {
+    const { country, offset, limit, sort, expired } = parseBundlesQuery(req);
+    if (offset > MAX_BUNDLES_OFFSET) return res.json({ bundles: [], offset, limit, fetchedAt: null });
     // ?refresh=1 backs the browse page's own "↻ Refresh" — a bundle can go live or expire at any
     // time, so "the list I'm looking at is out of date" needs an answer that isn't "wait out the
     // TTL". Only the pages this list comes from are forced; GET /api/bundles/:id deliberately has no
@@ -1060,23 +1072,24 @@ app.get('/api/bundles', bundlesListLimit, requireItad, async (req, res) => {
       limit,
       fetchedAt: oldestCachedAt(pageKeys),
     });
-  } catch (err) {
-    sendRouteError(res, 'bundles', err);
-  }
-});
+  }),
+);
 
 // Backs the Bundles page's `?bundle=<id>` deep link. There's no single-bundle-fetch endpoint
 // upstream (see findBundleById's own comment in lib/itad.js) — this pages through the same
 // GET /bundles/v1 the list above uses, active bundles first then expired, up to a bounded
 // number of pages, and 404s rather than searching indefinitely if the id never turns up (very
 // old/deleted bundle, or a bad id).
-app.get('/api/bundles/:id', bundlesByIdLimit, requireItad, async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
-    return res.status(400).json({ error: 'Invalid bundle id' });
-  }
-  const country = parseCountry(req);
-  try {
+app.get(
+  '/api/bundles/:id',
+  bundlesByIdLimit,
+  requireItad,
+  catchRouteError('bundles-by-id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid bundle id' });
+    }
+    const country = parseCountry(req);
     const found = await findBundleById(id, { country });
     if (!found) {
       return res
@@ -1088,10 +1101,8 @@ app.get('/api/bundles/:id', bundlesByIdLimit, requireItad, async (req, res) => {
     // this is stated rather than actionable: it says how old the tiers/dates on screen are.
     const [bundle] = await withPickAndMix(withChoiceEnd([found.bundle]), { names: true });
     res.json({ bundle, fetchedAt: getCachedAt(found.cacheKey) ?? null });
-  } catch (err) {
-    sendRouteError(res, 'bundles-by-id', err);
-  }
-});
+  }),
+);
 
 // Resolves a bundle's ITAD game ids (uuids, off tiers[].games[].id) to their Steam appid(s), so
 // the Bundles page can feed the resolved subset into the same GET /api/game-details/:appid /
@@ -1101,35 +1112,37 @@ app.get('/api/bundles/:id', bundlesByIdLimit, requireItad, async (req, res) => {
 // — the frontend renders those as the separate "not on Steam" list. `failed` lists the gids whose
 // lookup errored, so the frontend doesn't read them as "not on Steam".
 const MAX_BUNDLE_RESOLVE_GAMES = 500;
-app.post('/api/bundles/resolve', bundlesResolveLimit, requireItad, async (req, res) => {
-  const gids = req.body.gids;
-  if (!Array.isArray(gids) || gids.length === 0) {
-    return res.status(400).json({ error: 'Provide at least one game id' });
-  }
-  if (!gids.every(isItadGid)) return res.status(400).json({ error: 'gids must be ITAD game ids' });
-  if (gids.length > MAX_BUNDLE_RESOLVE_GAMES) {
-    return res.status(400).json({ error: `Too many games — maximum is ${MAX_BUNDLE_RESOLVE_GAMES}` });
-  }
-  try {
+app.post(
+  '/api/bundles/resolve',
+  bundlesResolveLimit,
+  requireItad,
+  catchRouteError('bundles-resolve', async (req, res) => {
+    const gids = req.body.gids;
+    if (!Array.isArray(gids) || gids.length === 0) {
+      return res.status(400).json({ error: 'Provide at least one game id' });
+    }
+    if (!gids.every(isItadGid)) return res.status(400).json({ error: 'gids must be ITAD game ids' });
+    if (gids.length > MAX_BUNDLE_RESOLVE_GAMES) {
+      return res.status(400).json({ error: `Too many games — maximum is ${MAX_BUNDLE_RESOLVE_GAMES}` });
+    }
     const unique = [...new Set(gids)];
     const resolved = await resolveSteamAppIds(unique);
     const failed = unique.filter((gid) => !resolved.has(gid));
     res.json({ appids: Object.fromEntries(resolved), ...(failed.length && { failed }) });
-  } catch (err) {
-    sendRouteError(res, 'bundles-resolve', err);
-  }
-});
+  }),
+);
 
 // The Steam games in PC Game Pass for `country`'s catalog — see lib/gamepass.js.
-app.get('/api/game-pass', gamePassLimit, requireItad, async (req, res) => {
-  const country = parseCountry(req);
-  try {
+app.get(
+  '/api/game-pass',
+  gamePassLimit,
+  requireItad,
+  catchRouteError('game-pass', async (req, res) => {
+    const country = parseCountry(req);
     const result = await getGamePass(country, { force: isForceRefresh(req) });
     res.json({ ...result, fetchedAt: getCachedAt(catalogCacheKey(country)) ?? null });
-  } catch (err) {
-    sendRouteError(res, 'game-pass', err);
-  }
-});
+  }),
+);
 
 // Steam's non-discounted regular price plus historical lows (all-time/1yr/3mo) and the current
 // best deal across every shop ITAD tracks — one shared route for both callers that need this,
@@ -1145,29 +1158,32 @@ app.get('/api/game-pass', gamePassLimit, requireItad, async (req, res) => {
 // specific; appid resolution isn't) and isn't always wanted (e.g. before a bundle's games have
 // even resolved to Steam). See lib/itad.js's resolveItadIds/getPrices/extractPriceInfo.
 const MAX_PRICE_LOOKUP_GAMES = 500;
-app.post('/api/prices', pricesLimit, requireItad, async (req, res) => {
-  const { gids, appids } = req.body;
-  const byGid = Array.isArray(gids) && gids.length > 0;
-  const byAppid = Array.isArray(appids) && appids.length > 0;
-  if (byGid === byAppid) {
-    // neither, or both — exactly one is required
-    return res.status(400).json({ error: 'Provide exactly one of gids or appids' });
-  }
-  if (byGid && !gids.every(isItadGid)) return res.status(400).json({ error: 'gids must be ITAD game ids' });
-  if (byAppid && !appids.every((a) => Number.isInteger(a) && a > 0)) {
-    return res.status(400).json({ error: 'appids must be positive integers' });
-  }
-  if ((byGid ? gids : appids).length > MAX_PRICE_LOOKUP_GAMES) {
-    return res.status(400).json({ error: `Too many games — maximum is ${MAX_PRICE_LOOKUP_GAMES}` });
-  }
-  const country = parseCountry(req);
-  // ?refresh=1 backs the page-level "↻ Refresh prices" button (bundles.js/library.js) — force
-  // only the price lookup itself, not the appid↔gid resolution above: that's an identity
-  // mapping, not price data, and near-permanent in practice (same reasoning as the panel's own
-  // ↻ Refresh never touching `resolve:` — see docs/dev/data.md), so refreshing
-  // it on every price refresh would just be an extra upstream call for nothing.
-  const force = isForceRefresh(req);
-  try {
+app.post(
+  '/api/prices',
+  pricesLimit,
+  requireItad,
+  catchRouteError('prices', async (req, res) => {
+    const { gids, appids } = req.body;
+    const byGid = Array.isArray(gids) && gids.length > 0;
+    const byAppid = Array.isArray(appids) && appids.length > 0;
+    if (byGid === byAppid) {
+      // neither, or both — exactly one is required
+      return res.status(400).json({ error: 'Provide exactly one of gids or appids' });
+    }
+    if (byGid && !gids.every(isItadGid)) return res.status(400).json({ error: 'gids must be ITAD game ids' });
+    if (byAppid && !appids.every((a) => Number.isInteger(a) && a > 0)) {
+      return res.status(400).json({ error: 'appids must be positive integers' });
+    }
+    if ((byGid ? gids : appids).length > MAX_PRICE_LOOKUP_GAMES) {
+      return res.status(400).json({ error: `Too many games — maximum is ${MAX_PRICE_LOOKUP_GAMES}` });
+    }
+    const country = parseCountry(req);
+    // ?refresh=1 backs the page-level "↻ Refresh prices" button (bundles.js/library.js) — force
+    // only the price lookup itself, not the appid↔gid resolution above: that's an identity
+    // mapping, not price data, and near-permanent in practice (same reasoning as the panel's own
+    // ↻ Refresh never touching `resolve:` — see docs/dev/data.md), so refreshing
+    // it on every price refresh would just be an extra upstream call for nothing.
+    const force = isForceRefresh(req);
     // Map(requested key → gid|null) — an identity map when the caller already sent gids, so
     // the response-shaping loop below doesn't need two separate code paths.
     const gidByKey = byAppid ? await resolveItadIds([...new Set(appids)]) : new Map(gids.map((g) => [g, g]));
@@ -1180,14 +1196,15 @@ app.post('/api/prices', pricesLimit, requireItad, async (req, res) => {
     // consequential to act on (someone clicks through to a shop from these), so how old they are
     // is worth stating rather than implying.
     res.json({ prices: out, fetchedAt: oldestCachedAt(gidsToPrice.map((gid) => priceCacheKey(gid, country))) });
-  } catch (err) {
-    sendRouteError(res, 'prices', err);
-  }
-});
+  }),
+);
 
-app.get('/api/game-bundles/:appid', gameBundlesLimit, requireItad, async (req, res) => {
-  const { appid } = req;
-  try {
+app.get(
+  '/api/game-bundles/:appid',
+  gameBundlesLimit,
+  requireItad,
+  catchRouteError('game-bundles', async (req, res) => {
+    const { appid } = req;
     const gid = (await resolveItadIds([appid])).get(appid);
     if (!gid) return res.json({ bundles: [] });
     const country = parseCountry(req);
@@ -1204,37 +1221,35 @@ app.get('/api/game-bundles/:appid', gameBundlesLimit, requireItad, async (req, r
         )
       : [];
     res.json({ bundles: extractGameBundles(await withPickAndMix(withChoiceEnd([...current, ...revived])), gid) });
-  } catch (err) {
-    sendRouteError(res, 'game-bundles', err);
-  }
-});
+  }),
+);
 
 app.get('/api/game-details/:appid', detailsLimit, async (req, res) => {
   const { appid } = req;
   res.json(await fetchGameDetails(appid, { force: isForceRefresh(req), priority: true }));
 });
 
-app.get('/api/game-meta/:appid', metaLimit, async (req, res) => {
-  const { appid } = req;
-  try {
+app.get(
+  '/api/game-meta/:appid',
+  metaLimit,
+  catchRouteError('game-meta', async (req, res) => {
+    const { appid } = req;
     res.json({ meta: await getAppDetails(appid) });
-  } catch (err) {
-    sendRouteError(res, 'game-meta', err);
-  }
-});
+  }),
+);
 
 // Recent news/announcements for one game — see newsLimit above for why this is its own
 // route rather than folded into fetchGameDetails/the SSE stream. Fetched by the side panel
 // (public/panelData.ts) once per game, only when that game's panel actually opens.
-app.get('/api/game-news/:appid', newsLimit, async (req, res) => {
-  const { appid } = req;
-  try {
+app.get(
+  '/api/game-news/:appid',
+  newsLimit,
+  catchRouteError('game-news', async (req, res) => {
+    const { appid } = req;
     const news = await getGameNews(appid, { force: isForceRefresh(req) });
     res.json({ news });
-  } catch (err) {
-    sendRouteError(res, 'game-news', err);
-  }
-});
+  }),
+);
 
 // Backs the Library Explorer side panel's "Achievements" section — schema (names/icons,
 // shared regardless of who's asking) plus per-account unlock state for every account
@@ -1243,23 +1258,25 @@ app.get('/api/game-news/:appid', newsLimit, async (req, res) => {
 // send resolved ids in practice). Accounts within a slot are unioned the same way
 // /api/common-games unions owned games: an achievement counts as unlocked for the group if
 // any member has it, keeping the earliest unlock time among those that do.
-app.get('/api/achievements/:appid', achievementsLimit, async (req, res) => {
-  const { appid } = req;
-  // Player progress (steamids) is optional — the achievement *list* (names, descriptions,
-  // icons, community-wide rarity) is store metadata, not tied to any account, so it's still
-  // useful with nobody loaded (e.g. a standalone "look up any game" lookup). Only the
-  // achieved/unlocktime state per item depends on steamids being present; see `playerCount`
-  // in the response below, which the frontend uses to distinguish "no player was asked about"
-  // from "a player was asked about but their data is unavailable" (private:true).
-  const rawIds = parseSteamIdsQuery(req);
-  if (rawIds.length > MAX_USERS) {
-    return res.status(400).json({ error: `Too many users — maximum is ${MAX_USERS}` });
-  }
-  const invalidIds = invalidMemberError(rawIds);
-  if (invalidIds) return res.status(400).json({ error: invalidIds });
+app.get(
+  '/api/achievements/:appid',
+  achievementsLimit,
+  catchRouteError('achievements', async (req, res) => {
+    const { appid } = req;
+    // Player progress (steamids) is optional — the achievement *list* (names, descriptions,
+    // icons, community-wide rarity) is store metadata, not tied to any account, so it's still
+    // useful with nobody loaded (e.g. a standalone "look up any game" lookup). Only the
+    // achieved/unlocktime state per item depends on steamids being present; see `playerCount`
+    // in the response below, which the frontend uses to distinguish "no player was asked about"
+    // from "a player was asked about but their data is unavailable" (private:true).
+    const rawIds = parseSteamIdsQuery(req);
+    if (rawIds.length > MAX_USERS) {
+      return res.status(400).json({ error: `Too many users — maximum is ${MAX_USERS}` });
+    }
+    const invalidIds = invalidMemberError(rawIds);
+    if (invalidIds) return res.status(400).json({ error: invalidIds });
 
-  const force = isForceRefresh(req);
-  try {
+    const force = isForceRefresh(req);
     const steamIds = await resolveSteamIds(rawIds);
     const none = { achievements: [], total: 0, unlocked: 0, private: false, playerCount: steamIds.length };
 
@@ -1348,10 +1365,8 @@ app.get('/api/achievements/:appid', achievementsLimit, async (req, res) => {
       steamUrl: `https://steamcommunity.com/stats/${appid}/achievements/`,
       ...(rarityFailed && { rarityFailed }),
     });
-  } catch (err) {
-    sendRouteError(res, 'achievements', err);
-  }
-});
+  }),
+);
 
 // This does the exact same per-appid work (rating/HLTB/meta/tags/ProtonDB) as
 // GET /api/game-details/:appid above and is meant to be throttled by the same budget — it's
