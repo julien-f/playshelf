@@ -150,12 +150,14 @@ test('syncFromUrl: a link that cannot be resolved reports the error and leaves n
 });
 
 test('syncFromUrl: a superseded resolve never overwrites a newer one', async (t) => {
-  // Two identifiers, the first resolving slower than the second — the stale-guard case.
+  // Two identifiers, the first resolving after the second — the stale-guard case.
+  let releaseSlow;
+  const slowReply = new Promise((r) => (releaseSlow = r));
   withFetch(t, async (url, opts) => {
     const body = JSON.parse(opts.body);
     if (url !== '/api/common-games') return { ok: true, json: async () => ({ items: [] }) };
     const slow = body.members[0] === 'slow';
-    if (slow) await new Promise((r) => setTimeout(r, 20));
+    if (slow) await slowReply;
     return {
       ok: true,
       json: async () => ({
@@ -168,7 +170,9 @@ test('syncFromUrl: a superseded resolve never overwrites a newer one', async (t)
 
   sync.syncFromUrl('?u=slow');
   sync.syncFromUrl('?u=fast');
-  await new Promise((r) => setTimeout(r, 40));
+  await settle(); // the fast one lands first
+  releaseSlow();
+  await settle();
 
   assert.equal(getAccountOverride().label, 'Fast');
   assert.deepEqual(sync.getState().identifiers, ['fast']);
@@ -191,16 +195,19 @@ test('clear: drops the override, and a later sync of the stripped URL is a no-op
 });
 
 test('clear: a resolve still in flight cannot land afterward', async (t) => {
+  let release;
+  const reply = new Promise((r) => (release = r));
   withFetch(t, async (url) => {
     if (url !== '/api/common-games') return { ok: true, json: async () => ({ items: [] }) };
-    await new Promise((r) => setTimeout(r, 20));
+    await reply;
     return { ok: true, json: async () => ({ games: [], players: [{ steamid: '1', personaname: 'Alice' }] }) };
   });
   const sync = createAccountOverrideSync();
 
   sync.syncFromUrl('?u=alice');
   sync.clear();
-  await new Promise((r) => setTimeout(r, 40));
+  release();
+  await settle();
 
   assert.equal(getAccountOverride(), null);
   assert.equal(sync.getState().state, 'none');
