@@ -2181,9 +2181,14 @@ function PanelHero(): JSX.Element {
 // The HLTB Main/Extra/Completionist breakdown. The glance strip above already carries HLTB's
 // "All PlayStyles" number (see GlanceGrid), so this is the fuller breakdown beneath it, not a
 // second copy of the headline figure.
+const HLTB_PARTS = [
+  ['main', 'Main Story'],
+  ['extra', 'Main + Extra'],
+  ['completionist', 'Completionist'],
+] as const;
 const hltbShown = (g: ReadonlyGame) => {
   const h = g.details?.hltb;
-  return !g.loading && !!h && !!(h.main || h.extra || h.completionist);
+  return !g.loading && !!h && HLTB_PARTS.some(([key]) => h[key]);
 };
 
 function HltbSection(props: { game: ReadonlyGame }): JSX.Element {
@@ -2191,7 +2196,7 @@ function HltbSection(props: { game: ReadonlyGame }): JSX.Element {
   const present = () => hltbShown(props.game);
   const parts = () => {
     const x = h();
-    return [x?.main && 'Main Story', x?.extra && 'Main + Extra', x?.completionist && 'Completionist'].filter(Boolean);
+    return HLTB_PARTS.filter(([key]) => x?.[key]).map(([, label]) => label);
   };
 
   // Collapsed by default like achievements/news, EXCEPT when `all` itself is missing — then this
@@ -2222,30 +2227,18 @@ function HltbSection(props: { game: ReadonlyGame }): JSX.Element {
           body={
             <div class="panel-collapsible-body-pad">
               <dl class="panel-hltb">
-                <Show when={h()?.main}>
-                  {(v) => (
-                    <div class="panel-hltb-item">
-                      <dt class="panel-hltb-label">Main Story</dt>
-                      <dd class="panel-hltb-val">{fmtH(v())}</dd>
-                    </div>
+                <For each={HLTB_PARTS}>
+                  {([key, label]) => (
+                    <Show when={h()?.[key]}>
+                      {(v) => (
+                        <div class="panel-hltb-item">
+                          <dt class="panel-hltb-label">{label}</dt>
+                          <dd class="panel-hltb-val">{fmtH(v())}</dd>
+                        </div>
+                      )}
+                    </Show>
                   )}
-                </Show>
-                <Show when={h()?.extra}>
-                  {(v) => (
-                    <div class="panel-hltb-item">
-                      <dt class="panel-hltb-label">Main + Extra</dt>
-                      <dd class="panel-hltb-val">{fmtH(v())}</dd>
-                    </div>
-                  )}
-                </Show>
-                <Show when={h()?.completionist}>
-                  {(v) => (
-                    <div class="panel-hltb-item">
-                      <dt class="panel-hltb-label">Completionist</dt>
-                      <dd class="panel-hltb-val">{fmtH(v())}</dd>
-                    </div>
-                  )}
-                </Show>
+                </For>
               </dl>
             </div>
           }
