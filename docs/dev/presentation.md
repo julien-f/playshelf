@@ -18,7 +18,7 @@ A second window (`present.html`, its own Vite entry: `PresentationView.tsx`): a 
 
 | Direction     | Message    | Meaning                                                                                                                                                    |
 | ------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Main → window | `onAir`    | One `buildMediaItems` item, a plain object: store rows are proxies, which `postMessage` can't clone. A repeat, `startAt` and `paused`: see below           |
+| Main → window | `onAir`    | One `gameMediaItems` item, a plain object: store rows are proxies, which `postMessage` can't clone. A repeat, `startAt` and `paused`: see below            |
 | Main → window | `control`  | Play, pause, replay, mute, unmute, retry, `seekBy`, `seekTo` (the nav chip, the linked lightbox)                                                           |
 | Main → window | `caption`  | Show the caption again: a key pressed there that does nothing (the host browsing privately)                                                                |
 | Main → window | `close`    | It closes itself; Stop also closes it through `window.open`'s handle, which reaches a window still loading but not one opened before a main-window reload  |
