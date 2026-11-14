@@ -143,7 +143,12 @@ test('resetTableView: blanks the view and the stored default', () => {
 
 // ── layoutDraft: a change stays a draft until Save or Discard ───────────────────────────────
 
-const restoreFor = (table) => layoutDraft(table, 'libraryView', prefViewStore('libraryView')).restore();
+// Whether a shared view applied.
+const restoreFor = (table) => {
+  const layout = layoutDraft(table, 'libraryView', prefViewStore('libraryView'));
+  layout.restore();
+  return layout.viewingShared();
+};
 
 test('layoutDraft: a change goes to the draft, not the stored layout, and says what differs', () => {
   withLocation('', () => {

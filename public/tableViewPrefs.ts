@@ -140,8 +140,8 @@ function layoutOf(view: TableViewState, temporary: TemporaryKeys, defaults: Tabl
 
 export interface LayoutDraft {
   // Applies the stored layout (the baseline), then a shared link's layout or this tab's draft over
-  // it; true when a shared one applied (viewingShared, which pauses persistence).
-  restore(): boolean;
+  // it; viewingShared when a shared one applied (which pauses persistence).
+  restore(): void;
   // Writes every future view change to `store`, the only ongoing side effect table interaction has (the URL stays
   // untouched until explicitly shared); paused while viewingShared. Returns the dispose function.
   bind(): () => void;
@@ -192,7 +192,6 @@ export function layoutDraft(
       const draft = readDraft(id);
       if (shared ?? draft) table.setViewState((shared ?? draft)!);
       setViewingShared(shared != null);
-      return shared != null;
     },
     // An effect re-reading getViewState() (tracking every signal it touches), in its own root since a route can bind
     // it from an async load.

@@ -89,7 +89,7 @@ import { MAX_RECENT_GAMES } from './recentGames.ts';
 // tooltip says "as of the last refresh" rather than implying real-time presence.
 
 type TreeEntry = { type: 'folder'; item: Folder } | { type: 'list'; item: GameList };
-type TreeRow = TreeEntry & { depth: number };
+type TreeRow = TreeEntry & { order: number; depth: number };
 
 export default function HomeRoute() {
   const location = useLocation();
@@ -136,7 +136,6 @@ export default function HomeRoute() {
   // Extracted from the effect below so the card's own ↻ can re-run it with `refresh: true`,
   // which forces the server past its library-tier cache for this account (owned games, wishlist
   // and profile alike) rather than waiting out a TTL now measured in weeks.
-  // Every load, not just a refresh: a superseded one never settles these for the next account.
   function resetAccountData(refreshing: boolean): void {
     setCounts({ owned: null, wishlist: null });
     setPlayers([]);
@@ -144,6 +143,7 @@ export default function HomeRoute() {
     setFetchedAt(null);
   }
   function loadAccountData(account: AccountSlot, { refresh = false }: { refresh?: boolean } = {}): void {
+    // Every load, not just a refresh: a superseded one never settles these for the next account.
     resetAccountData(refresh);
     const members = account.members;
     // Guards every setter below: switching accounts again before this fetch settles (e.g.
