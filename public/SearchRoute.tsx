@@ -14,7 +14,7 @@ import { useBaseTitle } from './pageTitle.ts';
 import { ListHero } from './ListHero.tsx';
 import { registerRouteHandlers } from './AppShell.tsx';
 import { panelOpen, panelClose, isPanelOpen, getPanelGame, pickRandomFrom } from './panel.tsx';
-import { renderPanelNav, stepGameList } from './panelNav.ts';
+import { listPosition, renderPanelNav, stepGameList } from './panelNav.ts';
 import { setPanelParam, setSearchQueryParam, parseUrlState } from './urlState.ts';
 import { addRecentGame } from './recentGames.ts';
 import { peekMyOwnershipStatus } from './myOwnership.ts';
@@ -218,10 +218,7 @@ export default function SearchRoute() {
 
   function gamePosition(): { index: number; total: number } | null {
     const game = getPanelGame();
-    if (!game) return null;
-    const list = getGameList();
-    const index = list.findIndex((g) => g.appid === game.appid);
-    return index === -1 ? null : { index, total: list.length };
+    return game ? listPosition(getGameList(), game.appid) : null;
   }
 
   // Auto-open happens at most once, for the initial `?q=` landing only (a Firefox keyword

@@ -57,13 +57,18 @@ export function renderPanelNav({
     next.append(createComponent(ChevronDown, {}) as Node);
     reroll.prepend(createComponent(Dices, {}) as Node);
     createEffect(() => {
-      const list = getGameList();
-      const idx = list.findIndex((g) => g.appid === game.appid);
+      const at = listPosition(getGameList(), game.appid);
       // A game the table no longer shows has no place to step from; `visibility` keeps the dice in place.
-      prev.style.visibility = next.style.visibility = idx === -1 ? 'hidden' : '';
-      pos.textContent = idx === -1 ? '' : `${idx + 1} / ${list.length}`;
+      prev.style.visibility = next.style.visibility = at ? '' : 'hidden';
+      pos.textContent = at ? `${at.index + 1} / ${at.total}` : '';
     });
   });
+}
+
+// Where `appid` sits in the list the panel steps through, for its "n of N"; null when it isn't there.
+export function listPosition(list: readonly Game[], appid: number): { index: number; total: number } | null {
+  const index = list.findIndex((g) => g.appid === appid);
+  return index === -1 ? null : { index, total: list.length };
 }
 
 // The step `getGameList()` itself does for ArrowLeft/Right-in-the-lightbox nav (see

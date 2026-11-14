@@ -141,7 +141,7 @@ import {
   type LayoutDraft,
   type ViewStore,
 } from './tableViewPrefs.ts';
-import { renderPanelNav, stepGameList } from './panelNav.ts';
+import { listPosition, renderPanelNav, stepGameList } from './panelNav.ts';
 import { KIND_LAYOUTS, PICK_BUNDLE_LAYOUT, type ListKind } from './tableViewKeys.ts';
 import { createRowStore } from './rowStore.ts';
 import { createStaleGuard } from './staleGuard.ts';
@@ -1693,9 +1693,7 @@ export default function ListRoute() {
   function gamePosition(): { index: number; total: number } | null {
     const game = getPanelGame();
     if (!table || !game || game.standalone) return null;
-    const list = getGameList();
-    const index = list.findIndex((g) => g.appid === game.appid);
-    return index === -1 ? null : { index, total: list.length };
+    return listPosition(getGameList(), game.appid);
   }
 
   function stepGame(dir: 1 | -1): boolean {
