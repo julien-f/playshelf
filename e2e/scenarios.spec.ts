@@ -4135,6 +4135,12 @@ test(
   },
 );
 
+// Checks these rows, then ranks them: the button counts what's checked.
+async function rankChosen(page: Page, names: string[]) {
+  for (const name of names) await row(page, name).getByRole('checkbox').check();
+  await page.getByRole('button', { name: `Rank ${names.length} games` }).click();
+}
+
 test(
   "R1 edge: a ranking card's HLTB time is the table's, rounded and labelled",
   { tag: '@any-width' },
@@ -4143,8 +4149,7 @@ test(
     await page.goto('/lists/owned');
     await expect(page.locator('thead th').filter({ hasText: /^HLTB \(h\)/ })).toHaveCount(1);
     await expect(row(page, 'Hades')).toContainText('44.5');
-    for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
-    await page.getByRole('button', { name: 'Rank 2 games' }).click();
+    await rankChosen(page, ['Portal 2', 'Hades']);
     await expect(page.locator('.rank-route')).toContainText('44.5 h to beat');
   },
 );
@@ -4152,8 +4157,7 @@ test(
 test("R1 edge: the ranking's keyboard hints show only with a mouse", async ({ page }, testInfo) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
-  for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Rank 2 games' }).click();
+  await rankChosen(page, ['Portal 2', 'Hades']);
   await expect(page.locator('.rank-question')).toBeVisible();
   await expect(page.locator('.rank-hint')).toBeVisible({ visible: testInfo.project.name !== 'phone' });
 });
@@ -4164,8 +4168,7 @@ test(
   async ({ page }) => {
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned');
-    for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
-    await page.getByRole('button', { name: 'Rank 2 games' }).click();
+    await rankChosen(page, ['Portal 2', 'Hades']);
     await page.getByRole('button', { name: 'Details', exact: true }).first().click();
     const similar = page.locator('#panel-section-similar');
     await expect(similar.locator('.panel-section-title')).toHaveText(/^Similar in Alice's library/);
@@ -4177,8 +4180,7 @@ test(
 test("R1 edge: the ranking's side panel shows tags as plain pills and its Refresh re-fetches", async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
-  for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Rank 2 games' }).click();
+  await rankChosen(page, ['Portal 2', 'Hades']);
   await page.getByRole('button', { name: 'Details', exact: true }).first().click();
 
   const panel = page.locator('.panel-tags');
@@ -4201,8 +4203,7 @@ test("R1 edge: the ranking's side panel shows tags as plain pills and its Refres
 test("R1 edge: a failed Refresh on the ranking's side panel says so", { tag: '@any-width' }, async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
-  for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Rank 2 games' }).click();
+  await rankChosen(page, ['Portal 2', 'Hades']);
   await page.getByRole('button', { name: 'Details', exact: true }).first().click();
   await page.route(/\/api\/game-details\/\d+\?refresh=1$/, (route) =>
     route.fulfill({ status: 502, json: { error: 'Steam did not answer' } }),
@@ -4239,8 +4240,7 @@ test('I1 edge: on a phone, the ranking shows both cards and its Tie/Skip/Undo wi
   test.skip(testInfo.project.name !== 'phone', 'phone layout');
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
-  for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Rank 2 games' }).click();
+  await rankChosen(page, ['Portal 2', 'Hades']);
   await expect(page.locator('.rank-card-name').nth(1)).not.toHaveText(/^App /);
 
   const viewport = page.viewportSize()!;
@@ -4299,8 +4299,7 @@ test("I1 edge: on a phone with no account yet, the nav's search, account and pre
 test('R1.1,3-6: rank chosen games, stop, resume on the same ones', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
-  for (const name of ['Portal 2', 'Terraria', 'Hades']) await row(page, name).getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Rank 3 games' }).click();
+  await rankChosen(page, ['Portal 2', 'Terraria', 'Hades']);
 
   await expect(page.getByText('Comparing 3 chosen games.')).toBeVisible();
   await page.keyboard.press('ArrowLeft');
@@ -4318,8 +4317,7 @@ test(
   async ({ page }) => {
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned');
-    for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
-    await page.getByRole('button', { name: 'Rank 2 games' }).click();
+    await rankChosen(page, ['Portal 2', 'Hades']);
     const details = page.getByRole('button', { name: 'Details', exact: true }).first();
     await details.click();
     await expect(page.locator('.game-panel')).toBeVisible();
@@ -4344,8 +4342,7 @@ test(
   async ({ page }) => {
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned');
-    for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
-    await page.getByRole('button', { name: 'Rank 2 games' }).click();
+    await rankChosen(page, ['Portal 2', 'Hades']);
     const tie = page.getByRole('button', { name: /^Tie/ });
     await expect(tie).toContainText('↓');
     await page.getByRole('button', { name: 'Details', exact: true }).first().click();
@@ -4370,8 +4367,7 @@ test(
 test('R1 edge: Esc closing a nav popover stays on the ranking', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
-  for (const name of ['Portal 2', 'Terraria', 'Hades']) await row(page, name).getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Rank 3 games' }).click();
+  await rankChosen(page, ['Portal 2', 'Terraria', 'Hades']);
   await expect(page.getByText('Comparing 3 chosen games.')).toBeVisible();
 
   await page.getByLabel('Preferences').click();
@@ -5553,8 +5549,7 @@ test('D2 edge: past its share, Refresh details, a lookup and the ranking say so 
   await expect(page.locator('.search-page-status[role="status"]')).toHaveText(LIMITED);
 
   await page.goto('/lists/owned');
-  for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Rank 2 games' }).click();
+  await rankChosen(page, ['Portal 2', 'Hades']);
   await expect(page.locator('.rank-route .list-status')).toHaveText(LIMITED);
 });
 
@@ -5571,8 +5566,7 @@ test("D2 edge: on the ranking, a later card's past-its-share reply doesn't hide 
   });
   await page.goto('/lists/owned');
   const names = ['Portal 2', 'Terraria', 'Hades'];
-  for (const name of names) await row(page, name).getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Rank 3 games' }).click();
+  await rankChosen(page, names);
   const cards = page.locator('.rank-card-name');
   for (const i of [0, 1]) await expect(cards.nth(i)).not.toHaveText(/^App /);
   const shown = await cards.allTextContents();
@@ -5603,8 +5597,7 @@ test('D2 edge: on the ranking, a retried Refresh details answered past its share
     await route.fulfill({ status: reply.status, contentType: reply.contentType, body: reply.body });
   });
   await page.goto('/lists/owned');
-  for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Rank 2 games' }).click();
+  await rankChosen(page, ['Portal 2', 'Hades']);
   await page.getByRole('button', { name: 'Details', exact: true }).first().click();
   const refresh = page.locator('.panel-refresh-btn');
   const status = page.locator('.rank-route .list-status');
