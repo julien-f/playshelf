@@ -5994,6 +5994,8 @@ test('I2 edge: a key on a control reached with Tab leaves the controls shown', a
 
 test('F1 edge: on a phone, a double-tap zooms a screenshot and another zooms back out', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'phone', 'touch only');
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now() + 1000); // load would otherwise outlast the lightbox's timers (testing.md)
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360&shot=s1');
   const img = page.locator('#screenshot-lightbox .lb-img');
@@ -6888,6 +6890,8 @@ test('F1 edge: on a phone, the previous/next media buttons sit clear of the medi
 });
 
 test("F1 edge: the viewer's toolbar holds only fullscreen, zoom and close", { tag: '@any-width' }, async ({ page }) => {
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now() + 1000); // load would otherwise outlast the lightbox's timers (testing.md)
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360&shot=s1');
   // The address bar already holds the media's link (`?shot=`), so there is no copy button.
@@ -7329,10 +7333,14 @@ test('F1 edge: on a phone, a sideways swipe drags the next media in beside the o
 
 test('F1 edge: on a phone, a pinch zooms around the point between the fingers', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'phone', 'touch only');
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now() + 1000); // load would otherwise outlast the lightbox's timers (testing.md)
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360&shot=s1');
   const img = page.locator('#screenshot-lightbox .lb-img');
-  await stillShown(page, 'Screenshot 1 of 3');
+  // The counter, not the status line: paused, its debounced write waits.
+  await expect(page.locator('.lb-counter-n')).toHaveText('3 / 5'); // screenshot 1 of 3, after the trailers
+  await expect(page.locator('#screenshot-lightbox')).not.toHaveClass(/lb--loading/);
   const before = await visibleBox(img);
   const mid = { x: before.x + before.width * 0.75, y: before.y + before.height / 2 };
   const cdp = await page.context().newCDPSession(page);
