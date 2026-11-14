@@ -5,7 +5,7 @@ import { getPref, setPref } from './prefs.ts';
 
 export type GameStatus = 'finished' | 'abandoned';
 
-export const GAME_STATUSES_KEY = 'gameStatuses';
+const GAME_STATUSES_KEY = 'gameStatuses';
 
 // Stored as one letter per game: the whole map is one synced key, flushed with keepalive (64 KiB) on tab hide.
 const CODES: Record<GameStatus, string> = { finished: 'f', abandoned: 'a' };

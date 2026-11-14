@@ -125,7 +125,7 @@ function writeDraft(id: string, view: TableViewState | null): void {
 
 // What a route manages itself, kept out of the layout: `cols` entirely (a similarity sort), `ranges`
 // only as range filters (a bundle's pressed tier, which means nothing on another bundle).
-export interface TemporaryKeys {
+interface TemporaryKeys {
   cols?: readonly string[];
   ranges?: readonly string[];
 }

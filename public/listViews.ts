@@ -11,7 +11,7 @@ import { COMING_SOON, availabilityOf, protonDbValue } from './gameColumns.ts';
 export type ViewKind = 'owned' | 'wishlist';
 type ListViews = Partial<Record<ViewKind, SavedView[]>>;
 
-export const LIST_VIEWS_KEY = 'listViews';
+const LIST_VIEWS_KEY = 'listViews';
 
 function read(): ListViews {
   const views = getPref<ListViews>(LIST_VIEWS_KEY, {});
@@ -67,7 +67,7 @@ export const PLAY_NEXT_MAX_HOURS = 2;
 
 // Suggested views, stamped into a SavedView at creation; an id is unique within its kind; `cols` are its visible columns in display order. No price
 // column without `needsPrices`, nor a sort or column set equal to the list's default: either reads back as unsaved.
-export interface ViewTemplate {
+interface ViewTemplate {
   id: string;
   kind: ViewKind;
   name: string;

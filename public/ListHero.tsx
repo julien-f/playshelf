@@ -25,7 +25,7 @@ import Ellipsis from 'lucide-solid/icons/ellipsis';
 import RefreshCw from 'lucide-solid/icons/refresh-cw';
 
 // One of a tile's chips (a bundle's tiers): a toggle with `onClick`, else plain text.
-export interface HeroChip {
+interface HeroChip {
   text: string;
   title: string;
   ariaLabel?: string;

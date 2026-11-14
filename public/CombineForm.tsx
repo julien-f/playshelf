@@ -56,7 +56,7 @@ export function sourceOptions(excludeListId?: string, keep: readonly ListRef[] =
   }));
 }
 
-export interface CombineFormProps {
+interface CombineFormProps {
   initialOp?: CombineOp;
   initialSources?: ListRef[];
   excludeListId?: string;

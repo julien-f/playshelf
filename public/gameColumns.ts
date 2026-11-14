@@ -444,10 +444,7 @@ export function withMissingGroup(bucketFn: (v: unknown, row: Row) => unknown) {
   return (value: unknown, row: Row) => (value == null ? null : bucketFn(value, row));
 }
 // Pairs with withMissingGroup above: labels its empty-string group key.
-export function formatMissingGroup(
-  formatFn: (keyPart: string) => string,
-  missingLabel = '—',
-): (keyPart: string) => string {
+function formatMissingGroup(formatFn: (keyPart: string) => string, missingLabel = '—'): (keyPart: string) => string {
   return (keyPart) => (keyPart === '' ? missingLabel : formatFn(keyPart));
 }
 
