@@ -4,8 +4,8 @@ export type HlsVideo = HTMLVideoElement & { _hls?: { destroy: () => void } | nul
 
 // hls.js is ~130KB gzipped and only needed once a non-Safari browser plays a trailer: loaded then,
 // memoized, so the lightbox's prefetch can warm it ahead of a video shot.
-let _hlsModulePromise: Promise<any> | null = null;
-export function loadHlsModule(): Promise<any> {
+let _hlsModulePromise: Promise<typeof import('hls.js').default> | null = null;
+export function loadHlsModule(): Promise<typeof import('hls.js').default> {
   return (_hlsModulePromise ??= import('hls.js').then((m) => m.default));
 }
 
