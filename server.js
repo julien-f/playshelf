@@ -250,7 +250,7 @@ function oldestOf(timestamps) {
 // the full stack, not just the message, since a bug needs its source line to be traceable.
 function routeErrorStatus(route, err, unreadable) {
   if (err.isClientError) return 400;
-  // Circuit-open errors (lib/steam.js's fetchStoreApi, while steam-store is blocked) are an
+  // Circuit-open errors (lib/steam.js's fetchStoreJson, while steam-store is blocked) are an
   // expected, already-logged consequence of the trip itself — see the one-time
   // [circuit-breaker] warning logged there at the moment it actually trips. Logging one more
   // near-identical [upstream:...] line per request blocked during the 5-minute window would

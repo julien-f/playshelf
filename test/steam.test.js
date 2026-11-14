@@ -103,7 +103,7 @@ test('steam-store circuit breaker: requests already queued when it trips never r
   assert.ok(fetchMock.mock.callCount() <= 3, `${fetchMock.mock.callCount()} requests`);
 });
 
-test('fetchStoreApi: the circuit-open error is marked isLogged so callers can skip re-logging it', async (t) => {
+test('fetchStoreJson: the circuit-open error is marked isLogged so callers can skip re-logging it', async (t) => {
   _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
@@ -151,7 +151,7 @@ test('steam-store circuit breaker: tripCount increments on trip and stays 0 unti
   assert.equal(getCircuitBreakers()['steam-store'].tripCount, 1, 'two consecutive 403s trip it once');
 });
 
-test('fetchStoreApi: a 429 holds every queued store request until Retry-After has passed', async (t) => {
+test('fetchStoreJson: a 429 holds every queued store request until Retry-After has passed', async (t) => {
   _reset();
   _resetCircuitBreakers();
   t.after(_resetCircuitBreakers);
@@ -941,7 +941,7 @@ test('getGameRating: throws isUpstream after exhausting 429 retries', async (t) 
   );
 });
 
-test('fetchStoreApi: a redirect fails with its target instead of being followed', async (t) => {
+test('fetchStoreJson: a redirect fails with its target instead of being followed', async (t) => {
   _reset();
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: false,
