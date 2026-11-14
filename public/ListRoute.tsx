@@ -3219,7 +3219,7 @@ export default function ListRoute() {
   const selectedOwnedGids = createMemo(() => {
     const owned = new Map<string | number, boolean>();
     for (const r of selectedRows()) {
-      const key = gidOf(r.appid) ?? r.appid;
+      const key = gameKey(r);
       owned.set(key, (owned.get(key) ?? true) && !!r.inLibrary);
     }
     return new Set([...owned].filter(([, all]) => all).map(([key]) => key));
@@ -3228,7 +3228,7 @@ export default function ListRoute() {
   function pickSaving(plan: PickPlan): { amount: number; text: string; overpays: boolean } | null {
     const owned = selectedOwnedGids();
     const amount = sumBestDeals(
-      selectedRows().filter((r) => !owned.has(gidOf(r.appid) ?? r.appid)),
+      selectedRows().filter((r) => !owned.has(gameKey(r))),
       plan.currency,
     );
     return amount == null ? null : { amount, ...savingsText(plan.cost, amount, plan.currency, regionCurrency()) };
