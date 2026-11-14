@@ -856,10 +856,9 @@ function logDetailsError(appid, label, err) {
   console.warn(`[game-details] ${label} (appid ${appid}):`, err?.message, err?.cause ?? '');
 }
 
-// The part's sources' `failed` names (each logged), refusal message and per-source ages, from its settled results.
+// The part's sources' `failed` names, refusal message and per-source ages, from its settled results.
 function settleSources(appid, sources, results) {
   const failed = Object.keys(results).filter((source) => results[source].status === 'rejected');
-  for (const source of failed) logDetailsError(appid, source, results[source].reason);
   // A source refused because this client spent its share: the stream says so once, not per game.
   const refused = Object.values(results).find((r) => r.status === 'rejected' && r.reason?.isClientBudgetExhausted);
   // Each source's own age: one untouched store page mustn't date the rating fetched yesterday. An expired row's
@@ -923,8 +922,12 @@ function fetchFastDetails(appid, { force = false, priority = false, storeDetails
       namedPromise,
       browsePromise,
     ]).then(async ([ratingRes, hltbRes, tagsRes, demoRes, protondbRes, basicsRes, namedRes, browseRes]) => {
+      if (ratingRes.status === 'rejected') logDetailsError(appid, 'rating', ratingRes.reason);
+      if (hltbRes.status === 'rejected') logDetailsError(appid, 'hltb', hltbRes.reason);
+      if (tagsRes.status === 'rejected') logDetailsError(appid, 'tags', tagsRes.reason);
       if (demoRes.status === 'rejected' && demoRes.reason !== tagsRes.reason)
         logDetailsError(appid, 'demo', demoRes.reason);
+      if (protondbRes.status === 'rejected') logDetailsError(appid, 'protondb', protondbRes.reason);
       const basics = value(basicsRes);
       // An unreleased game's empty sources expire like misses, to fill in after release; so do they when its phase is
       // unknown (a browse item without basics, no store page cached). A released or delisted (no item) game's are
@@ -968,6 +971,7 @@ function fetchFastDetails(appid, { force = false, priority = false, storeDetails
 function fetchStoreDetails(appid, { force = false } = {}) {
   return dedupDetails(`details:store:${force ? 'force:' : ''}${appid}`, () =>
     Promise.allSettled([getAppDetails(appid, { force })]).then(([metaRes]) => {
+      if (metaRes.status === 'rejected') logDetailsError(appid, 'meta', metaRes.reason);
       return { meta: value(metaRes), ...settleSources(appid, STORE_SOURCES, { meta: metaRes }) };
     }),
   );
