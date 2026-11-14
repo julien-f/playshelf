@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
-const { claimPort, listening, planRun } = require('../scripts/e2e');
+const { buildInputsHash, claimPort, listening, planRun } = require('../scripts/e2e');
 
 test('planRun: records a pass only for the projects a run covers in full', () => {
   const none = new Set();
@@ -72,4 +72,34 @@ test('listening: true while a server accepts on the port, false once it closes',
   assert.equal(await listening(port), true);
   await new Promise((resolve) => server.close(resolve));
   assert.equal(await listening(port), false);
+});
+
+test('buildInputsHash: changes with the frontend, static files and configs, not with e2e/ or the backend', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-build-'));
+  try {
+    for (const f of [
+      'public/app.tsx',
+      'static/icon.svg',
+      'vite.config.js',
+      'tsconfig.json',
+      'package-lock.json',
+      'e2e/a.spec.ts',
+      'lib/x.js',
+    ]) {
+      fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true });
+      fs.writeFileSync(path.join(root, f), 'v1');
+    }
+    const first = buildInputsHash(root);
+    for (const f of ['e2e/a.spec.ts', 'lib/x.js']) fs.writeFileSync(path.join(root, f), 'v2');
+    assert.equal(buildInputsHash(root), first);
+    for (const f of ['public/app.tsx', 'static/icon.svg', 'vite.config.js', 'tsconfig.json', 'package-lock.json']) {
+      const before = buildInputsHash(root);
+      fs.writeFileSync(path.join(root, f), `${f} changed`);
+      assert.notEqual(buildInputsHash(root), before, f);
+    }
+    fs.writeFileSync(path.join(root, 'public/new.ts'), '');
+    assert.notEqual(buildInputsHash(root), first);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

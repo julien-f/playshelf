@@ -6,6 +6,7 @@
 // skipped, since they would test exactly what passed. With --since=<ref> (a fix-batch lane), a
 // branch whose commits since <ref> touch nothing the suite covers (check.js's UI files) skips it.
 // A port another run holds or something listens on is skipped for the next free one, unless E2E_PORT sets it.
+// The build is skipped when its inputs are those of the build already in its directory (most runs only change e2e/).
 // Each --if-changed run logs the projects asked for and those run (dev-metrics `e2e-runs`).
 //   node scripts/e2e.js [--if-changed] [--since=<ref>] [playwright args…]
 
@@ -45,6 +46,18 @@ function inputsHash(outDir) {
     ...filesUnder(outDir, path.dirname(outDir)),
     ...filesUnder(path.join(ROOT, 'e2e'), ROOT),
     ...['playwright.config.ts', 'scripts/e2e-projects.js', 'package-lock.json'].map((f) => [f, path.join(ROOT, f)]),
+  ];
+  for (const [name, f] of files) hash.update(name).update('\0').update(fs.readFileSync(f)).update('\0');
+  return hash.digest('hex');
+}
+
+// Hash of what `vite build` reads under `root`: the frontend, its static files, configs and locked dependencies.
+function buildInputsHash(root = ROOT) {
+  const hash = crypto.createHash('sha256').update(process.version);
+  const files = [
+    ...filesUnder(path.join(root, 'public'), root),
+    ...filesUnder(path.join(root, 'static'), root),
+    ...['vite.config.js', 'tsconfig.json', 'package-lock.json'].map((f) => [f, path.join(root, f)]),
   ];
   for (const [name, f] of files) hash.update(name).update('\0').update(fs.readFileSync(f)).update('\0');
   return hash.digest('hex');
@@ -154,10 +167,17 @@ async function main() {
   process.env.E2E_PORT = String(claimed.port);
   const OUT_DIR = path.join(CACHE, 'e2e-dist', String(claimed.port));
 
-  execFileSync('npx', ['vite', 'build', '--sourcemap', '--outDir', OUT_DIR, '--logLevel', 'error'], {
-    cwd: ROOT,
-    stdio: 'inherit',
-  });
+  // Beside the build, not in it: vite empties its outDir.
+  const stamp = `${OUT_DIR}.inputs`;
+  const inputs = buildInputsHash();
+  if (!fs.existsSync(OUT_DIR) || !fs.existsSync(stamp) || fs.readFileSync(stamp, 'utf8') !== inputs) {
+    fs.rmSync(stamp, { force: true });
+    execFileSync('npx', ['vite', 'build', '--sourcemap', '--outDir', OUT_DIR, '--logLevel', 'error'], {
+      cwd: ROOT,
+      stdio: 'inherit',
+    });
+    fs.writeFileSync(stamp, inputs);
+  }
   const hash = inputsHash(OUT_DIR);
   const passed = passedOn(hash);
   const { running, runArgs } = planRun(pwArgs, passed, ifChanged);
@@ -185,4 +205,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { claimPort, listening, planRun };
+module.exports = { buildInputsHash, claimPort, listening, planRun };

@@ -39,6 +39,7 @@ Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` — pending.
 
 - **L1c eslint cache** (P76): `--cache` (no type-aware rule): 3.3–3.6 s → 0.56–0.61 s CPU, 6.6–11.5 s → 1.6–3.4 s wall at load ~42; one large file touched: 1.24 s CPU.
 - **L2 CI e2e in 4 shards** (P77): unmeasured until the branch runs CI (needs a push: asked). Estimate from the last run: test step 6 min 37 s / 4 + ~45 s of setup ≈ 2.5 min, plus a ~20 s summary job, vs 7 min 14 s.
+- **L3 e2e build skip** (P78): `scripts/e2e.js` skips `vite build` when public/, static/, configs and lockfile hash as the build in place; 502 of 848 transcript e2e runs had no frontend change since the previous. One-test run (`node scripts/e2e.js --project=desktop -g 'A1: first visit'`): 20.8–23.0 s → 8.7–9.6 s at load ~40 (3 alternating pairs).
 
 ## Negative results
 
