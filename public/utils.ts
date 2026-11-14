@@ -381,11 +381,11 @@ const TEXT_ENTRY_INPUT_TYPES = new Set([
 export function isTextEntry(
   el: { tagName?: string; type?: string; isContentEditable?: boolean } | null | undefined,
 ): boolean {
-  const tag = el?.tagName;
-  if (!tag) return false;
+  if (!el?.tagName) return false;
+  const tag = el.tagName;
   if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (tag === 'INPUT') return TEXT_ENTRY_INPUT_TYPES.has(el!.type ?? '');
-  return el!.isContentEditable === true;
+  if (tag === 'INPUT') return TEXT_ENTRY_INPUT_TYPES.has(el.type ?? '');
+  return el.isContentEditable === true;
 }
 
 // Hours to one decimal, as the Played column shows them — so the filter's range bounds read

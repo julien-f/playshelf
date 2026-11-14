@@ -190,7 +190,8 @@ export function layoutDraft(
       capture();
       const shared = takeSharedView();
       const draft = readDraft(id);
-      if (shared ?? draft) table.setViewState((shared ?? draft)!);
+      const applied = shared ?? draft;
+      if (applied) table.setViewState(applied);
       setViewingShared(shared != null);
     },
     // An effect re-reading getViewState() (tracking every signal it touches), in its own root since a route can bind
