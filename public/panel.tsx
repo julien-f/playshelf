@@ -1627,10 +1627,6 @@ function PriceSection(props: { game: ReadonlyGame }): JSX.Element {
     return d ? dealRecordTier(d.bestDealPrice, d) : null;
   };
   const shopUrl = () => safeHref(deal()?.bestDealUrl);
-  const tooltip = () => {
-    const shop = deal()?.bestDealShop;
-    return shop ?? '';
-  };
 
   // Historical lows (all-time/1yr/3mo) — see the original file's own (much longer) comment,
   // preserved in git history, for the full "why collapse equal-amount tiers" reasoning.
@@ -1712,7 +1708,7 @@ function PriceSection(props: { game: ReadonlyGame }): JSX.Element {
               <Show
                 when={shopUrl()}
                 fallback={
-                  <div class="panel-price-line" title={tooltip() || undefined}>
+                  <div class="panel-price-line" title={deal()?.bestDealShop || undefined}>
                     {line()}
                   </div>
                 }
@@ -1723,7 +1719,7 @@ function PriceSection(props: { game: ReadonlyGame }): JSX.Element {
                     href={url()}
                     target="_blank"
                     rel="noopener"
-                    title={tooltip() || undefined}
+                    title={deal()?.bestDealShop || undefined}
                   >
                     {line()}
                   </a>
