@@ -36,8 +36,8 @@ const NONE: AccountOverrideState = { state: 'none', identifiers: [] };
 
 // A factory rather than bare module-level state, same reason myOwnership.ts's
 // createMyOwnershipCache() is one: this module's real content is mutable state (the last
-// synced param, the in-flight resolve), and this repo's usual "delete require.cache between
-// tests" reset doesn't reach a module-level `let` in a TS-stripped ESM file. The app uses the
+// synced param, the in-flight resolve), and a test can't reload a TS-stripped ESM file to reset
+// a module-level `let`. The app uses the
 // single instance exported below; tests build their own.
 export function createAccountOverrideSync() {
   // A signal: a reader shows "Resolving…" then the error even when the override itself stays null.

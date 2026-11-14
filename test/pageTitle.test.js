@@ -6,10 +6,9 @@ const { setBaseTitle, setGameTitle } = require('../public/pageTitle.ts');
 
 // pageTitle.js writes to the bare `document.title` global (it's loaded in a browser, not under
 // jsdom here) — stub it before each test. baseTitle/gameTitle are real module-level state with
-// no reset function of their own (Node's native TS stripping doesn't actually re-evaluate the
-// module on a `delete require.cache` the way prefs.test.js's stubbing relies on for prefs.ts —
-// confirmed live: the same module instance came back either way — so tests reset the two known
-// setters back to null instead of trying to reload the module fresh).
+// no reset function of their own (Node's native TS stripping doesn't re-evaluate the module on a
+// `delete require.cache`: the same instance comes back), so tests reset the two known setters
+// back to null.
 beforeEach(() => {
   global.document = { title: '' };
   setBaseTitle(null);

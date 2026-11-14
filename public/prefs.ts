@@ -211,9 +211,8 @@ function sessionLost(): void {
   onSessionLost();
 }
 
-// Test-only (see test/prefs.test.js) — this repo's usual "delete require.cache between tests"
-// reset doesn't reach a module-level `let` in a TS-stripped ESM file (confirmed live; same
-// caveat myOwnership.ts/accountOverride.ts document for their own module state), and unlike
+// Test-only (see test/prefs.test.js) — a test can't reload a TS-stripped ESM file to reset its
+// module-level `let` (same caveat myOwnership.ts/accountOverride.ts document), and unlike
 // those this little state didn't seem worth a whole factory-function rewrite for. Same `_reset`
 // naming convention as lib/cache.js/lib/metrics.js's own test-only resets.
 export function _resetPrefsState(): void {

@@ -8,7 +8,7 @@
 - Both preload `test/gitEnv.js`, which strips `GIT_*` from the environment: hooks and `git rebase -x` export `GIT_DIR`/`GIT_INDEX_FILE`, which would point a test's git calls at the real repo.
 - `--conditions=browser` loads solid-js's browser build: under Node's default (server build) effects and memos never re-run and `createResource` throws, so reactivity couldn't be tested.
 - **A test's `require` and a `.ts` module's own `import`s load separate copies** of a module (CommonJS vs. Node's ESM loader, each with its own cache), so:
-  - `delete require.cache[…]` doesn't reset a module-level value (a memoized fetch, a counter) of a module that a `.ts` file imports: keep state a test must reset in a factory the test calls (like `createPanelDataCache()`).
+  - `delete require.cache[…]` doesn't reload a `.ts` module (the same instance comes back), so it resets none of its module-level values (a memoized fetch, a counter): keep state a test must reset in a factory the test calls (like `createPanelDataCache()`), or a test-only `_reset…`.
   - An effect created with `require('solid-js')` runs once and never again on a `public/` module's signal: `require` loads solid-js's CommonJS build, the `.ts` modules its ESM one. Use `await import('solid-js')` (see `test/authStore.test.js`).
   - `require('../public/gameColumns.ts')` (or any module importing `@vates/data-table-solid`) throws `ReferenceError: window is not defined`: the library touches `window` when it loads. Resolve it to `@vates/data-table-core`, which provides the helpers, with a `module.registerHooks` resolve hook (see `test/gameColumns.test.js`).
 

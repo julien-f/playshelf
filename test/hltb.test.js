@@ -6,10 +6,11 @@ const { ageCache } = require('./ageCache');
 const { levenshtein, stringSimilarity, getHLTB, buildSearchTerms, _resetAuth } = require('../lib/hltb');
 const { _reset, getCached, setCache } = require('../lib/cache');
 
-beforeEach(() => _reset());
 const { db } = require('../lib/db');
 const { MISS_CACHE_TTL_MS } = require('../lib/config');
 const { _resetCircuitBreakers } = require('../lib/circuitBreaker');
+
+beforeEach(() => _reset());
 
 // ── levenshtein ───────────────────────────────────────────────────────────
 

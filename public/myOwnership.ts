@@ -59,11 +59,8 @@ export interface MyOwnershipPeek {
 // `staleGuard.ts`'s `createStaleGuard`/`streamBatcher.ts`'s `createStreamBatcher`/
 // `lib/dedup.js`'s `createDedup`, for the same reason: this file's real state (the cached
 // owned/wishlist appid sets, keyed by whichever `currentAccount` they were fetched for) needs a
-// clean instance per test, and this repo's usual "delete require.cache between tests" pattern
-// only resets a *stateless* module (one with no top-level mutable state at all, like
-// accountsStore.ts/prefs.ts) — confirmed live not to reset a module-level `let` here, since
-// Node's CJS-require-of-an-ESM-file caches the module namespace outside `require.cache`
-// entirely. The app itself uses exactly one instance (exported as the bare functions below);
+// clean instance per test, and a test can't reload the module (Node caches a CJS-required ESM file's namespace
+// outside `require.cache`). The app itself uses exactly one instance (exported as the bare functions below);
 // tests create their own via `createMyOwnershipCache()` instead.
 export function createMyOwnershipCache() {
   let cachedAccountId: string | null = null;
