@@ -88,11 +88,8 @@ import { MAX_RECENT_GAMES } from './recentGames.ts';
 // account's data (see toAccountPlayer in accountData.ts) — real data, just not live — so the
 // tooltip says "as of the last refresh" rather than implying real-time presence.
 
-interface TreeRow {
-  type: 'folder' | 'list';
-  item: Folder | GameList;
-  depth: number;
-}
+type TreeEntry = { type: 'folder'; item: Folder } | { type: 'list'; item: GameList };
+type TreeRow = TreeEntry & { depth: number };
 
 export default function HomeRoute() {
   const location = useLocation();
@@ -428,7 +425,7 @@ export default function HomeRoute() {
     return true;
   }
 
-  function childrenOf(parentId: string | null): { type: 'folder' | 'list'; item: Folder | GameList; order: number }[] {
+  function childrenOf(parentId: string | null): (TreeEntry & { order: number })[] {
     const childFolders = folders()
       .filter((f) => f.parentId === parentId)
       .map((f) => ({ type: 'folder' as const, item: f, order: f.order }));
@@ -440,7 +437,7 @@ export default function HomeRoute() {
 
   function collectRows(parentId: string | null, depth: number, out: TreeRow[]): void {
     for (const child of childrenOf(parentId)) {
-      out.push({ type: child.type, item: child.item, depth });
+      out.push({ ...child, depth });
       if (child.type === 'folder') collectRows(child.item.id, depth + 1, out);
     }
   }
@@ -499,14 +496,14 @@ export default function HomeRoute() {
   }
 
   function rowName(row: TreeRow): string {
-    return row.type === 'folder' ? (row.item as Folder).name : listName(row.item as GameList);
+    return row.type === 'folder' ? row.item.name : listName(row.item);
   }
 
   const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
   // What a row holds, from what's already in memory: no list is resolved for it.
   function rowSummary(row: TreeRow): string {
     if (row.type === 'folder') return `Folder · ${plural(childrenOf(row.item.id).length, 'item')}`;
-    const list = row.item as GameList;
+    const list = row.item;
     if (list.kind === 'manual') return `List · ${plural(list.appids?.length ?? 0, 'game')}`;
     if (list.kind === 'ranked') return `Ranking · ${getRanking(list.id).groups.flat().length} ranked`;
     const formula = list.name && formatFormula(list, createDefaultNaming());
@@ -519,10 +516,10 @@ export default function HomeRoute() {
         <Match when={props.row.type === 'folder'}>
           <FolderIcon class="tree-icon" />
         </Match>
-        <Match when={(props.row.item as GameList).kind === 'dynamic'}>
+        <Match when={props.row.type === 'list' && props.row.item.kind === 'dynamic'}>
           <Blend class="tree-icon" />
         </Match>
-        <Match when={(props.row.item as GameList).kind === 'ranked'}>
+        <Match when={props.row.type === 'list' && props.row.item.kind === 'ranked'}>
           <Trophy class="tree-icon" />
         </Match>
       </Switch>
@@ -545,9 +542,7 @@ export default function HomeRoute() {
       panel.hidePopover();
       const index = treeRows().findIndex((r) => r.item.id === props.row.item.id);
       const deleted =
-        props.row.type === 'folder'
-          ? handleDeleteFolder(props.row.item as Folder)
-          : handleDeleteList(props.row.item as GameList);
+        props.row.type === 'folder' ? handleDeleteFolder(props.row.item) : handleDeleteList(props.row.item);
       if (!deleted) return; // cancelled: focus is already back on ⋯
       const rows = treeRows();
       const next = rows[Math.min(index, rows.length - 1)];
