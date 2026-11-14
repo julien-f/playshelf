@@ -35,4 +35,6 @@ Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` — pending.
 
 - **L1 pre-commit e2e → pre-push** (P74): UI commit hook 68 s p50 (253 runs) → 13–20 s slowest step at load ~40 (3 runs, `node scripts/check.js --staged=HEAD~1` on a UI commit), the unit suite now the long pole. Re-measure at normal load.
 
+- **L1b format cache** (P75): a cacheless `npx prettier` (1164 calls for 885 commits in transcripts) deleted the default cache, so the hook's format step re-read the tree. Dedicated `--cache-location`: 14.5 s → 0.85 s CPU, 32–65 s → 1.8–4.5 s at load 45–85 (4 runs each, `npx prettier --write PLAN.md; npm run -s format:check`).
+
 ## Negative results

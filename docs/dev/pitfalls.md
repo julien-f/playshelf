@@ -67,6 +67,12 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 - **Cause**: git opens the SSH connection before running the hook; GitHub drops it while the full e2e run (~8 min) keeps it idle.
 - **Fix**: run `npm run test:e2e -- --if-changed` before pushing: its passing run is recorded, so the hook skips e2e and pushes at once.
 
+### The hook's `format` step takes 30–60 s
+
+- **Symptom**: `✓ format (40 s)` in the pre-commit output, though Prettier's cache was warm.
+- **Cause**: Prettier deletes its default cache (`node_modules/.cache/prettier/`) on any run without `--cache`, such as `npx prettier --write <file>`, so the next check re-reads the whole tree.
+- **Fix**: `format` and `format:check` keep their cache in `node_modules/.cache/prettier-own/`, which such runs leave alone; keep both scripts on that `--cache-location`.
+
 ### Another agent's commit shows a branch as merged without its changes
 
 - **Symptom**: `git log --graph` shows someone else's commit with a branch as second parent, but its tree lacks that branch's changes, which are still staged.
