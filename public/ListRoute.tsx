@@ -359,8 +359,8 @@ function playedByColumn(
     label: `Played (h) · ${player.label}`,
     // Summed over a Family's members, like myOwnership.ts's own Played; null: this player doesn't own it.
     value: (row) => {
-      const owners = player.owners.get(row.appid);
-      return owners ? hoursFromMinutes(owners.reduce((sum, o) => sum + o.minutes, 0)) : null;
+      const minutes = playedMinutes(player.owners.get(row.appid));
+      return minutes == null ? null : hoursFromMinutes(minutes);
     },
   };
 }
@@ -368,6 +368,7 @@ function playedByColumn(
 // A player's hours in Steam's last two weeks, as of their library's copy (none once that's older too).
 const recentPlayedByKey = (i: number) => `recentPlaytime:${i}`;
 const recentMinutes = (owners: GameOwner[] | undefined) => owners?.reduce((sum, o) => sum + o.recentMinutes, 0);
+const playedMinutes = (owners: GameOwner[] | undefined) => owners?.reduce((sum, o) => sum + o.minutes, 0);
 function recentPlayedByColumn(
   player: { label: string; owners: Map<number, GameOwner[]> },
   i: number,
@@ -3648,7 +3649,7 @@ export default function ListRoute() {
 
   // A comparison player's hours on a game, summed over a Family's members.
   const playerHours = (player: (typeof comparePlayers)[number]) => (appid: number) => {
-    const minutes = player.owners.get(appid)?.reduce((sum, o) => sum + o.minutes, 0);
+    const minutes = playedMinutes(player.owners.get(appid));
     return minutes ? minutes / 60 : 0;
   };
   // Once every row's details are in, like Plays mostly.
