@@ -42,7 +42,8 @@ export default defineConfig({
     // E2E_BUILT: scripts/e2e.js (`npm run test:e2e`) already built into that directory.
     command: process.env.E2E_BUILT
       ? `npx vite preview --outDir ${process.env.E2E_BUILT} --port ${PORT} --strictPort`
-      : `npx vite build --sourcemap --outDir ${OUT_DIR} && npx vite preview --outDir ${OUT_DIR} --port ${PORT} --strictPort`,
+      : // scripts/e2e.js's stamp beside the build would describe what this replaces.
+        `rm -f ${OUT_DIR}.inputs && npx vite build --sourcemap --outDir ${OUT_DIR} && npx vite preview --outDir ${OUT_DIR} --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
     // A server already on the port would serve another build: fail on the busy port instead.
     reuseExistingServer: false,

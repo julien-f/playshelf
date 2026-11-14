@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-# What CI runs, so a push that passes here passes CI (its fresh `npm ci` aside). The checks run on
-# the working tree, so it must be exactly the commit being pushed.
+# What CI runs, but phone e2e skips the @any-width tests, so CI can still catch a phone-only break there
+# (and its fresh `npm ci`). The checks run on the working tree, so it must be exactly the commit being pushed.
 head=$(git rev-parse HEAD)
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$local_sha" = 0000000000000000000000000000000000000000 ] && continue # deleting a ref

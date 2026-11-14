@@ -26,7 +26,7 @@
 
 ## Writing reliable tests
 
-- Tag an e2e test `{ tag: '@any-width' }` only when nothing it checks depends on width, layout or touch: the pre-push hook then skips it at phone width. Untagged, it runs at both.
+- Tag an e2e test `{ tag: '@any-width' }` only when nothing it checks depends on width, layout, computed styles, popover placement or the pointer: the pre-push hook then skips it at phone width. Untagged, it runs at both.
 
 Each rule comes from a flake it fixed; add one when a fix teaches something new.
 

@@ -202,7 +202,7 @@ async function main() {
   const { status } = spawnSync('npx', ['playwright', 'test', ...runArgs], {
     cwd: ROOT,
     stdio: 'inherit',
-    env: { ...process.env, E2E_BUILT: OUT_DIR, ...(phoneSubset && { E2E_PHONE_SUBSET: '1' }) },
+    env: { ...process.env, E2E_BUILT: OUT_DIR, E2E_PHONE_SUBSET: phoneSubset ? '1' : '' },
   });
   log(status === 0, Math.round((Date.now() - started) / 1000));
   if (status === 0 && running)

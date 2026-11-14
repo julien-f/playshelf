@@ -261,6 +261,7 @@ export function initGameSearch({
   function showRecents(): boolean {
     const list = recents();
     if (!list.length) return false;
+    activeFetch++; // a search still in flight would replace them when it answers
     showResults(list.slice(0, RECENTS_SHOWN), { recent: true });
     return true;
   }
@@ -279,7 +280,6 @@ export function initGameSearch({
   inputEl.addEventListener('input', () => {
     escClosedResults = false;
     if (debounceTimer != null) clearTimeout(debounceTimer);
-    activeFetch++; // an answer for the previous text would replace what this input shows
     const term = inputEl.value.trim();
     // Cleared back to empty — that's the recents view again, not just an empty dropdown.
     if (shouldShowRecents(inputEl.value)) {

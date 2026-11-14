@@ -45,9 +45,15 @@ Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` (load 46.8, ma
 - **L6 phone subset at pre-push** (P64, user's choice: CI keeps every test at both widths): 266 edge tests tagged `@any-width`. Phone half: 451 → 181 tests, 62–65 s → 22–31 s (3 alternating pairs of `node scripts/e2e.js --project=phone [--phone-subset]`, load 1.4–23).
 - **L7 C234 zoom flakes**: both tests ran on a running fake clock or real time, so load let the lightbox's 3 s idle hide the controls they click or check. Clock paused from before `goto`. `e2e-flakes.js --repeat=… --load=24 --workers=12 --project=phone -g zoom`: 13/60 and 8/60 (load 66) → 0/120 and 0/120 (load 71.6). The same run found 3 other zoom tests failing 2–5/120 (L8).
 - **L8 three more lightbox tests**: double-tap (taps spaced past the double-tap window), toolbar (idle hid it), pinch (status line cleared on its timer): clock paused before `goto`, pinch waits on the counter. 120 repeats, load median 75: 3/120, 2/120 → 0/120; pinch 5/120 → 1/120 with another cause (lightbox empty after 5 s), filed as C323.
+- **Review fixes** (`/code-review medium`, 9 findings): 35 tests untagged (layout, styles, popovers, pointer; 231 left), stamp removed when playwright.config.ts builds by itself, inherited `E2E_PHONE_SUBSET` reset, CLAUDE.md and pre-push header no longer say "both widths, whole suite", BATCH.md's last `E2E_DEFER`, CI summary fails on a missing shard report and pins Node 24, gameSearch invalidates in `showRecents`. Not fixed: node_modules edits outside the lockfile (already escape the pass hash; deleting the stamp forces a build), a cosmetic redundancy in e2e.js.
 
 ## Negative results
 
 - **Unit tests in one process** (`--test-isolation=none`): fails (shared module state, e.g. `Date is already being mocked`), and 23 s wall vs 15 s default at load ~42, though 8.4 s vs 19.4 s CPU. Would need every file made state-clean: not worth it.
 - **auth.test.js nonce sweep** (O(n) per claim, O(n²) over the test's 10k sign-ins): stopping the sweep at the first live nonce saves 0.56 s CPU of the suite's ~19 s (< 5 %), in security code. Reverted.
 - **Playwright workers 10 vs 6** (default): full desktop suite, 3 alternating pairs at load 23–64: 6 → 79/96/155 s, 10 → 108/78/98 s (medians 96 vs 98), and one more failure at 10. Load noise dominates; kept the default.
+
+## At the merge
+
+- CHANGELOG (`node scripts/changelog-add.js`): Fixed "Clearing the nav search no longer lets a late answer replace the recently looked-up games"; Development "Faster hooks: the pre-commit hook no longer runs e2e, Prettier and ESLint keep their caches, the pre-push hook runs at phone width only the tests that depend on it, and CI runs e2e in four shards"; Development "Steadier e2e: concurrent runs in one checkout no longer delete each other's traces, and five lightbox tests no longer race the clock".
+- Delete PLAN.md.
