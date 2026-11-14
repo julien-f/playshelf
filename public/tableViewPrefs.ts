@@ -42,40 +42,11 @@ function takeSharedView(): TableViewState | null {
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-// Writes every future view change to `store` (a layout draft) — the only ongoing side effect table
-// interaction has; the URL stays untouched until explicitly shared. An effect re-reading getViewState() (tracking every
-// signal it touches), in its own root since a route can bind it from an async load. `paused`:
-// while a shared link's layout is on screen (SharedViewBanner); un-pausing saves it.
-// `onPausedEdit`: whether that shared layout now differs from the link's (page/search aside).
-// Returns the dispose function.
-export function bindViewPersistence(
-  table: ViewStateApi,
-  store: ViewStore,
-  paused: () => boolean,
-  onPausedEdit: (edited: boolean) => void,
-): () => void {
-  return createRoot((dispose) => {
-    let pausedView: string | undefined;
-    createEffect(() => {
-      const view = table.getViewState();
-      if (!paused()) {
-        pausedView = undefined;
-        untrack(() => store.save(view)); // a store's save reads its own pref back
-        return;
-      }
-      const layout = JSON.stringify(stripTransientViewFields(view));
-      if (pausedView === undefined) pausedView = layout;
-      else onPausedEdit(layout !== pausedView);
-    });
-    return dispose;
-  });
-}
-
 // Snapshots the table's current view into VIEW_PARAM and copies the resulting link to the
 // clipboard — deliberately does NOT write it to the page's own address bar (no
 // `history.replaceState`): a param left sitting in the visible URL goes stale the moment the
 // user makes one more change to the table, silently showing a snapshot that no longer matches
-// what's on screen. The layout draft (bindViewPersistence above) already captures live state on
+// what's on screen. The layout draft (layoutDraft's bind) already captures live state on
 // every change; this link is only for handing the *current* view to someone else.
 // `extraParams` are added only where the URL doesn't already set them; `dropParams` mean nothing to the recipient.
 export function shareTableView(
@@ -169,9 +140,18 @@ function layoutOf(view: TableViewState, temporary: TemporaryKeys, defaults: Tabl
 
 export interface LayoutDraft {
   // Applies the stored layout (the baseline), then a shared link's layout or this tab's draft over
-  // it; true when a shared one applied (the route then pauses persistence, see bindViewPersistence).
+  // it; true when a shared one applied (viewingShared, which pauses persistence).
   restore(): boolean;
-  // What bindViewPersistence and resetTableView write through: every change goes to the draft.
+  // Writes every future view change to `store`, the only ongoing side effect table interaction has (the URL stays
+  // untouched until explicitly shared); paused while viewingShared. Returns the dispose function.
+  bind(): () => void;
+  // A 🔗 Share layout link's layout is on screen, not saved (SharedViewBanner); sharedEdited: it now differs from the
+  // link's (page/search aside). keepShared saves it, discardShared applies the draft or stored layout instead.
+  viewingShared(): boolean;
+  sharedEdited(): boolean;
+  keepShared(): void;
+  discardShared(): void;
+  // What bind and resetTableView write through: every change goes to the draft.
   store: ViewStore;
   // The labels of what differs from the stored layout (diffViewLabels'), empty when nothing.
   changes(): string[];
@@ -194,6 +174,8 @@ export function layoutDraft(
   const storedLayout = () => withoutRanges(stored.load(), temporary.ranges ?? []);
   const current = () => layout(table.getViewState());
   const capture = () => setBaseline(untrack(current));
+  const [viewingShared, setViewingShared] = createSignal(false);
+  const [sharedEdited, setSharedEdited] = createSignal(false);
   const store: ViewStore = {
     load: () => readDraft(id) ?? storedLayout(),
     save: (view) => {
@@ -202,14 +184,43 @@ export function layoutDraft(
       writeDraft(id, changed || page || searchQuery ? withoutRanges(view, temporary.ranges ?? []) : null);
     },
   };
-  return {
+  const draft: LayoutDraft = {
     restore() {
       table.setViewState(storedLayout());
       capture();
       const shared = takeSharedView();
       const draft = readDraft(id);
       if (shared ?? draft) table.setViewState((shared ?? draft)!);
+      setViewingShared(shared != null);
       return shared != null;
+    },
+    // An effect re-reading getViewState() (tracking every signal it touches), in its own root since a route can bind
+    // it from an async load.
+    bind: () =>
+      createRoot((dispose) => {
+        let pausedView: string | undefined;
+        createEffect(() => {
+          const view = table.getViewState();
+          if (!viewingShared()) {
+            pausedView = undefined;
+            untrack(() => store.save(view)); // a store's save reads its own pref back
+            return;
+          }
+          const shared = JSON.stringify(stripTransientViewFields(view));
+          if (pausedView === undefined) pausedView = shared;
+          else setSharedEdited(shared !== pausedView);
+        });
+        return dispose;
+      }),
+    viewingShared,
+    sharedEdited,
+    keepShared() {
+      setViewingShared(false);
+      draft.save();
+    },
+    discardShared() {
+      table.setViewState(store.load());
+      setViewingShared(false);
     },
     store,
     changes: () => diffViewLabels(baseline(), current()),
@@ -226,4 +237,5 @@ export function layoutDraft(
       capture();
     },
   };
+  return draft;
 }

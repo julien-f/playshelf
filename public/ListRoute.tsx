@@ -135,7 +135,6 @@ import { inViewport, keepFocus, type FocusCandidate } from './focusHandoff.ts';
 import {
   shareTableView,
   resetTableView,
-  bindViewPersistence,
   prefViewStore,
   layoutDraft,
   type LayoutDraft,
@@ -2181,9 +2180,8 @@ export default function ListRoute() {
       tableDefaults,
     );
     setLayout(l);
-    setSharedViewEdited(false);
-    setViewingShared(l.restore());
-    unsyncView = bindViewPersistence(viewTable, l.store, viewingShared, setSharedViewEdited);
+    l.restore();
+    unsyncView = l.bind();
   }
   // Another tab of the same list: no reload, only its view (and where it's kept) changes.
   createEffect(on(viewId, () => table && bindLayout(), { defer: true }));
@@ -2209,14 +2207,6 @@ export default function ListRoute() {
   });
   // "🔗 Share layout"/"Reset layout" — see tableViewPrefs.ts for the share-on-demand-only reasoning
   // (a link written to the live URL goes stale the moment the table changes again).
-  // A 🔗 Share layout link's layout, on screen but not saved (see layoutDraft's restore).
-  const [viewingShared, setViewingShared] = createSignal(false);
-  const [sharedViewEdited, setSharedViewEdited] = createSignal(false);
-  function handleDiscardSharedView(): void {
-    const l = layout();
-    if (l) applyView(l.store.load());
-    setViewingShared(false);
-  }
 
   // The saved or shared list on screen, with the lookup its sources resolve through.
   function definedList(): { list: GameList; get: (id: string) => GameList | undefined } | null {
@@ -4533,7 +4523,7 @@ export default function ListRoute() {
         <Show when={selectionActionStatus()?.listId}>{(listId) => <A href={`/lists/${listId()}`}>Open list</A>}</Show>
       </div>
       {/* A shared link's layout has its own banner. */}
-      <Show when={tableReady() && !viewingShared() && layout()}>
+      <Show when={tableReady() && !layout()?.viewingShared() && layout()}>
         {(l) => (
           <UnsavedChangesBanner
             name={layoutName()}
@@ -4552,15 +4542,14 @@ export default function ListRoute() {
       <Show when={viewId() && !activeView()}>
         <p class="list-note">This view no longer exists; showing the whole list.</p>
       </Show>
-      <Show when={tableReady() && viewingShared()}>
-        <SharedViewBanner
-          edited={sharedViewEdited()}
-          onKeep={() => {
-            setViewingShared(false);
-            layout()?.save();
-          }}
-          onDiscard={handleDiscardSharedView}
-        />
+      <Show when={tableReady() && layout()?.viewingShared() && layout()}>
+        {(l) => (
+          <SharedViewBanner
+            edited={l().sharedEdited()}
+            onKeep={() => l().keepShared()}
+            onDiscard={() => l().discardShared()}
+          />
+        )}
       </Show>
       <Show when={emptyText()}>
         <p class="list-empty">{emptyText()}</p>

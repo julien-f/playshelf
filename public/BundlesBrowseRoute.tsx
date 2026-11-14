@@ -47,7 +47,7 @@ import {
 import { currentRegion, regionCurrency, regionLabel } from './region.ts';
 import { setBrowsedBundles } from './bundleBrowseStore.ts';
 import { openPrefsPopover } from './prefsPopover.tsx';
-import { shareTableView, resetTableView, bindViewPersistence, prefViewStore, layoutDraft } from './tableViewPrefs.ts';
+import { shareTableView, resetTableView, prefViewStore, layoutDraft } from './tableViewPrefs.ts';
 import { createStaleGuard } from './staleGuard.ts';
 import { SharedViewBanner } from './SharedViewBanner.tsx';
 import { UnsavedChangesBanner, ViewActions } from './TableViewControls.tsx';
@@ -407,14 +407,8 @@ export default function BundlesBrowseRoute() {
   slideRowsOnViewChange(table, () => tableContainer);
   // The layout as a draft until Save; a 🔗 Share layout link's layout is shown but not saved until kept.
   const layout = layoutDraft(table, VIEW_PREF_KEY, prefViewStore(VIEW_PREF_KEY));
-  const [viewingShared, setViewingShared] = createSignal(layout.restore());
-  const [sharedViewEdited, setSharedViewEdited] = createSignal(false);
-  // eslint-disable-next-line solid/reactivity -- bindViewPersistence reads it in its own effect
-  onCleanup(bindViewPersistence(table, layout.store, viewingShared, setSharedViewEdited));
-  function handleDiscardSharedView(): void {
-    table.setViewState(layout.store.load());
-    setViewingShared(false);
-  }
+  layout.restore();
+  onCleanup(layout.bind());
   // Feeds /lists/bundle/:bundleId's prev/next nav (see bundleBrowseStore.ts) — off processedData,
   // not the raw row list, so ‹/› steps through exactly what's on screen in the order it's shown,
   // including whatever filter/sort/search the user has applied here.
@@ -613,17 +607,14 @@ export default function BundlesBrowseRoute() {
         }
       />
       <Show when={!unavailable()}>
-        <Show when={viewingShared()}>
+        <Show when={layout.viewingShared()}>
           <SharedViewBanner
-            edited={sharedViewEdited()}
-            onKeep={() => {
-              setViewingShared(false);
-              layout.save();
-            }}
-            onDiscard={handleDiscardSharedView}
+            edited={layout.sharedEdited()}
+            onKeep={() => layout.keepShared()}
+            onDiscard={() => layout.discardShared()}
           />
         </Show>
-        <Show when={!viewingShared()}>
+        <Show when={!layout.viewingShared()}>
           <UnsavedChangesBanner
             name="your bundles layout"
             changes={layout.changes()}
