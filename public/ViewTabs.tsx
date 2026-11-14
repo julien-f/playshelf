@@ -15,12 +15,13 @@ import {
 } from './listViews.ts';
 import { bindNavPopover } from './navPopover.ts';
 import { urlWithParams } from './urlState.ts';
+import { VIEW_PARAM } from './tableViewPrefs.ts';
 import type { SavedView } from './types.ts';
 
 // This page with `view` set (or cleared, for the whole list); a shared layout isn't carried over.
 export function viewHref(location: { pathname: string; search: string }, id: string | null): string {
   const params = new URLSearchParams(location.search);
-  params.delete('tv');
+  params.delete(VIEW_PARAM);
   if (id) params.set('view', id);
   else params.delete('view');
   return urlWithParams(params, location.pathname);
