@@ -14,13 +14,8 @@ function makeMemoryLocalStorage() {
 
 beforeEach(() => {
   global.localStorage = makeMemoryLocalStorage();
-  delete require.cache[require.resolve('../public/prefs.ts')];
-  delete require.cache[require.resolve('../public/listsStore.ts')];
-  delete require.cache[require.resolve('../public/accountsStore.ts')];
-  // The `?u=` override is module-level state, not a pref — so unlike everything else in this
-  // file it survives the require.cache reset above (see myOwnership.ts's own comment on why a
-  // TS-stripped ESM module's `let` isn't reachable through require.cache). Cleared by hand so
-  // each test starts with no override rather than inheriting the previous one's.
+  // The `?u=` override is module-level state, not a pref, so a new localStorage doesn't clear it:
+  // cleared by hand so each test starts with no override rather than inheriting the previous one's.
   require('../public/accountsStore.ts').setAccountOverride(null);
 });
 

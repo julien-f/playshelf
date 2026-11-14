@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 // Same localStorage-stub convention as prefs.test.js — recentGames.ts is now backed by
 // prefs.ts's shared blob rather than its own standalone localStorage key (see
-// docs/dev/lists-and-accounts.md), so clear both modules' require caches per test.
+// docs/dev/lists-and-accounts.md).
 function makeMemoryLocalStorage() {
   const store = new Map();
   return {
@@ -21,8 +21,6 @@ const NOW = Date.UTC(2026, 10, 5, 12);
 beforeEach((t) => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: NOW });
   global.localStorage = makeMemoryLocalStorage();
-  delete require.cache[require.resolve('../public/prefs.ts')];
-  delete require.cache[require.resolve('../public/recentGames.ts')];
 });
 
 function mod() {

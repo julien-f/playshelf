@@ -14,7 +14,7 @@ function makeMemoryLocalStorage() {
 
 // createAccountOverrideSync() is a factory precisely so each test gets a clean instance (see
 // its own comment) — but the override it hands to accountsStore.ts is module-level state there,
-// which this repo's "delete require.cache" reset can't reach, so that half is cleared by hand.
+// which persists between tests, so that half is cleared by hand.
 const { createAccountOverrideSync, accountOverrideStatusText } = require('../public/accountOverride.ts');
 const {
   getAccountOverride,

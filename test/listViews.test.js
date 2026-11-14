@@ -20,8 +20,6 @@ beforeEach(() => {
     setItem: (k, v) => store.set(k, String(v)),
     removeItem: (k) => store.delete(k),
   };
-  delete require.cache[require.resolve('../public/prefs.ts')];
-  delete require.cache[require.resolve('../public/listViews.ts')];
 });
 
 const views = () => require('../public/listViews.ts');

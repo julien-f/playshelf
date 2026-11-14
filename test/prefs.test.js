@@ -17,9 +17,8 @@ function makeMemoryLocalStorage() {
 
 beforeEach(() => {
   global.localStorage = makeMemoryLocalStorage();
-  delete require.cache[require.resolve('../public/prefs.ts')];
-  // require.cache deletion above doesn't reach prefs.ts's module-level state — see
-  // _resetPrefsState's own comment there.
+  // A new localStorage doesn't reset prefs.ts's module-level state — see _resetPrefsState's own
+  // comment there.
   require('../public/prefs.ts')._resetPrefsState();
 });
 
@@ -72,7 +71,6 @@ test('getPref/setPref: never throw when localStorage is unavailable', () => {
       throw new Error('unavailable');
     },
   };
-  delete require.cache[require.resolve('../public/prefs.ts')];
   const { getPref, setPref } = require('../public/prefs.ts');
   assert.doesNotThrow(() => setPref('region', 'DE'));
   assert.equal(getPref('region', 'fallback'), 'fallback');

@@ -13,10 +13,8 @@ function makeMemoryLocalStorage() {
   };
 }
 
-const MODULES = ['prefs', 'bundleSnapshots', 'listsStore', 'listResolve'];
 beforeEach(() => {
   global.localStorage = makeMemoryLocalStorage();
-  for (const m of MODULES) delete require.cache[require.resolve(`../public/${m}.ts`)];
 });
 
 function load() {

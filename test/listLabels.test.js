@@ -268,14 +268,6 @@ function freshStores() {
     setItem: (k, v) => store.set(k, String(v)),
     removeItem: (k) => store.delete(k),
   };
-  for (const mod of [
-    '../public/prefs.ts',
-    '../public/listsStore.ts',
-    '../public/accountsStore.ts',
-    '../public/listLabels.ts',
-  ]) {
-    delete require.cache[require.resolve(mod)];
-  }
   return { ...require('../public/listsStore.ts'), ...require('../public/listLabels.ts') };
 }
 

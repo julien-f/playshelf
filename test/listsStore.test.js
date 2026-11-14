@@ -14,8 +14,6 @@ function makeMemoryLocalStorage() {
 
 beforeEach(() => {
   global.localStorage = makeMemoryLocalStorage();
-  delete require.cache[require.resolve('../public/prefs.ts')];
-  delete require.cache[require.resolve('../public/listsStore.ts')];
 });
 
 function store() {

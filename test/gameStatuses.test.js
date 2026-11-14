@@ -14,9 +14,7 @@ function makeMemoryLocalStorage() {
 
 beforeEach(() => {
   global.localStorage = makeMemoryLocalStorage();
-  for (const m of ['prefs', 'accountsStore', 'gameStatuses'])
-    delete require.cache[require.resolve(`../public/${m}.ts`)];
-  // The override is in-memory module state, which outlives the cache reset.
+  // The override is in-memory module state, which a new localStorage doesn't clear.
   require('../public/accountsStore.ts').setAccountOverride(null);
 });
 

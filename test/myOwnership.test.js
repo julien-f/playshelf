@@ -21,9 +21,8 @@ beforeEach(() => {
 });
 
 // createMyOwnershipCache() is imported fresh (not re-required) per test — it's a factory
-// specifically so each test gets a clean instance without depending on this repo's usual
-// "delete require.cache between tests" pattern, which only resets a *stateless* module (see
-// myOwnership.ts's own comment on why that pattern doesn't reset a module-level `let` here).
+// specifically so each test gets a clean instance: module-level state persists between tests (see
+// myOwnership.ts's own comment).
 const { createMyOwnershipCache } = require('../public/myOwnership.ts');
 const { setCurrentAccount, setAccountOverride } = require('../public/accountsStore.ts');
 const { clearAccountDataCache, fetchAccountOverview } = require('../public/accountData.ts');

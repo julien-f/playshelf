@@ -23,13 +23,8 @@ function withFetch(t, handler) {
 
 beforeEach(() => {
   global.localStorage = makeMemoryLocalStorage();
-  delete require.cache[require.resolve('../public/prefs.ts')];
-  delete require.cache[require.resolve('../public/listsStore.ts')];
-  delete require.cache[require.resolve('../public/accountsStore.ts')];
-  delete require.cache[require.resolve('../public/accountData.ts')];
-  delete require.cache[require.resolve('../public/authStore.ts')];
   require('../public/accountsStore.ts').setAccountOverride(null);
-  // require.cache deletion above doesn't reach signedInSteamid (module-level state) — see
+  // signedInSteamid is module-level state, which a new localStorage doesn't reset — see
   // _resetPrefsState's own comment in prefs.ts.
   require('../public/prefs.ts')._resetPrefsState();
 });
@@ -399,7 +394,7 @@ function mockMeFetch(t, me) {
 
 const pushes = (calls) => calls.filter((c) => c.method === 'PUT');
 
-// authStore.ts's module state survives the require.cache reset (see beforeEach), so a test needing
+// authStore.ts's module state survives between tests, so a test needing
 // a signed-out start after a signed-in one says so explicitly.
 async function signIn(t) {
   mockMeFetch(t, { steamid: STEAMID, prefs: null });
