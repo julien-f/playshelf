@@ -141,7 +141,7 @@ import {
   type LayoutDraft,
   type ViewStore,
 } from './tableViewPrefs.ts';
-import { renderPanelNav as renderPanelNavShared, stepGameList } from './panelNav.ts';
+import { renderPanelNav, stepGameList } from './panelNav.ts';
 import { createRowStore } from './rowStore.ts';
 import { createStaleGuard } from './staleGuard.ts';
 import { createStreamBatcher } from './streamBatcher.ts';
@@ -1641,10 +1641,6 @@ export default function ListRoute() {
     });
   }
 
-  function renderPanelNav(game: Game): void {
-    renderPanelNavShared({ hasList: !!table, game, getGameList, onStep: stepGame, onReroll: pickRandomGame });
-  }
-
   function openGame(game: Game, { isRandom = false }: { isRandom?: boolean } = {}): void {
     if (!isRandom) clearRandomQueue(randomQueueKey());
     const resolved = rowStore.getRow(game.appid) ?? standaloneRows[game.appid] ?? game;
@@ -1652,7 +1648,7 @@ export default function ListRoute() {
     // `pendingHopAppid` there), which is the only way the `/game/:appid` path — where the open
     // happens a whole route navigation later, from load() — could preserve one at all.
     panelOpen(resolved);
-    renderPanelNav(resolved);
+    renderPanelNav({ hasList: !!table, game: resolved, getGameList, onStep: stepGame, onReroll: pickRandomGame });
     // Reveals the newly-open game in the table (expands its group, jumps to its page, scrolls it
     // into view) without stealing real DOM focus from the panel — `@vates/data-table-solid`'s
     // external focus API (>= 0.14), built for exactly this "external nav just changed the current
