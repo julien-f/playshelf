@@ -80,6 +80,6 @@ Each rule comes from a flake it fixed; add one when a fix teaches something new.
 - `pre-merge-commit`: the changelog check on the merge's whole diff — a feature branch's own commits skip the entry requirement, so its merge into `main` must carry them.
 - `pre-push`: what CI runs (`npm run check`, then both widths of e2e) on HEAD; refuses a push of anything else or with untracked files, and sets uncommitted edits to tracked files aside for the checks, then restores them.
 - Claude Code `PreToolUse` hook (`.claude/settings.json`): `scripts/bash-guard.js` refuses `pkill`, `killall` and `kill $(pgrep …)`, whose pattern matches the agent's own shell (exit 144) and can miss the server, and names the `down` scripts instead; each refusal goes to `.git/dev-metrics/bash-guard.jsonl`.
-- CI (`.github/workflows/ci.yml`): `npm run check` and the e2e suite as two parallel jobs on Node 24, on every push to `main` and every PR; the run's summary lists the journey steps the tests lock.
+- CI (`.github/workflows/ci.yml`): `npm run check` beside the e2e suite in four shards (`--shard=N/4`), on Node 24, on every push to `main` and every PR; the run's summary lists the journey steps the tests lock.
 - A doc reference `check` reports is either stale (fix the doc) or deliberate history (add it to `HISTORY` in `scripts/doc-refs.js`, which reports an entry no doc mentions any more).
 - `scripts/doc-lint.js` fails on history phrasing ("used to", "no longer"… outside quotes), a paragraph over 1000 characters, and a `docs/` file missing from CLAUDE.md's or README.md's index.

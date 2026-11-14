@@ -38,5 +38,9 @@ Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` — pending.
 - **L1b format cache** (P75): a cacheless `npx prettier` (1164 calls for 885 commits in transcripts) deleted the default cache, so the hook's format step re-read the tree. Dedicated `--cache-location`: 14.5 s → 0.85 s CPU, 32–65 s → 1.8–4.5 s at load 45–85 (4 runs each, `npx prettier --write PLAN.md; npm run -s format:check`).
 
 - **L1c eslint cache** (P76): `--cache` (no type-aware rule): 3.3–3.6 s → 0.56–0.61 s CPU, 6.6–11.5 s → 1.6–3.4 s wall at load ~42; one large file touched: 1.24 s CPU.
+- **L2 CI e2e in 4 shards** (P77): unmeasured until the branch runs CI (needs a push: asked). Estimate from the last run: test step 6 min 37 s / 4 + ~45 s of setup ≈ 2.5 min, plus a ~20 s summary job, vs 7 min 14 s.
 
 ## Negative results
+
+- **Unit tests in one process** (`--test-isolation=none`): fails (shared module state, e.g. `Date is already being mocked`), and 23 s wall vs 15 s default at load ~42, though 8.4 s vs 19.4 s CPU. Would need every file made state-clean: not worth it.
+- **auth.test.js nonce sweep** (O(n) per claim, O(n²) over the test's 10k sign-ins): stopping the sweep at the first live nonce saves 0.56 s CPU of the suite's ~19 s (< 5 %), in security code. Reverted.

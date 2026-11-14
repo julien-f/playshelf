@@ -81,3 +81,9 @@ test("testsFromReport: one entry per title across projects, failed if any projec
     { title: 'A3: z', passed: true },
   ]);
 });
+
+test("testsFromReport: CI's shard reports merge, a title failed in any shard failing", () => {
+  const shard = (status) => ({ suites: [{ specs: [{ title: 'A1: x', tests: [{ results: [{ status }] }] }] }] });
+  assert.deepStrictEqual(testsFromReport(shard('passed'), shard('failed')), [{ title: 'A1: x', passed: false }]);
+  assert.deepStrictEqual(testsFromReport(shard('passed'), shard('passed')), [{ title: 'A1: x', passed: true }]);
+});
