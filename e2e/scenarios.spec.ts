@@ -5962,6 +5962,8 @@ test('M3 edge: without element fullscreen (an iPhone), only a trailer offers it,
 test('M1 edge: on a phone, a double-tap zoom leaves the controls as they were', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'phone', 'touch only');
   await page.clock.install();
+  // Paused from the start: running, the fake clock follows real time, and load let the 3 s idle hide the controls.
+  await page.clock.pauseAt(Date.now() + 1000);
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360&shot=s1');
   const lb = page.locator('#screenshot-lightbox');
@@ -6297,6 +6299,9 @@ test(
 );
 
 test('F1 edge: a screenshot shown below its size zooms from a visible button, or Z', async ({ page }) => {
+  await page.clock.install();
+  // Paused, the 3 s idle never hides the controls the steps below click, however long load stretches them.
+  await page.clock.pauseAt(Date.now() + 1000);
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360&shot=s1');
   const zoom = page.getByRole('button', { name: 'Zoom', exact: true });
@@ -6313,7 +6318,6 @@ test('F1 edge: a screenshot shown below its size zooms from a visible button, or
   await expect(zoom).toHaveAttribute('aria-pressed', 'false');
   await expect(img).not.toHaveAttribute('style', /scale/);
   // Nothing to zoom on a trailer.
-  await reachForControls(page);
   await page.getByRole('button', { name: 'Previous screenshot' }).click();
   await expect(zoom).toBeHidden();
 });

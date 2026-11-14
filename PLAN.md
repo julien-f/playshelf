@@ -43,6 +43,7 @@ Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` (load 46.8, ma
 - **L4 per-port e2e output dir** (P79): two e2e runs in one checkout (sessions sharing the main checkout; `claimPort` allows it) shared `test-results/`, which each run empties on start, deleting the other's traces. Reproduction (40 phone tests, a second run started mid-way): 6 failed, 12 ENOENT → 0 failed in 5 of 5.
 - **L5 Clear search flake** (P61): root cause an app bug, a search answering after × replaced the recents (any input now invalidates the in-flight search). New test fails before, passes after; `e2e-flakes.js --repeat=24 --load=24 --workers=12 -g 'Clear search'`: 0 of 144 at load median 40.5 (was 1/5 in the baseline run). Changelog at merge: "Clearing the nav search no longer lets a late answer replace the recently looked-up games".
 - **L6 phone subset at pre-push** (P64, user's choice: CI keeps every test at both widths): 266 edge tests tagged `@any-width`. Phone half: 451 → 181 tests, 62–65 s → 22–31 s (3 alternating pairs of `node scripts/e2e.js --project=phone [--phone-subset]`, load 1.4–23).
+- **L7 C234 zoom flakes**: both tests ran on a running fake clock or real time, so load let the lightbox's 3 s idle hide the controls they click or check. Clock paused from before `goto`. `e2e-flakes.js --repeat=… --load=24 --workers=12 --project=phone -g zoom`: 13/60 and 8/60 (load 66) → 0/120 and 0/120 (load 71.6). The same run found 3 other zoom tests failing 2–5/120: next.
 
 ## Negative results
 
