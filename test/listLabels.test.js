@@ -11,6 +11,7 @@ const {
   OP_SYMBOLS,
   OP_DESCRIPTIONS,
 } = require('../public/listLabels.ts');
+const { makeMemoryLocalStorage } = require('./memoryStorage.js');
 const { OP_LABELS } = require('../public/combine.ts');
 
 // The injected half of ListNaming (see listLabels.ts) — the real one reads accountsStore.ts/
@@ -262,12 +263,7 @@ test('listDisplayName: nothing to derive from (no sources, or a manual list) fal
 // Same memory-localStorage harness listsStore.test.js uses — this is the one part of this module
 // that does read the real stores, so it's the one part that needs them.
 function freshStores() {
-  const store = new Map();
-  global.localStorage = {
-    getItem: (k) => (store.has(k) ? store.get(k) : null),
-    setItem: (k, v) => store.set(k, String(v)),
-    removeItem: (k) => store.delete(k),
-  };
+  global.localStorage = makeMemoryLocalStorage();
   return { ...require('../public/listsStore.ts'), ...require('../public/listLabels.ts') };
 }
 

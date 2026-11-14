@@ -3,14 +3,7 @@
 const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 
-function makeMemoryLocalStorage() {
-  const store = new Map();
-  return {
-    getItem: (k) => (store.has(k) ? store.get(k) : null),
-    setItem: (k, v) => store.set(k, String(v)),
-    removeItem: (k) => store.delete(k),
-  };
-}
+const { makeMemoryLocalStorage } = require('./memoryStorage.js');
 
 // createAccountOverrideSync() is a factory precisely so each test gets a clean instance (see
 // its own comment) — but the override it hands to accountsStore.ts is module-level state there,

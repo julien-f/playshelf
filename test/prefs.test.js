@@ -6,14 +6,7 @@ const { until } = require('./until');
 
 // prefs.js reads/writes the bare `localStorage` global (it's loaded as a plain script in the
 // browser, not a module) — stub it before requiring so getPref/setPref have something to hit.
-function makeMemoryLocalStorage() {
-  const store = new Map();
-  return {
-    getItem: (k) => (store.has(k) ? store.get(k) : null),
-    setItem: (k, v) => store.set(k, String(v)),
-    removeItem: (k) => store.delete(k),
-  };
-}
+const { makeMemoryLocalStorage } = require('./memoryStorage.js');
 
 beforeEach(() => {
   global.localStorage = makeMemoryLocalStorage();

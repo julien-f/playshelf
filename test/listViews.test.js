@@ -12,14 +12,10 @@ registerHooks({
 });
 
 const { PRICE_COLUMNS } = require('../public/gameColumns.ts');
+const { makeMemoryLocalStorage } = require('./memoryStorage.js');
 
 beforeEach(() => {
-  const store = new Map();
-  global.localStorage = {
-    getItem: (k) => (store.has(k) ? store.get(k) : null),
-    setItem: (k, v) => store.set(k, String(v)),
-    removeItem: (k) => store.delete(k),
-  };
+  global.localStorage = makeMemoryLocalStorage();
 });
 
 const views = () => require('../public/listViews.ts');

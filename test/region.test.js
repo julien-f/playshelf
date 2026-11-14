@@ -17,14 +17,7 @@ const {
 // its own to reset between tests — see setPref/getPref's own equivalent note in prefs.js) —
 // localStorage (via prefs.js) and Intl.DateTimeFormat/Intl.Locale (detectCountry). Each test stubs only what it needs and afterEach restores
 // the real Intl.DateTimeFormat/Intl.Locale so no test leaks a stub into another.
-function makeMemoryLocalStorage() {
-  const store = new Map();
-  return {
-    getItem: (k) => (store.has(k) ? store.get(k) : null),
-    setItem: (k, v) => store.set(k, String(v)),
-    removeItem: (k) => store.delete(k),
-  };
-}
+const { makeMemoryLocalStorage } = require('./memoryStorage.js');
 
 const realDateTimeFormat = Intl.DateTimeFormat;
 const realLocale = Intl.Locale;
