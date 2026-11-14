@@ -207,10 +207,6 @@ export function keepAccountForLists({ unresolved: _unresolved, ...account }: Acc
 // same shape as listsStore.ts's deleteList. Never touches myAccount/currentAccount even if
 // they happen to hold the same id, since those are stored independently.
 export function removeRecentAccount(id: string): { softRemoved: boolean } {
-  return removeRecent(id);
-}
-
-function removeRecent(id: string): { softRemoved: boolean } {
   const recents = readRecents();
   const idx = recents.findIndex((a) => a.id === id);
   if (idx === -1) return { softRemoved: false };
@@ -229,7 +225,7 @@ function removeRecent(id: string): { softRemoved: boolean } {
 export function clearRecentAccounts(): void {
   batch(() =>
     readRecents().forEach((a) => {
-      if (!a.removedAt) removeRecent(a.id);
+      if (!a.removedAt) removeRecentAccount(a.id);
     }),
   );
 }
