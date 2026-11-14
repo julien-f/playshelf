@@ -98,7 +98,7 @@ export const ERIN: Player = {
 };
 
 // A private profile: no library, an empty wishlist, no friends list (A1's edge).
-export const FRANK: Player = {
+const FRANK: Player = {
   steamid: '76561198000000006',
   vanity: 'frank',
   personaname: 'Frank',

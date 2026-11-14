@@ -2,7 +2,7 @@
 // for scripts/perf-measure.js. Deterministic, and sized like a real stream event (raw and gzipped).
 import type { CatalogGame } from './fixtures.ts';
 
-export const BIG_LIBRARY_SIZE = 1200;
+const BIG_LIBRARY_SIZE = 1200;
 const FIRST_APPID = 9_000_000; // a range no fixture uses
 export const BIG_LIBRARY_APPIDS = Array.from({ length: BIG_LIBRARY_SIZE }, (_, i) => FIRST_APPID + i);
 
@@ -58,7 +58,7 @@ const prose = (rnd: () => number, n: number) =>
     Array.from({ length: 1 + Math.floor(rnd() * 3) }, () => pick(rnd, SYLLABLES)).join(''),
   ).join(' ');
 
-export interface BigLibraryGame extends CatalogGame {
+interface BigLibraryGame extends CatalogGame {
   description: string;
   languages: string[];
 }

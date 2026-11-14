@@ -1663,10 +1663,6 @@ async function stepsAtOnce(page: Page, keys: string[]) {
   }, keys);
 }
 
-async function lightboxShotId(page: Page) {
-  return new URL(page.url()).searchParams.get('shot');
-}
-
 // What the TV last reported of its trailer.
 async function lastPlayback(shown: Page) {
   return shown.evaluate(
@@ -2229,7 +2225,7 @@ test('C8 edge: game steps in the linked lightbox put each game on the TV once it
     .toContain('On TV: Terraria, game 3 of 3');
   await page.clock.runFor(600); // and nothing after
   // One send, of what the lightbox landed on once the media came, not the Cover first.
-  expect((await terraria()).map((m) => m.item.shotId)).toEqual([await lightboxShotId(page)]);
+  expect((await terraria()).map((m) => m.item.shotId)).toEqual([new URL(page.url()).searchParams.get('shot')]);
   expect(terrariaMedia.count).toBe(1);
   await page.keyboard.press('ArrowUp');
   await expect(shown.locator('.pres-caption-name')).toHaveText('Hades');

@@ -288,7 +288,7 @@ function bundleJson(origin: string, b: typeof BUNDLE | typeof PICK_BUNDLE = BUND
   };
 }
 
-export interface MockResponse {
+interface MockResponse {
   status: number;
   contentType: string;
   body: string;
