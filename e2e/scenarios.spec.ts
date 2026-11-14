@@ -591,13 +591,18 @@ test('A1 edge: an account stored without its name picks it up from Home', { tag:
   await expect(page.getByRole('banner')).toContainText('Alice');
 });
 
+// Opens the table's Filter menu on one column, found by searching its label.
+async function filterColumn(page: Page, label: string, key: string) {
+  await page.getByRole('button', { name: 'Filter', exact: true }).click();
+  await page.locator('.dt-filter-cols-search').fill(label);
+  await page.locator(`[data-filter-col-key="${key}"]`).click();
+}
+
 test('F3 edge: the Played (h) filter range reads in rounded hours', { tag: '@any-width' }, async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(6);
-  await page.getByRole('button', { name: 'Filter', exact: true }).click();
-  await page.locator('.dt-filter-cols-search').fill('Played');
-  await page.locator('[data-filter-col-key="playtime"]').click();
+  await filterColumn(page, 'Played', 'playtime');
   // Empty until a bound is set; the column's bounds show as placeholders in its own format (0 h is "—").
   const bounds = () =>
     page.locator('.dt-range-input').evaluateAll((inputs) => inputs.map((i) => (i as HTMLInputElement).placeholder));
@@ -652,9 +657,7 @@ test('F3 edge: the Played (h) filter has a "never played" preset', { tag: '@any-
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(6);
-  await page.getByRole('button', { name: 'Filter', exact: true }).click();
-  await page.locator('.dt-filter-cols-search').fill('Played');
-  await page.locator('[data-filter-col-key="playtime"]').click();
+  await filterColumn(page, 'Played', 'playtime');
   await page.getByRole('button', { name: 'never played' }).click();
   await expect(rows(page)).toHaveCount(3);
   await expect(page.getByRole('button', { name: /Played \(h\): never played/ })).toBeVisible();
@@ -664,9 +667,7 @@ test('F3.5: the table toolbar picks a random game from the filtered rows', async
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(6);
-  await page.getByRole('button', { name: 'Filter', exact: true }).click();
-  await page.locator('.dt-filter-cols-search').fill('Played');
-  await page.locator('[data-filter-col-key="playtime"]').click();
+  await filterColumn(page, 'Played', 'playtime');
   await page.getByRole('button', { name: 'never played' }).click();
   await expect(rows(page)).toHaveCount(3);
   await page.keyboard.press('Escape');
@@ -695,9 +696,7 @@ test(
     await asPlayer(page, ALICE);
     await page.goto('/lists/wishlist');
     await expect(rows(page)).toHaveCount(4);
-    await page.getByRole('button', { name: 'Filter', exact: true }).click();
-    await page.locator('.dt-filter-cols-search').fill('ProtonDB');
-    await page.locator('[data-filter-col-key="protondb"]').click();
+    await filterColumn(page, 'ProtonDB', 'protondb');
     const values = page.locator('.dt-dd');
     await expect(values).toContainText('Borked');
     await expect(values).toContainText('No report');
@@ -1334,9 +1333,7 @@ test(
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned');
     await expect(rows(page)).toHaveCount(6);
-    await page.getByRole('button', { name: 'Filter', exact: true }).click();
-    await page.locator('.dt-filter-cols-search').fill('Tags');
-    await page.locator('[data-filter-col-key="tags"]').click();
+    await filterColumn(page, 'Tags', 'tags');
     await page.getByRole('checkbox', { name: 'Action', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Co-op', exact: true }).click();
     // Portal 2: Action 100%, Co-op 30%.
@@ -1377,9 +1374,7 @@ test(
     await coop.click();
     await expect(rows(page)).toHaveCount(4);
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Filter', exact: true }).click();
-    await page.locator('.dt-filter-cols-search').fill('Tag Match');
-    await page.locator('[data-filter-col-key="tagMatch"]').click();
+    await filterColumn(page, 'Tag Match', 'tagMatch');
     await page.getByRole('textbox', { name: 'Tag Match Min' }).fill('60');
     await expect(rows(page)).toHaveCount(3);
     await expect(row(page, 'Portal 2')).toHaveCount(0);
