@@ -142,6 +142,7 @@ import {
   type ViewStore,
 } from './tableViewPrefs.ts';
 import { renderPanelNav, stepGameList } from './panelNav.ts';
+import { KIND_LAYOUTS, PICK_BUNDLE_LAYOUT, type ListKind } from './tableViewKeys.ts';
 import { createRowStore } from './rowStore.ts';
 import { createStaleGuard } from './staleGuard.ts';
 import { createStreamBatcher } from './streamBatcher.ts';
@@ -325,8 +326,6 @@ import Link from 'lucide-solid/icons/link';
 import Plus from 'lucide-solid/icons/plus';
 import TriangleAlert from 'lucide-solid/icons/triangle-alert';
 import Trophy from 'lucide-solid/icons/trophy';
-
-type ListKind = 'owned' | 'wishlist' | 'bundle' | 'recent' | 'user' | 'compare' | 'shared' | 'creator' | 'game-pass';
 
 // ── Columns — ported verbatim from library.tsx's own (see its comments for the full reasoning
 // behind each column's grouping/format/category choices) ──────────────────────────────────────
@@ -2132,22 +2131,6 @@ export default function ListRoute() {
     }),
   );
 
-  // Each kind's own layout when it has no saved view or list of its own: its pref key, and what Save calls it.
-  const KIND_LAYOUTS: Record<ListKind, { prefKey: string; name: string }> = {
-    owned: { prefKey: 'ownedListView', name: 'Owned' },
-    wishlist: { prefKey: 'wishlistListView', name: 'Wishlist' },
-    bundle: { prefKey: 'bundleListView', name: 'bundle' },
-    recent: { prefKey: 'recentListView', name: 'Recently Looked Up' },
-    // One for every comparison and every shared link: neither has a stored list to hang a view on (a
-    // comparison's draft is per comparison, storedLayout; a shared link's own view is what Share layout is for).
-    compare: { prefKey: 'compareListView', name: 'comparison' },
-    shared: { prefKey: 'sharedListView', name: 'shared list' },
-    creator: { prefKey: 'creatorListView', name: 'developer and publisher list' },
-    'game-pass': { prefKey: 'gamePassListView', name: 'Game Pass' },
-    user: { prefKey: 'ownedListView', name: 'list' }, // unreached: a user list's layout lives on the list
-  };
-  // Pick-and-mix bundles share their own layout: grouped and sorted for picking, not by tier.
-  const PICK_BUNDLE_LAYOUT = { prefKey: 'pickBundleListView', name: 'pick & mix bundle' };
   const kindLayout = () =>
     kind === 'bundle' && bundleMeta()?.model === 'pick' ? PICK_BUNDLE_LAYOUT : KIND_LAYOUTS[kind];
   // Owned/Wishlist's saved view (listViews.ts) in `?view=`, for whichever account is current.
@@ -4078,8 +4061,7 @@ export default function ListRoute() {
     kind === 'recent' ? undefined : (
       <>
         {/* userList() is still null at mount (set once load() resolves it below), so this has to be
-          a reactive Show rather than a plain `kind === 'user' && ...` check — the latter would
-          freeze at "no list yet" forever, since heroActions itself is only built once. */}
+          a reactive Show: heroActions itself is only built once. */}
         <Show when={isDynamicList()}>
           {/* Stays "Edit sources" while open: the form's own Cancel is the one way out it names. */}
           <button
