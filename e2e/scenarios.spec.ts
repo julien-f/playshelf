@@ -1803,7 +1803,7 @@ test("C8 edge: the host's mute holds from one media to the next on the TV", asyn
   // A screenshot, then the trailer again: still muted.
   await page.getByRole('button', { name: 'Screenshot 1 of 3' }).click();
   await page.keyboard.press('p');
-  await expect.poll(() => shown.locator('img.pres-media').getAttribute('src')).toContain('Screenshot%201');
+  await expect(shown.locator('img.pres-media')).toHaveAttribute('src', /Screenshot%201/);
   await page.getByRole('button', { name: 'Trailer 1 of 1' }).click();
   await page.keyboard.press('p');
   await expect.poll(() => tv.evaluate((v: HTMLVideoElement) => !v.hidden && !v.paused)).toBe(true);
@@ -1887,7 +1887,7 @@ test('C8 edge: P again on a picture the TV failed to load loads it, the spinner 
   broken = false;
   await page.keyboard.press('p');
   await expect(shown.getByRole('alert')).toHaveCount(0);
-  await expect.poll(() => shown.locator('img.pres-media').getAttribute('src')).toContain('full');
+  await expect(shown.locator('img.pres-media')).toHaveAttribute('src', /full/);
   await expect(shown.locator('.pres')).not.toHaveClass(/pres--loading/);
 });
 
@@ -2167,7 +2167,7 @@ test('C8 edge: a burst of steps sends the TV its first at once and then only whe
   await page.goto('/game/1145360?shot=s3');
   await expect(page.locator('#screenshot-lightbox')).toHaveAttribute('open');
   const shown = await startPresenting(page);
-  await expect.poll(() => shown.locator('img.pres-media').getAttribute('src')).toContain('Screenshot%203');
+  await expect(shown.locator('img.pres-media')).toHaveAttribute('src', /Screenshot%203/);
   // Frozen, so a slow poll can't miss the burst's first before the settle sends its last.
   await page.clock.install();
   await page.clock.pauseAt(Date.now() + 60_000);
@@ -2650,7 +2650,7 @@ test('C8 edge: P in the lightbox presents its media and keeps the lightbox, now 
   const popup = page.waitForEvent('popup', { timeout: 3000 });
   await page.keyboard.press('p');
   const shown = await popup;
-  await expect.poll(() => shown.locator('img.pres-media').getAttribute('src')).toContain('Screenshot%203');
+  await expect(shown.locator('img.pres-media')).toHaveAttribute('src', /Screenshot%203/);
   await expect(lightbox).toHaveAttribute('open');
   await expect(lightbox.locator('.lb-tv-toggle')).toHaveAccessibleName('On TV');
   await expect(page.getByRole('banner').locator('.present-chip')).toContainText('Hades');
@@ -2688,7 +2688,7 @@ test("C8 edge: a trailer the browser won't play with sound there says a click gi
   await page.keyboard.press('p');
   await expect.poll(() => shown.evaluate(() => (window as unknown as { ghosts: number }).ghosts)).toBe(1);
   await expect(shown.locator('.pres-ghost')).toHaveCount(0);
-  await expect.poll(() => shown.locator('img.pres-media').getAttribute('src')).toContain('Screenshot%201');
+  await expect(shown.locator('img.pres-media')).toHaveAttribute('src', /Screenshot%201/);
 });
 
 test('C8 edge: the tokens shared with the TV leave the app as it was', async ({ page }) => {
@@ -2710,7 +2710,7 @@ test('C8 edge: before its first click, the TV says what a click does; then never
   await expect(card).toBeHidden();
   await page.getByRole('button', { name: 'Screenshot 1 of 3' }).click();
   await page.keyboard.press('p');
-  await expect.poll(() => shown.locator('img.pres-media').getAttribute('src')).toContain('Screenshot%201');
+  await expect(shown.locator('img.pres-media')).toHaveAttribute('src', /Screenshot%201/);
   await expect(card).toBeHidden();
 });
 
@@ -2855,7 +2855,7 @@ test("C8 edge: a screenshot whose thumbnail is broken but picture loads isn't ca
   await expect(page.locator('#panel-title')).toHaveText('Hades');
   await page.getByRole('button', { name: 'Screenshot 1 of 3' }).click();
   const shown = await startPresenting(page);
-  await expect.poll(() => shown.locator('img.pres-media').getAttribute('src')).toContain('full');
+  await expect(shown.locator('img.pres-media')).toHaveAttribute('src', /full/);
   await expect(shown.getByRole('alert')).toHaveCount(0);
 });
 
@@ -2870,7 +2870,7 @@ test('C8 edge: a trailer that fails to load says so on the presentation', async 
   await expect(error).toHaveText("Couldn't load this video.");
   await page.getByRole('button', { name: 'Screenshot 1 of 3' }).click();
   await page.keyboard.press('p');
-  await expect.poll(() => shown.locator('img.pres-media').getAttribute('src')).toContain('Screenshot%201');
+  await expect(shown.locator('img.pres-media')).toHaveAttribute('src', /Screenshot%201/);
   await expect(error).toBeHidden();
 });
 
