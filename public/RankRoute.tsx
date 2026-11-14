@@ -38,6 +38,7 @@ import { registerRouteHandlers } from './AppShell.tsx';
 import Kbd from './Kbd.tsx';
 import { focusFirst, focusLost, handOffFocus } from './focusHandoff.ts';
 import type { Game, GameDetails, GameDetailsReply } from './types.ts';
+import { createStaleGuard } from './staleGuard.ts';
 
 const MAX_UNDO = 100;
 // Tie, Skip and Undo's keys, which wait while the details panel is open.
@@ -84,7 +85,7 @@ export default function RankRoute() {
   const excludeArmed = () => armed() === 'exclude';
   // Store-backed, so the panel showing one of them updates in place when its details land or refresh.
   const [games, setGames] = createStore<Record<number, Game>>({});
-  let loadToken = 0;
+  const loadGuard = createStaleGuard();
 
   // Shows the next pair; `save` also stores the ranking it came with.
   function showNext(next: { state: RankingState; pair: RankingPair | null }, save = true): void {
@@ -98,7 +99,7 @@ export default function RankRoute() {
   }
 
   async function load(): Promise<void> {
-    const token = ++loadToken;
+    const token = loadGuard.next();
     const list = getList(params.listId!);
     if (!list || list.kind !== 'ranked') {
       setStatus("This ranked list isn't in this browser: it was deleted, or it was made in another one.");
@@ -109,7 +110,7 @@ export default function RankRoute() {
     setBaseTitle(`Rank — ${name}`);
     try {
       const { result } = await resolveListWithSources(list, createDefaultFetchers());
-      if (token !== loadToken) return;
+      if (loadGuard.isStale(token)) return;
       const appids = flattenCombineResult(result);
       // A new choice replaces the stored one; a used-up one is dropped rather than resumed.
       const incoming = location.state?.rankFocus;
@@ -126,7 +127,7 @@ export default function RankRoute() {
       setRefreshFailure(null);
       setLimited('');
     } catch (err) {
-      if (token !== loadToken) return;
+      if (loadGuard.isStale(token)) return;
       setStatus(`Error: ${(err as Error).message}`);
     }
   }
@@ -276,7 +277,7 @@ export default function RankRoute() {
   onCleanup(() => {
     document.removeEventListener('keydown', onKeydown, true);
     if (isPanelOpen()) panelClose({ leavingRoute: true });
-    loadToken++;
+    loadGuard.next();
     setBaseTitle(null);
   });
 

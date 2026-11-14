@@ -23,6 +23,7 @@ import type { GameSearchResult } from './gameSearch.ts';
 import type { Game } from './types.ts';
 import { detailsFields, failedLookupFields, fetchGameDetails } from './utils.ts';
 import { SearchClearButton } from './SearchClearButton.tsx';
+import { createStaleGuard } from './staleGuard.ts';
 
 // CORE_COLUMNS' thumb + Name pair over a bare GameSearchResult; a cell is a tracked scope, so renderName's badge follows ownership landing.
 function renderThumb(_value: unknown, row: GameSearchResult): Node {
@@ -101,10 +102,10 @@ export default function SearchRoute() {
     if (debounceTimer != null) clearTimeout(debounceTimer);
   });
 
-  let searchToken = 0;
+  const searchGuard = createStaleGuard();
   createEffect(
     on(query, (term) => {
-      const token = ++searchToken;
+      const token = searchGuard.next();
       // Same floor as the nav-bar box (gameSearch.ts) — a 1-character query is expensive and
       // near-meaningless against an unofficial, unpaginated store-search endpoint.
       if (term.length < GAME_SEARCH_MIN_CHARS) {
@@ -116,15 +117,15 @@ export default function SearchRoute() {
       setSearchFailed(false);
       searchGames(term)
         .then((list) => {
-          if (token === searchToken) setResults(list);
+          if (!searchGuard.isStale(token)) setResults(list);
         })
         .catch(() => {
-          if (token !== searchToken) return;
+          if (searchGuard.isStale(token)) return;
           setResults([]);
           setSearchFailed(true);
         })
         .finally(() => {
-          if (token === searchToken) setSearching(false);
+          if (!searchGuard.isStale(token)) setSearching(false);
         });
     }),
   );
@@ -154,9 +155,9 @@ export default function SearchRoute() {
   // Store-backed, so the panel updates in place when details land rather than reopening (which drops its DLC trail).
   const [games, setGames] = createStore<Record<number, Game>>({});
   const [statusText, setStatusText] = createSignal('');
-  let lookupToken = 0;
+  const lookupGuard = createStaleGuard();
   async function openResult(appid: number, name: string, tinyImage: string | null, standalone = false): Promise<void> {
-    const token = ++lookupToken;
+    const token = lookupGuard.next();
     setStatusText('');
     setGames(appid, { appid, name, loading: true, details: null, standalone });
     const game = games[appid];
@@ -172,12 +173,12 @@ export default function SearchRoute() {
     focusRow(appid);
     try {
       const data = await fetchGameDetails(appid);
-      if (token !== lookupToken) return; // a newer pick has since taken over
+      if (lookupGuard.isStale(token)) return; // a newer pick has since taken over
       setGames(appid, { ...detailsFields(data), name: data.name || name });
       setStatusText(data.limited ?? '');
       addRecentGame(appid, data.name || name, data.meta?.capsule || tinyImage);
     } catch (err) {
-      if (token !== lookupToken) return;
+      if (lookupGuard.isStale(token)) return;
       setGames(appid, failedLookupFields());
       setStatusText(`Lookup failed: ${(err as Error).message}`);
     }
