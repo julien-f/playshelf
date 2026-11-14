@@ -24,9 +24,9 @@
     "check:journeys": "node scripts/journey-coverage.js --check",
     "check:setup": "node scripts/setup-lint.js",
     "cache:clear": "node scripts/cache-clear.js",
-    "lint": "eslint public --max-warnings=0",
-    "format": "prettier --write --cache --log-level warn .",
-    "format:check": "prettier --check --cache ."
+    "lint": "eslint public --max-warnings=0 --cache --cache-location node_modules/.cache/eslint/",
+    "format": "prettier --write --cache --cache-location node_modules/.cache/prettier-own/cache --log-level warn .",
+    "format:check": "prettier --check --cache --cache-location node_modules/.cache/prettier-own/cache ."
   },
   "dependencies": {
     "@solidjs/router": "^1.0.0",

@@ -2,8 +2,8 @@
 
 // `npm run check`: every check in parallel, one line each, full output only for the ones that fail —
 // so nobody has to filter the output to find what broke. With --staged=<base> (the pre-commit hook),
-// checks the commit against <base> instead: typecheck, lint, the CSS check and the e2e suite run only
-// when something they cover is staged. Each run's step times and failures go to scripts/dev-metrics.js.
+// checks the commit against <base> instead: typecheck, lint and the CSS check run only when something
+// they cover is staged; e2e is the pre-push hook's. Each run's step times and failures go to scripts/dev-metrics.js.
 
 const { execFileSync, spawn } = require('node:child_process');
 const { record } = require('./dev-metrics');
@@ -15,8 +15,7 @@ const UI =
 const touchesUi = (files) => files.some((f) => UI.test(f));
 
 // `[name, npm script args]` for a full run (`staged` undefined) or a commit against `staged`.
-// `deferE2e`: a fix-batch lane commits without e2e and runs it once before reporting (BATCH.md).
-function steps(staged, files = [], { deferE2e = process.env.E2E_DEFER === '1' } = {}) {
+function steps(staged, files = []) {
   const ui = staged === undefined || touchesUi(files);
   return [
     ['format', ['format:check']],
@@ -34,10 +33,6 @@ function steps(staged, files = [], { deferE2e = process.env.E2E_DEFER === '1' } 
     ['doc-lint', ['check:doc-lint']],
     ['journeys', ['check:journeys']],
     ['setup', ['check:setup']],
-    // Desktop only: the pre-push hook runs both widths before anything reaches CI.
-    ...(ui && staged !== undefined && !deferE2e
-      ? [['e2e', ['test:e2e', '--', '--if-changed', '--project=desktop']]]
-      : []),
   ];
 }
 

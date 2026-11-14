@@ -33,7 +33,7 @@ An `ERESOLVE` warning, or `npm ls --all` exiting non-zero on an `invalid` `types
 Confirm the changes first, then:
 
 1. `npm update` for in-range drift, `npm install <pkg>@latest` for a range bump.
-2. `npm run build` — the one step the pre-commit hook doesn't cover; the hook runs the rest, e2e included, since the lockfile is staged. A 0.x minor bump can break like a major one even when its README and types show only additions. Report real output.
+2. `npm run build` and `npm run test:e2e` — the pre-commit hook runs the rest, since the lockfile is staged. A 0.x minor bump can break like a major one even when its README and types show only additions. Report real output.
 3. A lockfile-only change is still a code change: `CHANGELOG.md` entry in the same commit, per `CLAUDE.md`.
 4. Surface new lint violations from a plugin bump rather than silencing them with `eslint-disable`.
 5. An updated `@vates/data-table-solid` (or any package an improvements.md item waits on): re-check every item citing its issues (`grep -n 'vatesfr/data-table' docs/dev/improvements.md`) on `dev:mock`, and drop or narrow the ones it fixed — 0.16 shipped five such fixes that sat unnoticed.

@@ -15,6 +15,8 @@ const OUT_DIR = path.join(__dirname, 'node_modules/.cache/e2e-dist', String(PORT
 
 export default defineConfig({
   testDir: 'e2e',
+  // Per port: a run empties its outputDir on start, which would delete a concurrent run's traces (ENOENT failures).
+  outputDir: `test-results/${PORT}`,
   fullyParallel: true,
   reporter: 'dot',
   use: {
@@ -25,17 +27,23 @@ export default defineConfig({
     timezoneId: 'Europe/Paris',
     // Transitions and smooth scrolls end at once, so a test never waits on or measures one mid-way.
     reducedMotion: 'reduce',
-    // `E2E_SHOTS=1 npm run test:e2e` keeps every test's final screen in test-results/, to look at a UI change under mocks.
+    // `E2E_SHOTS=1 npm run test:e2e` keeps every test's final screen in test-results/<port>/, to look at a UI change under mocks.
     screenshot: process.env.E2E_SHOTS ? 'on' : 'off',
     // The committed DejaVu fonts, not the machine's: layouts measure the same locally and in CI (Linux only: fontconfig).
     launchOptions: { env: { ...process.env, FONTCONFIG_FILE: path.join(__dirname, 'e2e/fonts/fonts.conf') } },
   },
-  projects: Object.entries(PROJECTS).map(([name, use]) => ({ name, use })),
+  projects: Object.entries(PROJECTS).map(([name, use]) => ({
+    name,
+    use,
+    // The pre-push hook's phone run (scripts/e2e.js --phone-subset) skips tests tagged as the same at any width; CI runs them.
+    ...(name === 'phone' && process.env.E2E_PHONE_SUBSET && { grepInvert: /@any-width/ }),
+  })),
   webServer: {
     // E2E_BUILT: scripts/e2e.js (`npm run test:e2e`) already built into that directory.
     command: process.env.E2E_BUILT
       ? `npx vite preview --outDir ${process.env.E2E_BUILT} --port ${PORT} --strictPort`
-      : `npx vite build --sourcemap --outDir ${OUT_DIR} && npx vite preview --outDir ${OUT_DIR} --port ${PORT} --strictPort`,
+      : // scripts/e2e.js's stamp beside the build would describe what this replaces.
+        `rm -f ${OUT_DIR}.inputs && npx vite build --sourcemap --outDir ${OUT_DIR} && npx vite preview --outDir ${OUT_DIR} --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
     // A server already on the port would serve another build: fail on the busy port instead.
     reuseExistingServer: false,

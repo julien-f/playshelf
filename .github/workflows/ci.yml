@@ -30,10 +30,14 @@ jobs:
       - run: npm ci
       - run: npm run check
 
-  # Its own job, so it runs beside check rather than after it.
+  # Its own jobs, so it runs beside check rather than after it; four shards cut its ~7 min.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -42,12 +46,36 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e -- --reporter=list,json
+      - run: npm run test:e2e -- --reporter=list,json --shard=${{ matrix.shard }}/4
         env:
-          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-results.json
-      - run: |
-          { echo '```'; node scripts/journey-coverage.js --results=e2e-results.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-results-${{ matrix.shard }}.json
+      # The JSON report only (titles, statuses, errors): no traces.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: success() || failure()
+        with:
+          name: e2e-results-${{ matrix.shard }}
+          path: e2e-results-${{ matrix.shard }}.json
+          retention-days: 1
       # The page's accessibility snapshot at each failure (mocked fixtures only), since no traces are kept.
       - run: find test-results -name error-context.md -exec sh -c 'echo "== $1"; cat "$1"' _ {} \;
         if: failure()
+
+  # The journey steps the shards' passing tests lock, in the run's summary.
+  e2e-summary:
+    needs: e2e
+    if: success() || failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: e2e-results-*
+          merge-multiple: true
+      # A shard that uploaded no report would leave its tests' steps out without a word.
+      - run: |
+          [ "$(ls e2e-results-*.json | wc -l)" -eq 4 ] || { echo "a shard's report is missing: $(ls e2e-results-*.json)"; exit 1; }
+          { echo '```'; node scripts/journey-coverage.js $(printf -- '--results=%s ' e2e-results-*.json); echo '```'; } >> "$GITHUB_STEP_SUMMARY"

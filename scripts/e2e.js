@@ -3,11 +3,13 @@
 // `npm run test:e2e`: builds the frontend once, then runs Playwright against it. A full passing run
 // records, per project, a hash of everything the suite can see (the build minus its sourcemaps, e2e/, the Playwright
 // config, the lockfile, Node's version); with --if-changed (the hooks), projects already passed on that hash are
-// skipped, since they would test exactly what passed: a push after the pre-commit desktop run runs only phone. With --since=<ref> (a fix-batch lane), a
+// skipped, since they would test exactly what passed. With --since=<ref> (a fix-batch lane), a
 // branch whose commits since <ref> touch nothing the suite covers (check.js's UI files) skips it.
 // A port another run holds or something listens on is skipped for the next free one, unless E2E_PORT sets it.
+// The build is skipped when its inputs are those of the build already in its directory (most runs only change e2e/).
+// With --phone-subset (the pre-push hook), phone skips the tests tagged `@any-width`; its pass is recorded apart.
 // Each --if-changed run logs the projects asked for and those run (dev-metrics `e2e-runs`).
-//   node scripts/e2e.js [--if-changed] [--since=<ref>] [playwright args…]
+//   node scripts/e2e.js [--if-changed] [--since=<ref>] [--phone-subset] [playwright args…]
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -45,6 +47,18 @@ function inputsHash(outDir) {
     ...filesUnder(outDir, path.dirname(outDir)),
     ...filesUnder(path.join(ROOT, 'e2e'), ROOT),
     ...['playwright.config.ts', 'scripts/e2e-projects.js', 'package-lock.json'].map((f) => [f, path.join(ROOT, f)]),
+  ];
+  for (const [name, f] of files) hash.update(name).update('\0').update(fs.readFileSync(f)).update('\0');
+  return hash.digest('hex');
+}
+
+// Hash of what `vite build` reads under `root`: the frontend, its static files, configs and locked dependencies.
+function buildInputsHash(root = ROOT) {
+  const hash = crypto.createHash('sha256').update(process.version);
+  const files = [
+    ...filesUnder(path.join(root, 'public'), root),
+    ...filesUnder(path.join(root, 'static'), root),
+    ...['vite.config.js', 'tsconfig.json', 'package-lock.json'].map((f) => [f, path.join(root, f)]),
   ];
   for (const [name, f] of files) hash.update(name).update('\0').update(fs.readFileSync(f)).update('\0');
   return hash.digest('hex');
@@ -92,6 +106,10 @@ async function claimPort(start, { fixed = false, lockDir = CACHE, isBusy = liste
   throw new Error(fixed ? `port ${start} (E2E_PORT) is in use` : `no free port from ${start} to ${MAX_PORT}`);
 }
 
+// The key a project's pass is recorded under: the phone subset apart, as a full phone pass covers it but not
+// the other way round.
+const passKey = (project, phoneSubset) => (project === 'phone' && phoneSubset ? 'phone-subset' : project);
+
 // The projects already passed on `hash`.
 const passedOn = (hash) => {
   try {
@@ -130,8 +148,9 @@ function planRun(pwArgs, passed, ifChanged) {
 async function main() {
   const args = process.argv.slice(2);
   const ifChanged = args.includes('--if-changed');
+  const phoneSubset = args.includes('--phone-subset');
   const since = args.find((a) => a.startsWith('--since='))?.slice(8);
-  const pwArgs = args.filter((a) => a !== '--if-changed' && !a.startsWith('--since='));
+  const pwArgs = args.filter((a) => !['--if-changed', '--phone-subset'].includes(a) && !a.startsWith('--since='));
   if (since) {
     const changed = execFileSync('git', ['diff', '--name-only', `${since}...HEAD`], { cwd: ROOT, encoding: 'utf8' });
     if (!touchesUi(changed.split('\n').filter(Boolean))) {
@@ -154,12 +173,20 @@ async function main() {
   process.env.E2E_PORT = String(claimed.port);
   const OUT_DIR = path.join(CACHE, 'e2e-dist', String(claimed.port));
 
-  execFileSync('npx', ['vite', 'build', '--sourcemap', '--outDir', OUT_DIR, '--logLevel', 'error'], {
-    cwd: ROOT,
-    stdio: 'inherit',
-  });
+  // Beside the build, not in it: vite empties its outDir.
+  const stamp = `${OUT_DIR}.inputs`;
+  const inputs = buildInputsHash();
+  if (!fs.existsSync(OUT_DIR) || !fs.existsSync(stamp) || fs.readFileSync(stamp, 'utf8') !== inputs) {
+    fs.rmSync(stamp, { force: true });
+    execFileSync('npx', ['vite', 'build', '--sourcemap', '--outDir', OUT_DIR, '--logLevel', 'error'], {
+      cwd: ROOT,
+      stdio: 'inherit',
+    });
+    fs.writeFileSync(stamp, inputs);
+  }
   const hash = inputsHash(OUT_DIR);
-  const passed = passedOn(hash);
+  const passedKeys = passedOn(hash);
+  const passed = new Set(PROJECTS.filter((p) => passedKeys.has(p) || passedKeys.has(passKey(p, phoneSubset))));
   const { running, runArgs } = planRun(pwArgs, passed, ifChanged);
   const log = (ok, seconds) =>
     ifChanged && running && record('e2e-runs', { asked: splitProjects(pwArgs).projects, ran: running, ok, seconds });
@@ -175,14 +202,17 @@ async function main() {
   const { status } = spawnSync('npx', ['playwright', 'test', ...runArgs], {
     cwd: ROOT,
     stdio: 'inherit',
-    env: { ...process.env, E2E_BUILT: OUT_DIR },
+    env: { ...process.env, E2E_BUILT: OUT_DIR, E2E_PHONE_SUBSET: phoneSubset ? '1' : '' },
   });
   log(status === 0, Math.round((Date.now() - started) / 1000));
   if (status === 0 && running)
-    fs.writeFileSync(PASS_FILE, `${[hash, ...new Set([...passed, ...running])].join('\n')}\n`);
+    fs.writeFileSync(
+      PASS_FILE,
+      `${[hash, ...new Set([...passedKeys, ...running.map((p) => passKey(p, phoneSubset))])].join('\n')}\n`,
+    );
   process.exit(status ?? 1);
 }
 
 if (require.main === module) main();
 
-module.exports = { claimPort, listening, planRun };
+module.exports = { buildInputsHash, claimPort, listening, passKey, planRun };

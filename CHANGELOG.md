@@ -112,6 +112,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - After two quick refreshes of an account where the second failed, the owned and wishlist marks now show the first one's data
 - A saved comparison names its players instead of showing their Steam IDs, and so does a list saved from a shared link or a ranking made from someone else's link.
 - Reopening a game from the table morphs its picture into the panel again, not only on its first open
+- Clearing the nav search no longer lets a late answer replace the recently looked-up games
 
 ### Development
 
@@ -146,6 +147,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - The real dev server runs on a worktree's own ports with the main checkout's settings and cache
 - A feature skill for new feature requests; backlog-run takes item ids and hands over the next one
 - Hook e2e runs log which projects they ran, summarized by `setup-facts.js --cost`
+- Faster hooks: the pre-commit hook no longer runs e2e, Prettier and ESLint keep their caches, the pre-push hook runs at phone width only the tests that depend on it, and CI runs e2e in four shards
+- Steadier e2e: concurrent runs in one checkout no longer delete each other's traces, and six lightbox tests no longer race the clock
 
 ## [0.12.0] - 2026-10-30
 

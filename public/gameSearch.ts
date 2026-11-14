@@ -261,6 +261,7 @@ export function initGameSearch({
   function showRecents(): boolean {
     const list = recents();
     if (!list.length) return false;
+    activeFetch++; // a search still in flight would replace them when it answers
     showResults(list.slice(0, RECENTS_SHOWN), { recent: true });
     return true;
   }

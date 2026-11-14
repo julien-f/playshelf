@@ -3,8 +3,8 @@
 // Derives which journey steps in docs/dev/journeys.md the e2e tests lock (★), from test titles:
 // `A1: …` covers A1's built steps, `A1.1,3-4: …` those steps, `A1 edge: …` A1's edges.
 // Prints one line per journey; `--check` (run by `npm run check`) fails on a title that maps to
-// no journey or step, or to a ◇ step. `--results=<file>` (Playwright's JSON report) counts only
-// passing tests.
+// no journey or step, or to a ◇ step. `--results=<file>` (Playwright's JSON report; repeated for
+// CI's shards) counts only passing tests.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -81,12 +81,12 @@ function format(journeys, cov) {
     .join('\n');
 }
 
-// Playwright's JSON report → [{ title, passed }], one per title across projects (widths); a test
-// passes when no project's last result failed it.
-function testsFromReport(report) {
+// Playwright's JSON reports → [{ title, passed }], one per title across projects (widths) and shards;
+// a test passes when no project's last result failed it.
+function testsFromReport(...reports) {
   const specs = (suite) => [...(suite.specs ?? []), ...(suite.suites ?? []).flatMap(specs)];
   const passed = new Map();
-  for (const spec of report.suites.flatMap(specs)) {
+  for (const spec of reports.flatMap((r) => r.suites).flatMap(specs)) {
     const ok = spec.tests.every(
       (t) => t.results.length === 0 || ['passed', 'skipped'].includes(t.results.at(-1).status),
     );
@@ -97,17 +97,23 @@ function testsFromReport(report) {
 
 function main() {
   const args = process.argv.slice(2);
-  const results = args.find((a) => a.startsWith('--results='))?.split('=')[1];
-  const report = results
-    ? JSON.parse(fs.readFileSync(results, 'utf8'))
-    : JSON.parse(
-        execFileSync(process.execPath, [require.resolve('@playwright/test/cli'), 'test', '--list', '--reporter=json'], {
-          cwd: ROOT,
-          encoding: 'utf8',
-        }),
-      );
+  const results = args.filter((a) => a.startsWith('--results=')).map((a) => a.split('=')[1]);
+  const reports = results.length
+    ? results.map((f) => JSON.parse(fs.readFileSync(f, 'utf8')))
+    : [
+        JSON.parse(
+          execFileSync(
+            process.execPath,
+            [require.resolve('@playwright/test/cli'), 'test', '--list', '--reporter=json'],
+            {
+              cwd: ROOT,
+              encoding: 'utf8',
+            },
+          ),
+        ),
+      ];
   const journeys = parseJourneys(fs.readFileSync(path.join(ROOT, 'docs/dev/journeys.md'), 'utf8'));
-  const { journeys: cov, problems } = coverage(journeys, testsFromReport(report));
+  const { journeys: cov, problems } = coverage(journeys, testsFromReport(...reports));
   if (!args.includes('--check')) console.log(format(journeys, cov));
   if (problems.length) {
     console.error(`journey-coverage:\n  ${problems.join('\n  ')}`);
