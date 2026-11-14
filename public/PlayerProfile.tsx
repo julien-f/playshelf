@@ -12,6 +12,7 @@ import { creatorTitle, type CreatorRole } from './creatorData.ts';
 import type { Archetype, Creator, StoryGames } from './playerProfile.ts';
 import type { PlayedTag } from './tagTaste.ts';
 import { fadeInOnLoad, fmtHours, roundHours } from './utils.ts';
+import { PLAY_NEXT_MAX_HOURS } from './listViews.ts';
 
 const ARCHETYPE_ICONS = { 'book-open': BookOpen, compass: Compass, handshake: Handshake, swords: Swords, users: Users };
 
@@ -280,8 +281,7 @@ export function OwnedProfile(props: {
   creatorHref: (role: CreatorRole, name: string) => string;
   isCreatorActive: (role: CreatorRole, name: string) => boolean;
   onCreator: (role: CreatorRole, name: string) => void;
-  unplayed: number; // games played `playNextHours` or less
-  playNextHours: number;
+  unplayed: number; // games played PLAY_NEXT_MAX_HOURS or less
   backlogShown: boolean;
   whyOpen: boolean;
   isTagActive: (tag: string) => boolean;
@@ -409,13 +409,13 @@ export function OwnedProfile(props: {
                 <div class="profile-tile-body">
                   <span class="profile-figure">{props.unplayed}</span>
                   <span>
-                    {props.unplayed === 1 ? 'game' : 'games'} played {props.playNextHours} h or less
+                    {props.unplayed === 1 ? 'game' : 'games'} played {PLAY_NEXT_MAX_HOURS} h or less
                   </span>
                   <button
                     type="button"
                     class="btn"
                     aria-pressed={props.backlogShown}
-                    aria-label={`Play next: ${props.unplayed} ${props.unplayed === 1 ? 'game' : 'games'} played ${props.playNextHours} h or less`}
+                    aria-label={`Play next: ${props.unplayed} ${props.unplayed === 1 ? 'game' : 'games'} played ${PLAY_NEXT_MAX_HOURS} h or less`}
                     title="Open Play next: these games, best Taste Fit first"
                     onClick={() => props.onBacklog()}
                   >

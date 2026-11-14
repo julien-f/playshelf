@@ -170,7 +170,6 @@ import { SharedViewBanner } from './SharedViewBanner.tsx';
 import { SteamPrivacyLink } from './SteamPrivacyLink.tsx';
 import { UnsavedChangesBanner, ViewActions } from './TableViewControls.tsx';
 import {
-  PLAY_NEXT_MAX_HOURS,
   isPlayNextCandidate,
   VIEW_TEMPLATES,
   createFromTemplate,
@@ -4001,7 +4000,6 @@ export default function ListRoute() {
         isCreatorActive={(role, name) => tableReady() && isTagActive(`${role}s`, name)}
         onCreator={(role, name) => onTagClick(`${role}s`, name)}
         unplayed={unplayed()}
-        playNextHours={PLAY_NEXT_MAX_HOURS}
         backlogShown={backlogShown()}
         whyOpen={playsMostlyWhy()}
         isTagActive={(tag) => tableReady() && isTagActive('tags', tag)}
