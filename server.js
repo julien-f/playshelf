@@ -39,6 +39,7 @@ const {
   getWishlist,
   getFriendList,
   getPlayerSummaries,
+  privateLibraryError,
   getGameRating,
   getAppDetails,
   getStoreBrowseItem,
@@ -277,7 +278,8 @@ function sendRouteError(res, route, err) {
   const unreadable = err.name === 'SyntaxError';
   const status = routeErrorStatus(route, err, unreadable);
   const error = status === 500 ? INTERNAL_ERROR : unreadable ? 'Unreadable reply from upstream' : err.message;
-  res.status(status).json({ error });
+  // privateLibraryError's accounts, for the UI to name them.
+  res.status(status).json({ error, ...(status === 400 && err.accounts && { accounts: err.accounts }) });
 }
 
 const app = express();
@@ -607,7 +609,7 @@ app.get('/api/metrics', (_req, res) => {
 // tailored to that route's own cache-key shape — mirroring detailsLimit/achievementsLimit's own
 // "cache hits don't count" skip, not just a shared always-counts limiter. Without this, simply
 // reloading the Bundles page a handful of times (every reload re-requests the list, and
-// re-opens whatever bundle is deep-linked — see docs/dev/integrations.md) burns the
+// re-opens whatever bundle is deep-linked — see docs/dev/architecture.md) burns the
 // whole per-minute budget on requests that never actually hit ITAD, and once burned, real
 // upstream calls (a newly-opened bundle) start 429ing with no visible explanation.
 const bundlesListLimit = namedRateLimit('bundlesList', {
@@ -697,10 +699,24 @@ app.post('/api/common-games', searchLimit, async (req, res) => {
 
   try {
     const ids = await resolveSteamIds(members);
-    const [playerList, libraries] = await Promise.all([
+    const [summaries, ...owned] = await Promise.allSettled([
       getPlayerSummaries(ids, { force: refresh }),
-      Promise.all(ids.map((id) => getOwnedGames(id, { force: refresh }))),
+      ...ids.map((id) => getOwnedGames(id, { force: refresh })),
     ]);
+    // An upstream failure first: a private library isn't the user's to fix if Steam didn't answer.
+    const failed = owned.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
+    const upstream = failed.find((err) => !err.privateSteamId);
+    if (upstream) throw upstream;
+    if (failed.length) {
+      const known = summaries.status === 'fulfilled' ? summaries.value : [];
+      throw privateLibraryError(
+        failed.map((err) => err.privateSteamId),
+        known,
+      );
+    }
+    if (summaries.status === 'rejected') throw summaries.reason;
+    const playerList = summaries.value;
+    const libraries = owned.map((r) => r.value);
 
     // Union across accounts (a Steam Family) — first-seen wins.
     const merged = new Map();
@@ -1009,7 +1025,7 @@ app.get('/api/creator-games', creatorGamesLimit, async (req, res) => {
 });
 
 // Backs the Bundles page's bundle list — a thin, cached proxy over ITAD's GET /bundles/v1.
-// See lib/itad.js and docs/dev/integrations.md and docs/dev/data.md.
+// See lib/itad.js and docs/dev/bundles-and-prices.md and docs/dev/data.md.
 app.get('/api/bundles', bundlesListLimit, requireItad, async (req, res) => {
   const { country, offset, limit, sort, expired } = parseBundlesQuery(req);
   if (offset > MAX_BUNDLES_OFFSET) return res.json({ bundles: [], offset, limit, fetchedAt: null });

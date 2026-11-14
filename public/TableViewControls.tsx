@@ -1,6 +1,12 @@
 import { Show, createSignal, onCleanup, type JSX } from 'solid-js';
 import Link from 'lucide-solid/icons/link';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
+import { focusFirst, keepFocus } from './focusHandoff.ts';
+
+// Where focus goes when a layout banner holding it goes: the table's own layout controls.
+export function keepLayoutFocus(banner: Element, change: () => void): void {
+  void keepFocus(banner, change, focusFirst('.list-view-actions .btn'), focusFirst('.dt-search-input'));
+}
 
 // Hidden while `changes` is empty.
 export function UnsavedChangesBanner(props: {
@@ -10,14 +16,15 @@ export function UnsavedChangesBanner(props: {
   onSave: () => void;
   onDiscard: () => void;
 }): JSX.Element {
+  let banner!: HTMLDivElement;
   return (
     <Show when={props.changes.length}>
-      <div class="pref-unsaved-banner">
+      <div ref={banner} class="pref-unsaved-banner">
         Unsaved changes to {props.name} ({props.changes.join(', ')}) — {props.note}
-        <button type="button" class="btn" onClick={() => props.onSave()}>
+        <button type="button" class="btn" onClick={() => keepLayoutFocus(banner, props.onSave)}>
           Save
         </button>
-        <button type="button" class="btn" onClick={() => props.onDiscard()}>
+        <button type="button" class="btn" onClick={() => keepLayoutFocus(banner, props.onDiscard)}>
           Discard
         </button>
       </div>
@@ -25,7 +32,7 @@ export function UnsavedChangesBanner(props: {
   );
 }
 
-// A table's "🔗 Share view"/"Default view" toolbar buttons — see tableViewPrefs.ts.
+// A table's "🔗 Share layout"/"Reset layout" toolbar buttons — see tableViewPrefs.ts.
 const REASON_MS = 5000;
 
 export function ViewActions(props: {
@@ -50,27 +57,27 @@ export function ViewActions(props: {
         <button
           type="button"
           class="btn"
-          aria-label="Share view"
+          aria-label="Share layout"
           aria-disabled={props.shareDisabledReason ? 'true' : undefined}
           aria-describedby={props.shareDisabledReason ? 'share-view-reason' : undefined}
-          title={props.shareDisabledReason ? undefined : "Copy a link to this table's layout"}
+          title={props.shareDisabledReason ? undefined : 'Copy a link to this list as you see it'}
           onClick={(e) => (props.shareDisabledReason ? showReason() : props.onShare(e.currentTarget))}
           onBlur={() => setReasonShown(false)}
         >
           <Link />
-          <span class="btn-label"> Share view</span>
+          <span class="btn-label"> Share layout</span>
         </button>
       </Show>
       <Show when={!props.hideReset}>
         <button
           type="button"
           class="btn"
-          aria-label="Default view"
+          aria-label="Reset layout"
           title="Back to the default columns, sort and filters"
           onClick={() => props.onReset()}
         >
           <RotateCcw class="btn-icon" />
-          <span class="btn-label">Default view</span>
+          <span class="btn-label">Reset layout</span>
         </button>
       </Show>
       <Show when={props.shareDisabledReason}>

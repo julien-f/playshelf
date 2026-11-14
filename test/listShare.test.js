@@ -210,6 +210,10 @@ test('shareListUrl: builds a /lists/shared link carrying the formula verbatim (r
   assert.equal(url, `${SHARED_LIST_PATH}?f=union:(o:acc1;w:acc2)`);
 });
 
+test("shareListUrl: writes ' as %27, as browsers and the in-page URL do", () => {
+  assert.equal(shareListUrl("union:(d:Don'tNod;o:acc1)"), `${SHARED_LIST_PATH}?f=union:(d:Don%27tNod;o:acc1)`);
+});
+
 test('encodeListFormula: rejects a `user` source pointing at a ranked list', () => {
   const ranked = {
     id: 'r1',

@@ -1,6 +1,6 @@
 // Shared "apply an ITAD /api/prices response to a row" logic — the POST /api/prices call, the
 // response-to-row-fields mapping, and the "don't leave it stuck on its loading placeholder
-// forever" null-out on failure (see docs/dev/integrations.md). Chunking and the
+// forever" null-out on failure (see docs/dev/game-table.md). Chunking and the
 // no-ITAD-configured check stay with the caller (ListRoute.tsx's loadPrices).
 import type { PriceAmount, PriceFields } from './types.ts';
 import { discountPct, postJson } from './utils.ts';

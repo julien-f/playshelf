@@ -38,7 +38,7 @@ test('A1: first visit — resolve my account, then open my library', async ({ pa
   await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('alice');
   await page.getByRole('button', { name: 'Look up', exact: true }).click();
   await expect(page.getByRole('main')).toContainText('Owned: 6');
-  await expect(page.getByText('Friends (private)')).toBeVisible(); // the mock's friends lists are private
+  await expect(page.getByText('Friends (3)')).toBeVisible();
 
   await page.getByRole('main').getByRole('link', { name: 'Owned', exact: true }).click();
   await expect(rows(page)).toHaveCount(6);
@@ -49,25 +49,56 @@ test('A1: first visit — resolve my account, then open my library', async ({ pa
   await expect(rows(page)).toHaveCount(6);
 });
 
-test(
-  'A1 edge: Home, then Owned, then a game download the library and wishlist once',
-  { tag: '@any-width' },
-  async ({ page }) => {
-    await asPlayer(page, ALICE);
-    const asked: string[] = [];
-    page.on('request', (req) => {
-      const path = new URL(req.url()).pathname;
-      if (path === '/api/common-games' || path === '/api/wishlist') asked.push(path);
-    });
-    await page.goto('/');
-    await expect(page.locator('.account-counts')).toContainText('Owned: 6');
-    await page.getByRole('main').getByRole('link', { name: 'Owned', exact: true }).click();
-    await expect(rows(page)).toHaveCount(6);
-    await row(page, 'Hades').getByText('Hades').click();
-    await expect(page.locator('.panel-ownership-badge.owned')).toBeVisible();
-    expect(asked.sort()).toEqual(['/api/common-games', '/api/wishlist']);
-  },
-);
+test('A1 edge: the first account resolved becomes my ★ account; a later one does not', async ({ page }) => {
+  await page.goto('/');
+  const lookup = page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…');
+  await lookup.fill('alice');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Unstar Alice' })).toBeVisible();
+
+  await lookup.fill('bob');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Star Bob as mine' })).toBeVisible();
+  await expect(page.locator('.account-tiles .account-tile').first()).toHaveText(/Alice.*\(yours\)/);
+});
+
+test('A2 edge: after unstarring my account, looking up a friend does not star them', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Unstar Alice' }).click();
+  await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('bob');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.getByRole('banner')).toContainText('Bob');
+  await expect(page.getByRole('button', { name: 'Star Bob as mine' })).toBeVisible();
+});
+
+test('A1 edge: an account reached by a ?u= or compare link is never starred', async ({ page }) => {
+  await page.goto('/lists/compare?u=alice&u=bob');
+  await expect(rows(page).first()).toBeVisible();
+  await page.goto('/?u=bob');
+  await page.getByRole('button', { name: 'Set as my current account' }).click();
+  await expect(page.getByRole('button', { name: 'Star Bob as mine' })).toBeVisible();
+  const myAccount = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('steam.isonoe.net:prefs') ?? '{}').myAccount?.value ?? null,
+  );
+  expect(myAccount).toBeNull();
+});
+
+test('A1 edge: Home, then Owned, then a game download the library and wishlist once', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const asked: string[] = [];
+  page.on('request', (req) => {
+    const path = new URL(req.url()).pathname;
+    if (path === '/api/common-games' || path === '/api/wishlist') asked.push(path);
+  });
+  await page.goto('/');
+  await expect(page.locator('.account-counts')).toContainText('Owned: 6');
+  await page.getByRole('main').getByRole('link', { name: 'Owned', exact: true }).click();
+  await expect(rows(page)).toHaveCount(6);
+  await row(page, 'Hades').getByText('Hades').click();
+  await expect(page.locator('.panel-ownership-badge.owned')).toBeVisible();
+  expect(asked.sort()).toEqual(['/api/common-games', '/api/wishlist']);
+});
 
 test(
   'A1 edge: a first visit says what the app does, and the account field looks it up',
@@ -94,6 +125,21 @@ test('A1 edge: Look up keeps focus while it resolves', { tag: '@any-width' }, as
   await expect(busy).toBeFocused();
   release();
   await expect(page.getByRole('main')).toContainText('Owned: 6');
+});
+
+const PRIVATE_LIBRARY =
+  "Frank's games aren't public. In Steam: Edit Profile → Privacy Settings → My profile and Game details: Public.";
+
+test('A1 edge: a private profile is named, with where Steam makes it public', async ({ page }) => {
+  await page.goto('/');
+  await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('frank');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  const error = page.locator('.error');
+  await expect(error).toContainText(PRIVATE_LIBRARY);
+  await expect(error.getByRole('link', { name: /Steam privacy settings/ })).toHaveAttribute(
+    'href',
+    'https://steamcommunity.com/my/edit/settings',
+  );
 });
 
 test('A1 edge: an Explore card opens its list from anywhere on the card', async ({ page }) => {
@@ -266,10 +312,10 @@ test('A2.1-2,4: explore a friend, then switch back to my ★ account from the na
 });
 
 test('A2 edge: the nav chip reads as an account, not as a second selected route', async ({ page }) => {
-  await asPlayer(page, ALICE);
+  await asPlayer(page, CAROL);
   await page.goto('/lists/owned');
   const chip = page.locator('.account-chip-btn');
-  await expect(chip.locator('.account-chip-initial')).toHaveText('A'); // no avatar in the fixtures
+  await expect(chip.locator('.account-chip-initial')).toHaveText('C'); // Carol has no avatar
   await chip.hover();
   await expect(chip).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const route = page.locator('.site-nav-link.active');
@@ -479,8 +525,20 @@ test(
 test('S3 edge: About names every data source, ProtonDB included', { tag: '@any-width' }, async ({ page }) => {
   await page.goto('/about');
   const sources = page.locator('section', { hasText: 'Data sources' });
-  for (const name of ['Steam Web API', 'Steam Store', 'HowLongToBeat', 'ProtonDB', 'IsThereAnyDeal'])
+  for (const name of [
+    'Steam Web API',
+    'Steam Store',
+    'Steam sign-in',
+    'HowLongToBeat',
+    'ProtonDB',
+    'IsThereAnyDeal',
+    'Fanatical',
+    'Microsoft',
+  ])
     await expect(sources.getByText(name, { exact: true })).toBeVisible();
+  const stored = page.locator('section', { hasText: "What's stored" });
+  await expect(stored).toContainText('If you Sign in with Steam');
+  await expect(stored).not.toContainText('no accounts');
 });
 
 test(
@@ -517,9 +575,11 @@ test("S3 edge: editing a shared layout warns it's lost on reload unless kept", a
   // Back to the link's own layout: nothing of the viewer's is left to lose.
   await toggle.click();
   await expect(banner).toContainText('for this visit only');
-  await banner.getByRole('button', { name: 'Keep as my layout' }).click();
+  await banner.getByRole('button', { name: 'Keep as my layout' }).focus();
+  await page.keyboard.press('Enter');
   await expect(banner).toHaveCount(0);
   await expect(page.getByText('Unsaved changes to')).toHaveCount(0); // kept is saved
+  await expect(page.getByRole('button', { name: 'Share layout' })).toBeFocused(); // not dropped to <body>
 });
 
 test("S3 edge: another browser's list link explains lists are local", { tag: '@any-width' }, async ({ page }) => {
@@ -677,10 +737,10 @@ test(
     await row(page, 'Portal 2').getByText('Portal 2').click();
     const coop = page.locator('.panel-tags').getByRole('button', { name: 'Co-op, tag', exact: true });
     await coop.click();
-    await expect(page.getByRole('columnheader', { name: /Tag match/ })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /Tag Match/ })).toBeVisible();
     await expect.poll(names).toEqual(['Valheim', 'Terraria', 'Stardew Valley', 'Portal 2']);
     await coop.click();
-    await expect(page.getByRole('columnheader', { name: /Tag match/ })).toHaveCount(0);
+    await expect(page.getByRole('columnheader', { name: /Tag Match/ })).toHaveCount(0);
     await expect.poll(names).toEqual(byRating);
   },
 );
@@ -788,10 +848,99 @@ test(
     const coop = note.getByRole('button', { name: /^Co-op \d+%$/ });
     await coop.click();
     await expect(rows(page)).toHaveCount(4);
-    await expect(page.getByRole('columnheader', { name: /Tag match/ })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /Tag Match/ })).toBeVisible();
     await expect(coop).toHaveAttribute('aria-pressed', 'true');
   },
 );
+
+const openFriends = async (page: Page) => {
+  await page.goto('/');
+  await page.getByText(/^Friends \(\d+\)$/).click();
+};
+// A friends-list entry in server.js's shape, for lists the fixtures don't hold.
+const friendJson = (steamid: string, personaname: string) => ({
+  steamid,
+  personaname,
+  avatar: '',
+  profileurl: `https://steamcommunity.com/profiles/${steamid}/`,
+  timecreated: 1300000000,
+  loccountrycode: 'FR',
+  realname: '',
+});
+
+test('A4: explore a friend from my friends list, who shows our mutual friends', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await openFriends(page);
+  await page
+    .locator('.account-friends-list li')
+    .filter({ hasText: 'Bob' })
+    .getByRole('button', { name: 'Explore' })
+    .click();
+  await expect(page.getByRole('banner')).toContainText('Bob');
+  await page.getByText('Friends (2)').click();
+  await expect(page.locator('.account-friends-list li').filter({ hasText: 'Carol' })).toContainText('Mutual');
+});
+
+test('A4.5-7: select friends, then compare them with the current account, which stays current', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await openFriends(page);
+  await expect(page.getByText('Select up to 5 friends to compare with Alice.')).toBeVisible();
+  const list = page.locator('.account-friends-list');
+  const listTop = (await list.boundingBox())!.y;
+  await page.getByRole('checkbox', { name: 'Select Bob' }).check();
+  expect((await list.boundingBox())!.y).toBe(listTop); // the Compare link takes the hint's place, no jump
+  await page.getByRole('checkbox', { name: 'Select Carol' }).check();
+  await page.getByRole('link', { name: 'Compare with Alice (2)' }).click();
+  await expect(page).toHaveURL(/\/lists\/compare\?/);
+  expect(new URL(page.url()).searchParams.getAll('u')).toHaveLength(3);
+  await expect(groupRows(page).first()).toBeVisible();
+  await expect(page.locator('.account-chip-btn')).toContainText('Alice');
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator('.account-chip-btn')).toContainText('Alice');
+});
+
+test('A4 edge: past five friends the others are disabled, and the list says why', async ({ page }) => {
+  const friends = Array.from({ length: 6 }, (_, i) => friendJson(`7656119800000010${i}`, `Friend ${i + 1}`));
+  await page.route('**/api/friends**', (route) =>
+    route.fulfill({ json: { friends, unavailable: [], fetchedAt: Date.now() } }),
+  );
+  await asPlayer(page, ALICE);
+  await openFriends(page);
+  for (let i = 1; i <= 5; i++) await page.getByRole('checkbox', { name: `Select Friend ${i}` }).check();
+  await expect(page.getByRole('checkbox', { name: 'Select Friend 6' })).toBeDisabled();
+  await expect(page.getByText('Up to 5 friends: a comparison is for one group.')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Select Friend 1' }).uncheck();
+  await expect(page.getByRole('checkbox', { name: 'Select Friend 6' })).toBeEnabled();
+});
+
+test('A4 edge: a private friends list is named by its owner, with where Steam makes it public', async ({ page }) => {
+  await asPlayer(page, DAVE);
+  await page.goto('/');
+  await page.getByText('Friends (private)').click();
+  const note = page.locator('.account-friends-note').first();
+  await expect(note).toHaveText(
+    "Dave's friends list isn't public. In Steam: Edit Profile → Privacy Settings → Friends List: Public. Steam privacy settings ↗",
+  );
+  await expect(note.getByRole('link', { name: /Steam privacy settings/ })).toBeVisible();
+});
+
+test("A4 edge: the account's own members, in its friends list, can't be picked", async ({ page }) => {
+  await page.route('**/api/friends**', (route) =>
+    route.fulfill({
+      json: {
+        friends: [friendJson(ALICE.steamid, 'Alice'), friendJson(BOB.steamid, 'Bob')],
+        unavailable: [],
+        fetchedAt: Date.now(),
+      },
+    }),
+  );
+  await asPlayer(page, ALICE);
+  await openFriends(page);
+  await expect(page.getByRole('checkbox', { name: 'Select Bob' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Select Alice' })).toHaveCount(0);
+});
 
 test('A5: Favourite studios names the studios behind 2+ played games, each filtering Owned or opening its list', async ({
   page,
@@ -947,7 +1096,7 @@ test('A5.1-3: Plays mostly says what it is built from, leaving software out, and
   await expect(note.locator('.profile-how')).toContainText('Story games: single-player');
 });
 
-test('A5.4: the barely-played count opens Play next, best Taste fit first, on a first visit', async ({ page }) => {
+test('A5.4: the barely-played count opens Play next, best Taste Fit first, on a first visit', async ({ page }) => {
   await asPlayer(page, DAVE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(DAVE.owned.length);
@@ -959,7 +1108,7 @@ test('A5.4: the barely-played count opens Play next, best Taste fit first, on a 
   ).toHaveAttribute('aria-current', 'page');
   await expect(rows(page)).toHaveCount(3);
   await expect(backlog).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: /Taste Fit/ })).toBeVisible();
   // Scored against the taste this visit just learned: nothing was stored before it.
   await expect(
     rows(page)
@@ -1072,7 +1221,7 @@ test(
 );
 
 test(
-  "B2 edge: Taste fit scores the wishlist by the account's taste, once Owned has been opened",
+  "B2 edge: Taste Fit scores the wishlist by the account's taste, once Owned has been opened",
   { tag: '@any-width' },
   async ({ page }) => {
     await asPlayer(page, ALICE);
@@ -1088,14 +1237,14 @@ test(
     await page.goto('/lists/wishlist');
     await expect(rows(page).first()).toBeVisible();
     // No taste on this device yet: no column of "—", and no note about it.
-    await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toHaveCount(0);
+    await expect(page.getByRole('columnheader', { name: /Taste Fit/ })).toHaveCount(0);
     await expect(note).toHaveCount(0);
 
     await page.goto('/lists/owned');
     await expect(page.locator('.profile')).toBeVisible();
     await page.goto('/lists/wishlist');
-    await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
-    await expect(note).toHaveText(/^Taste fit: Alice's taste as of \d{4}-\d{2}-\d{2}$/);
+    await expect(page.getByRole('columnheader', { name: /Taste Fit/ })).toBeVisible();
+    await expect(note).toHaveText(/^Taste Fit: Alice's taste as of \d{4}-\d{2}-\d{2}$/);
     await expect(
       rows(page)
         .first()
@@ -1105,7 +1254,7 @@ test(
 );
 
 test(
-  'B2 edge: Taste fit says an opened Owned has too few games played, and stays quiet on a link',
+  'B2 edge: Taste Fit says an opened Owned has too few games played, and stays quiet on a link',
   { tag: '@any-width' },
   async ({ page }) => {
     // Alice's own fixture has too few played games for a profile.
@@ -1117,16 +1266,16 @@ test(
       .poll(() => page.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith('steam.isonoe.net:taste:'))))
       .toBe(true);
     await page.goto('/lists/wishlist');
-    await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
-    await expect(note).toHaveText('Taste fit: Alice has too few games played');
+    await expect(page.getByRole('columnheader', { name: /Taste Fit/ })).toBeVisible();
+    await expect(note).toHaveText('Taste Fit: Alice has too few games played');
     await page.goto('/lists/wishlist?u=alice');
     await expect(rows(page)).toHaveCount(ALICE.wishlist!.length);
-    await expect(note).toHaveText('Taste fit: Alice has too few games played');
+    await expect(note).toHaveText('Taste Fit: Alice has too few games played');
 
     // Someone else's wishlist from a link: nothing for the viewer to open about the sender.
     await page.goto('/lists/wishlist?u=bob');
     await expect(rows(page)).toHaveCount(BOB.wishlist!.length);
-    await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toHaveCount(0);
+    await expect(page.getByRole('columnheader', { name: /Taste Fit/ })).toHaveCount(0);
     await expect(note).toHaveCount(0);
 
     // Once the viewer has opened that account's Owned here, its taste is on this device.
@@ -1137,7 +1286,7 @@ test(
       .toHaveLength(2);
     await page.goto('/lists/wishlist?u=bob');
     await expect(rows(page)).toHaveCount(BOB.wishlist!.length);
-    await expect(note).toHaveText('Taste fit: Bob has too few games played');
+    await expect(note).toHaveText('Taste Fit: Bob has too few games played');
   },
 );
 
@@ -1174,22 +1323,22 @@ test(
     await page.goto('/lists/wishlist?u=alice');
     await expect(rows(page)).toHaveCount(ALICE.wishlist!.length);
     // Hidden with no taste here; shown from Columns, it says what to open.
-    await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toHaveCount(0);
+    await expect(page.getByRole('columnheader', { name: /Taste Fit/ })).toHaveCount(0);
     await page.getByRole('button', { name: 'Columns', exact: true }).click();
     await page
       .locator('.dt-dd')
       .getByRole('button', { name: /^Classification/ })
       .click();
-    await page.locator('.dt-dd').getByRole('button', { name: 'Taste fit' }).click();
+    await page.locator('.dt-dd').getByRole('button', { name: 'Taste Fit' }).click();
     await page.keyboard.press('Escape');
     await expect(page.locator('.list-score-note')).toHaveText(
-      "Taste fit needs Alice's Owned list opened on this device",
+      "Taste Fit needs Alice's Owned list opened on this device",
     );
   },
 );
 
 test(
-  'C1 edge: Tag match averages the filtered tags, or with All takes the weakest',
+  'C1 edge: Tag Match averages the filtered tags, or with All takes the weakest',
   { tag: '@any-width' },
   async ({ page }) => {
     await asPlayer(page, ALICE);
@@ -1227,7 +1376,7 @@ test(
 );
 
 test(
-  'C1 edge: a Tag match range keeps the games strongly tagged, and goes with the tag filter',
+  'C1 edge: a Tag Match range keeps the games strongly tagged, and goes with the tag filter',
   { tag: '@any-width' },
   async ({ page }) => {
     await asPlayer(page, ALICE);
@@ -1239,9 +1388,9 @@ test(
     await expect(rows(page)).toHaveCount(4);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Filter', exact: true }).click();
-    await page.locator('.dt-filter-cols-search').fill('Tag match');
+    await page.locator('.dt-filter-cols-search').fill('Tag Match');
     await page.locator('[data-filter-col-key="tagMatch"]').click();
-    await page.getByRole('textbox', { name: 'Tag match Min' }).fill('60');
+    await page.getByRole('textbox', { name: 'Tag Match Min' }).fill('60');
     await expect(rows(page)).toHaveCount(3);
     await expect(row(page, 'Portal 2')).toHaveCount(0);
     await page.keyboard.press('Escape');
@@ -1252,7 +1401,7 @@ test(
 );
 
 test(
-  "C1 edge: a comparison's Group fit scores games for its least suited player",
+  "C1 edge: a comparison's Group Fit scores games for its least suited player",
   { tag: '@any-width' },
   async ({ page }) => {
     await asPlayer(page, ALICE);
@@ -1265,7 +1414,7 @@ test(
       return route.fulfill({ json: body });
     });
     await page.goto('/lists/compare?u=alice&u=bob');
-    await expect(page.getByRole('columnheader', { name: /Group fit/ })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /Group Fit/ })).toBeVisible();
     const fit = row(page, 'Valheim').locator('span[title^="Alice "]');
     await expect(fit).toHaveText(/^\d+% · Alice$/);
     await expect(fit).toHaveAttribute('title', /· Bob: too few games played to tell$/);
@@ -1418,10 +1567,10 @@ test('C7 edge: a player without a profile is said once, in Players while it is o
   await expect(page.locator('.list-score-note')).toHaveCount(0);
   // Folded (a phone's default), the status line says it again.
   await players.locator('summary').click();
-  await expect(page.locator('.list-score-note')).toContainText('Group fit leaves out Alice');
+  await expect(page.locator('.list-score-note')).toContainText('Group Fit leaves out Alice');
   // Intersect has no Players section: the status line says it.
   await page.goto('/lists/compare?u=alice&u=dave&u=erin&op=intersect');
-  await expect(page.locator('.list-score-note')).toContainText('Group fit leaves out Alice');
+  await expect(page.locator('.list-score-note')).toContainText('Group Fit leaves out Alice');
 });
 
 test(
@@ -2758,6 +2907,22 @@ test('C1.4: compare three players — one table grouped from "all" to "only one"
   );
 });
 
+test("C1 edge: an unsaved change stays with its comparison, not the next group's", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=bob&u=carol');
+  await expect(groupRows(page).first()).toBeVisible();
+  await page.locator('.dt-th[data-col-key="name"] .dt-th-sort').click();
+  const banner = page.locator('.pref-unsaved-banner');
+  await expect(banner).toContainText('Unsaved changes to your comparison layout (Sort)');
+
+  await page.goto('/lists/compare?u=alice&u=bob&u=dave');
+  await expect(groupRows(page).first()).toBeVisible();
+  await expect(banner).toHaveCount(0);
+
+  await page.goto('/lists/compare?u=alice&u=bob&u=carol');
+  await expect(banner).toContainText('Unsaved changes to your comparison layout (Sort)');
+});
+
 test("C1 edge: the account's ungrouped comparison layout keeps the comparison grouped, unchanged", async ({ page }) => {
   await mockApi(page, { states: ['signed-in'] });
   // The account's saved comparison layout, with the grouping removed: adopted, then reloaded.
@@ -2795,6 +2960,25 @@ test('L3 edge: a table change waits for Save, survives a reload in the tab, and 
   expect(await stored()).toContain('releaseDate');
 });
 
+test("L3 edge: Save and Discard hand focus to Share layout as the banner goes, not the page's top", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  const sort = page.locator('.dt-th[data-col-key="releaseDate"] .dt-th-sort');
+  const banner = page.locator('.pref-unsaved-banner');
+  const share = page.getByRole('button', { name: 'Share layout' });
+  await sort.click();
+  await banner.getByRole('button', { name: 'Discard' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(banner).toHaveCount(0);
+  await expect(share).toBeFocused();
+  await sort.click();
+  await banner.getByRole('button', { name: 'Save' }).click();
+  await expect(banner).toHaveCount(0);
+  await expect(share).toBeFocused();
+});
+
 test('Y1 edge: signed in, a saved table layout syncs, without page or search, and only on Save', async ({ page }) => {
   await mockApi(page, { states: ['signed-in'] });
   // An account with no prefs: nothing to adopt, so no reload under the typing.
@@ -2816,7 +3000,17 @@ test('Y1 edge: signed in, a saved table layout syncs, without page or search, an
   expect(pushed[0]).not.toHaveProperty('page');
 });
 
-test('C1 edge: my account comes first, is prefilled, and only once', { tag: '@any-width' }, async ({ page }) => {
+test('C1 edge: a private player is named in the title and the warning, not as typed', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/compare?u=alice&u=frank');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Alice vs. Frank');
+  const warning = page.locator('.compare-failures');
+  await expect(warning.locator('strong')).toHaveText('Frank');
+  await expect(warning).toContainText(PRIVATE_LIBRARY);
+  await expect(warning.getByRole('link', { name: /Steam privacy settings/ })).toBeVisible();
+});
+
+test('C1 edge: my account comes first, is prefilled, and only once', async ({ page }) => {
   await asPlayer(page, BOB); // Bob's steamid sorts after Alice's
   await page.goto('/lists/compare?u=alice&u=bob');
   await expect(page.getByRole('heading', { name: 'Bob vs. Alice' })).toBeVisible();
@@ -2884,18 +3078,20 @@ test(
   },
 );
 
-test('C3 edge: a saved comparison offers Share list only, not a Share view that only opens here', async ({ page }) => {
+test('C3 edge: a saved comparison offers Share list only, not a Share layout that only opens here', async ({
+  page,
+}) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/compare?u=alice&u=bob');
   await expect(groupRows(page)).toHaveCount(3);
-  await expect(page.getByRole('button', { name: 'Share view' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Share layout' })).toHaveCount(1);
   const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Save behind More actions
   if (await more.isVisible()) await more.click();
   await page.getByRole('button', { name: 'Save as a list' }).click();
   await expect(page).toHaveURL(/\/lists\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('button', { name: /Share list/ })).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Default view' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Share view' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reset layout' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Share layout' })).toHaveCount(0);
 });
 
 test('C3 edge: Save as a list moves focus into the saved list, not to the page', async ({ page }) => {
@@ -2996,6 +3192,76 @@ test('C1 edge: ArrowDown steps through every player suggestion', async ({ page }
   await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
   await box.press('ArrowDown');
   await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true'); // wraps
+});
+
+// Alice's friends listed on Home, Erin a stored account who isn't one; then Compare, in-app.
+async function compareAfterHomeFriends(page: Page): Promise<() => number> {
+  let friendRequests = 0;
+  page.on('request', (req) => {
+    if (new URL(req.url()).pathname === '/api/friends') friendRequests++;
+  });
+  await asPlayer(page, ALICE);
+  await page.goto('/');
+  await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('erin');
+  await page.getByRole('button', { name: 'Look up', exact: true }).click();
+  await expect(page.locator('.account-tiles li')).toHaveCount(2);
+  await page.locator('.account-tiles li').filter({ hasText: 'Alice' }).getByRole('button').first().click();
+  await expect(page.getByText('Friends (3)')).toBeVisible();
+  const homeRequests = friendRequests;
+  await page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link', { name: 'Compare' }).click();
+  return () => friendRequests - homeRequests;
+}
+
+test('C1 edge: friends Home is still fetching show in the player boxes once they arrive', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const friends = await gate(page, '**/api/friends');
+  await page.goto('/');
+  await friends.requested;
+  await page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link', { name: 'Compare' }).click();
+  const box = page.locator('.compare-form').getByRole('combobox').nth(1);
+  await box.focus();
+  await expect(page.getByRole('option', { name: /Friend/ })).toHaveCount(0);
+  friends.release();
+  await expect(page.getByRole('option')).toHaveText([/Bob.*Friend/, /Carol.*Friend/, /Dave.*Friend/]);
+  expect(friends.count).toBe(1);
+});
+
+test('C1 edge: the player boxes suggest the friends Home fetched, below the stored accounts, without fetching them again', async ({
+  page,
+}) => {
+  const extraRequests = await compareAfterHomeFriends(page);
+  const box = page.locator('.compare-form').getByRole('combobox').nth(1);
+  await box.focus();
+  await expect(page.getByRole('option')).toHaveText([/Erin/, /Bob.*Friend/, /Carol.*Friend/, /Dave.*Friend/]);
+  await page.getByRole('option', { name: /Carol/ }).click();
+  await expect(page.locator('.compare-token').filter({ hasText: 'Carol' })).toHaveCount(1);
+  await box.press('Escape');
+  await page.getByRole('button', { name: 'Compare libraries' }).click();
+  await expect(page.getByRole('heading', { name: 'Alice vs. Carol' })).toBeVisible();
+  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Edit players behind More actions
+  if (await more.isVisible()) await more.click();
+  // Read in the click's own task: named from the first render, never by Steam ID.
+  const chips = await page.getByRole('button', { name: 'Edit players' }).evaluate((button: HTMLElement) => {
+    button.click();
+    return [...document.querySelectorAll('.compare-token')].map((chip) => chip.textContent);
+  });
+  expect(chips).toEqual(['Alice', 'Carol']);
+  expect(extraRequests()).toBe(0);
+
+  await page.goto('/lists/compare'); // a fresh load has fetched no friends: none suggested, none fetched
+  await page.locator('.compare-form').getByRole('combobox').nth(1).focus();
+  await expect(page.getByRole('option')).toHaveText([/Erin/]);
+  expect(extraRequests()).toBe(0);
+});
+
+test('C1 edge: a friend typed by profile URL is in, so not suggested again', async ({ page }) => {
+  await compareAfterHomeFriends(page);
+  const boxes = page.locator('.compare-form').getByRole('combobox');
+  await boxes.nth(1).fill('https://steamcommunity.com/id/carol/');
+  await boxes.nth(1).press('Enter');
+  await boxes.nth(1).press('Escape');
+  await page.getByRole('button', { name: 'Add player' }).click();
+  await expect(page.getByRole('option')).toHaveText([/Erin/, /Bob/, /Dave/]);
 });
 
 test('C1 edge: the players form offers no More actions with nothing to fold', async ({ page }, testInfo) => {
@@ -3111,22 +3377,73 @@ test('L1.1-3: select games, add them to a new list, open it', async ({ page }) =
   await expect(rows(page)).toHaveCount(2);
 });
 
-test(
-  'L1 edge: Add hands focus to the row it added as the selection bar goes',
-  { tag: '@any-width' },
-  async ({ page }) => {
-    await asPlayer(page, ALICE);
-    await page.goto('/lists/owned');
-    const added = rows(page).last();
-    await added.getByRole('checkbox').check();
-    const toolbar = page.locator('.selection-toolbar');
-    await toolbar.getByRole('combobox').selectOption({ label: 'Create new list…' });
-    await page.getByRole('textbox', { name: 'New list name' }).fill('Later');
-    await toolbar.getByRole('button', { name: 'Add', exact: true }).click();
-    await expect(page.getByRole('status').getByRole('link', { name: 'Open list' })).toBeVisible();
-    await expect(added).toBeFocused();
-  },
-);
+const picksList = (appids: number[]) => ({
+  id: 'picks',
+  name: 'Picks',
+  kind: 'manual',
+  appids,
+  parentId: null,
+  order: 0,
+  createdAt: 0,
+  updatedAt: 0,
+});
+
+test("L1.5: from a game's panel, tick a list to add it, or make a new list with it", async ({ page }) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620])] });
+  await page.goto('/game/1145360');
+  const panel = page.locator('#game-panel');
+  await panel.getByRole('button', { name: 'Add to list' }).click();
+  const menu = await panel.locator('.panel-lists-menu').boundingBox();
+  expect(menu!.x).toBeGreaterThanOrEqual(0); // on screen at both widths
+  expect(menu!.x + menu!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await panel.getByRole('checkbox', { name: 'Picks' }).check();
+  await expect(panel.getByRole('button', { name: 'In 1 list: add or remove' })).toBeVisible();
+
+  await panel.getByRole('textbox', { name: 'New list name' }).fill('Roguelikes');
+  await page.keyboard.press('Enter');
+  await expect(panel.getByRole('checkbox', { name: 'Roguelikes' })).toBeChecked();
+  await expect(panel.getByRole('button', { name: 'In 2 lists: add or remove' })).toBeVisible();
+
+  await page.goto('/lists/picks');
+  await expect(rows(page)).toHaveCount(2);
+});
+
+test("L1 edge: a list made in a game's panel is offered at once by the selection bar", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=620');
+  const panel = page.locator('#game-panel');
+  await panel.getByRole('button', { name: 'Add to list' }).click();
+  await panel.getByRole('textbox', { name: 'New list name' }).fill('Game night');
+  await page.keyboard.press('Enter');
+  await expect(panel.getByRole('checkbox', { name: 'Game night' })).toBeChecked();
+  await page.getByRole('button', { name: 'Close', exact: true }).click(); // a phone's panel covers the table
+  await row(page, 'Terraria').getByRole('checkbox').check();
+  await expect(page.locator('.selection-toolbar').getByRole('option', { name: 'Game night' })).toHaveCount(1);
+});
+
+test("L1 edge: unticking the list being viewed in a game's panel drops its row", async ({ page }) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620, 105600])] });
+  await page.goto('/lists/picks?game=620');
+  await expect(rows(page)).toHaveCount(2);
+  const panel = page.locator('#game-panel');
+  await panel.getByRole('button', { name: 'In 1 list: add or remove' }).click();
+  // The list reloads without the game, closing the menu: the row going is what's checked.
+  await panel.getByRole('checkbox', { name: 'Picks' }).click();
+  await expect(rows(page)).toHaveCount(1);
+});
+
+test('L1 edge: Add hands focus to the row it added as the selection bar goes', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  const added = rows(page).last();
+  await added.getByRole('checkbox').check();
+  const toolbar = page.locator('.selection-toolbar');
+  await toolbar.getByRole('combobox').selectOption({ label: 'Create new list…' });
+  await page.getByRole('textbox', { name: 'New list name' }).fill('Later');
+  await toolbar.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.getByRole('status').getByRole('link', { name: 'Open list' })).toBeVisible();
+  await expect(added).toBeFocused();
+});
 
 test('L1 edge: Add hands focus to an added row still on screen, not back to the first', async ({ page }) => {
   await asPlayer(page, ALICE);
@@ -3142,6 +3459,28 @@ test('L1 edge: Add hands focus to an added row still on screen, not back to the 
   await page.getByRole('textbox', { name: 'New list name' }).fill('Later');
   await toolbar.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(onScreen).toBeFocused();
+});
+
+test('L1 edge: Clear selection hands focus to a selected row as the selection bar goes', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  const picked = rows(page).nth(1);
+  await picked.getByRole('checkbox').check();
+  await page.locator('.selection-toolbar').getByRole('button', { name: 'Clear selection' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.selection-toolbar')).toHaveCount(0);
+  await expect(picked).toBeFocused();
+});
+
+test('L1 edge: Remove from this list hands focus to the next row left', async ({ page }) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620, 105600])] });
+  await page.goto('/lists/picks');
+  await expect(rows(page)).toHaveCount(2);
+  await rows(page).first().getByRole('checkbox').check();
+  await page.locator('.selection-toolbar').getByRole('button', { name: 'Remove from this list' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page).first()).toBeFocused();
 });
 
 test("L1 edge: the new list's toast stays while pointed at", async ({ page }) => {
@@ -3467,7 +3806,7 @@ test("L3 edge: the toolbar's two resets say what they do", { tag: '@any-width' }
     await page.goto(route);
     // The library's "× Clear all" (sort, filters, grouping, search) beside ours, which restores the defaults.
     await expect(page.getByRole('button', { name: '× Clear all' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Default view' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reset layout' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Reset view' })).toHaveCount(0);
   }
 });
@@ -3480,7 +3819,7 @@ test("L3 edge: the toolbar's buttons share one font and one height, the library'
       font: getComputedStyle(el).fontFamily,
       height: el.getBoundingClientRect().height,
     }));
-  expect(await style('Default view')).toEqual(await style('× Clear all'));
+  expect(await style('Reset layout')).toEqual(await style('× Clear all'));
 });
 
 test('L3 edge: the column menu undoes the group and filter it set', async ({ page }, testInfo) => {
@@ -3511,7 +3850,7 @@ test('L5.4: a view keeps its edits until Save or Discard', async ({ page }) => {
   await asPlayer(page, ALICE, { listViews: { owned: [SHORT_VIEW] } });
   await page.goto('/lists/owned?view=short');
   await expect(rows(page)).toHaveCount(4); // played 2 h or less
-  await expect(page.getByRole('button', { name: 'Default view' })).toHaveCount(0); // Discard does it
+  await expect(page.getByRole('button', { name: 'Reset layout' })).toHaveCount(0); // Discard does it
 
   await page.getByRole('button', { name: /Clear all/ }).click();
   await expect(rows(page)).toHaveCount(6);
@@ -3554,7 +3893,7 @@ test('L5.1-3: a suggested view opens as its own tab, and is suggested once', asy
   const tabs = page.getByRole('navigation', { name: 'Views' });
   await expect(tabs.getByRole('link', { name: 'Play next' })).toHaveAttribute('aria-current', 'page');
   await expect(rows(page)).toHaveCount(4); // played 2 h or less
-  await expect(page.getByRole('columnheader', { name: /Taste fit/ })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: /Taste Fit/ })).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'Saved view Play next' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'New view' })).toBeFocused();
 
@@ -3569,25 +3908,23 @@ test('L5.1-3: a suggested view opens as its own tab, and is suggested once', asy
   await expect(rows(page)).toHaveCount(4);
 });
 
-test(
-  'L5 edge: with too few games played for Taste fit, Play next lists best rated first and says so',
-  { tag: '@any-width' },
-  async ({ page }) => {
-    await asPlayer(page, ALICE); // 3 played: no taste profile
-    await page.goto('/lists/owned');
-    await expect(rows(page)).toHaveCount(6);
-    const menu = await newView(page);
-    await menu.getByRole('button', { name: 'Play next' }).click();
-    await expect(page).toHaveURL(/view=/);
-    await expect(rows(page)).toHaveCount(4);
-    const names = () =>
-      rows(page)
-        .getByRole('checkbox')
-        .evaluateAll((boxes) => boxes.map((b) => b.getAttribute('aria-label')!.replace('Select row ', '')));
-    await expect.poll(names).toEqual(['Stardew Valley', 'Hades', 'Hollow Knight', 'Valheim']);
-    await expect(page.getByText('Taste fit: Alice has too few games played, so best rated first')).toBeVisible();
-  },
-);
+test('L5 edge: with too few games played for Taste Fit, Play next lists best rated first and says so', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE); // 3 played: no taste profile
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(6);
+  const menu = await newView(page);
+  await menu.getByRole('button', { name: 'Play next' }).click();
+  await expect(page).toHaveURL(/view=/);
+  await expect(rows(page)).toHaveCount(4);
+  const names = () =>
+    rows(page)
+      .getByRole('checkbox')
+      .evaluateAll((boxes) => boxes.map((b) => b.getAttribute('aria-label')!.replace('Select row ', '')));
+  await expect.poll(names).toEqual(['Stardew Valley', 'Hades', 'Hollow Knight', 'Valheim']);
+  await expect(page.getByText('Taste Fit: Alice has too few games played, so best rated first')).toBeVisible();
+});
 
 test(
   'L5 edge: Short games keeps barely played games with a short main story, known',
@@ -3622,6 +3959,21 @@ test('L5 edge: Runs on Linux keeps ProtonDB Gold or better', { tag: '@any-width'
   await expect(row(page, 'It Takes Two')).toHaveCount(0); // Silver
   await expect(row(page, 'Quiet Little Game')).toHaveCount(0); // no ProtonDB report
   await expect(page.getByRole('columnheader', { name: /ProtonDB/ })).toBeVisible();
+});
+
+test('L5 edge: Runs on Linux is suggested on Wishlist too, before buying', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/wishlist');
+  await expect(rows(page)).toHaveCount(4);
+  const menu = await newView(page);
+  await menu.getByRole('button', { name: 'Runs on Linux (ProtonDB)' }).click();
+  await expect(
+    page.getByRole('navigation', { name: 'Views' }).getByRole('link', { name: /Runs on Linux/ }),
+  ).toHaveAttribute('aria-current', 'page');
+  await expect(rows(page)).toHaveCount(1); // not It Takes Two (Silver), Apex Legends (Borked), Quiet Little Game (no report)
+  await expect(rows(page).first()).toContainText('Overcooked! 2');
+  await expect(page.getByRole('columnheader', { name: /ProtonDB/ })).toBeVisible();
+  await expect(page.locator('.pref-unsaved-banner')).toBeHidden(); // a fresh view has nothing to save
 });
 
 test('L5.2: the table as it is saves as a named view', async ({ page }) => {
@@ -3667,7 +4019,7 @@ test('L5 edge: Bargains is suggested on Wishlist, and only with prices', { tag: 
   await page.goto('/lists/wishlist');
   await expect(rows(page)).toHaveCount(4);
   menu = await newView(page);
-  await expect(menu.getByRole('button')).toHaveText(['Save as view']);
+  await expect(menu.getByRole('button')).toHaveText(['Runs on Linux (ProtonDB)', 'Save as view']);
 });
 
 test('L5.3: the tabs switch views in place, each keeping its unsaved edits', async ({ page }) => {
@@ -4047,14 +4399,14 @@ test('R1 edge: Esc closing a nav popover stays on the ranking', async ({ page })
   await expect(page.getByText('Comparing 3 chosen games.')).toBeVisible();
 });
 
-test("R3 edge: a ranked list's Share view says why it can't be shared", async ({ page }) => {
+test("R3 edge: a ranked list's Share layout says why it can't be shared", async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/wishlist');
   await page.getByRole('button', { name: /Rank this list/ }).click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('heading', { name: /^Ranking of/ })).toBeVisible();
   // Its /lists/<id> link only opens in this browser.
-  const share = page.getByRole('button', { name: 'Share view' });
+  const share = page.getByRole('button', { name: 'Share layout' });
   await expect(share).toHaveAttribute('aria-disabled', 'true');
   await expect(share).toHaveCSS('opacity', '0.5');
   await expect(share).toHaveCSS('cursor', 'not-allowed');
@@ -4115,6 +4467,31 @@ test(
     await expect(page.getByRole('main').getByRole('button', { name: /^Compare/ })).toHaveCount(0);
   },
 );
+
+test('R1 edge: Exclude keeps focus on a selected row as the selection bar goes', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/wishlist');
+  await page.getByRole('button', { name: /Rank this list/ }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('heading', { name: /^Ranking of/ })).toBeVisible();
+  const toolbar = page.locator('.selection-toolbar');
+  const picked = rows(page).first();
+  await picked.getByRole('checkbox').check();
+  await toolbar.getByRole('button', { name: 'Exclude' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(toolbar).toHaveCount(0);
+  await expect(picked).toBeFocused();
+});
+
+test("R1 edge: ranking selected games lands on the first pick, not the page's top", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  for (const name of ['Portal 2', 'Terraria', 'Hades']) await row(page, name).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Rank 3 games' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Comparing 3 chosen games.')).toBeVisible();
+  await expect(page.locator('.rank-card-pick').first()).toBeFocused();
+});
 
 test('R2 edge: a Wishlist ranking keeps its price columns', { tag: '@any-width' }, async ({ page }) => {
   await asPlayer(page, ALICE);
@@ -5201,6 +5578,164 @@ test(
     await expect(page.locator('#panel-section-achievements')).toContainText(LIMITED);
   },
 );
+
+test('D2 edge: past its share, Refresh details, a lookup and the ranking say so rather than inviting a retry', async ({
+  page,
+}) => {
+  await mockApi(page);
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  await row(page, 'Hades').getByText('Hades').click();
+  await mockApi(page, { states: ['client-limited'] }); // routes registered last take precedence
+  await page.locator('.panel-refresh-btn').click();
+  const status = page.locator('.list-status');
+  await expect(status.locator('.list-failed')).toHaveText(LIMITED);
+  await expect(status).not.toContainText("didn't answer");
+
+  await page.goto('/search?q=hades');
+  await expect(page.locator('.search-page-status[role="status"]')).toHaveText(LIMITED);
+
+  await page.goto('/lists/owned');
+  for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Rank 2 games' }).click();
+  await expect(page.locator('.rank-route .list-status')).toHaveText(LIMITED);
+});
+
+test("D2 edge: on the ranking, a later card's past-its-share reply doesn't hide a failed Refresh details", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.route('**/api/game-details/*', async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (url.searchParams.has('refresh')) return route.fulfill({ status: 502, json: { error: 'Steam is down' } });
+    const reply = respond(req.method(), url, null, new Set(['client-limited']));
+    await route.fulfill({ status: reply.status, contentType: reply.contentType, body: reply.body });
+  });
+  await page.goto('/lists/owned');
+  const names = ['Portal 2', 'Terraria', 'Hades'];
+  for (const name of names) await row(page, name).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Rank 3 games' }).click();
+  const cards = page.locator('.rank-card-name');
+  for (const i of [0, 1]) await expect(cards.nth(i)).not.toHaveText(/^App /);
+  const shown = await cards.allTextContents();
+  const third = names.find((name) => !shown.includes(name))!;
+
+  await page.getByRole('button', { name: 'Details', exact: true }).first().click();
+  await page.locator('.panel-refresh-btn').click();
+  const status = page.locator('.rank-route .list-status');
+  await expect(status).toContainText('Refresh failed');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.game-panel')).toBeHidden();
+  await page.keyboard.press('ArrowLeft');
+  await expect(cards.filter({ hasText: third })).toBeVisible();
+  await expect(status).toContainText('Refresh failed');
+});
+
+test('D2 edge: on the ranking, a retried Refresh details answered past its share replaces its earlier failure', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  let refreshes = 0;
+  await page.route('**/api/game-details/*', async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (!url.searchParams.has('refresh')) return route.fallback();
+    if (++refreshes === 1) return route.fulfill({ status: 502, json: { error: 'Steam is down' } });
+    const reply = respond(req.method(), url, null, new Set(['client-limited']));
+    await route.fulfill({ status: reply.status, contentType: reply.contentType, body: reply.body });
+  });
+  await page.goto('/lists/owned');
+  for (const name of ['Portal 2', 'Hades']) await row(page, name).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Rank 2 games' }).click();
+  await page.getByRole('button', { name: 'Details', exact: true }).first().click();
+  const refresh = page.locator('.panel-refresh-btn');
+  const status = page.locator('.rank-route .list-status');
+  await refresh.click();
+  await expect(status).toContainText('Refresh failed');
+  await refresh.click();
+  await expect(status).toHaveText(LIMITED);
+});
+
+test("D2 edge: a Refresh details answered past its share after stepping to another bundle doesn't mark the new one", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/bundles');
+  await page.getByRole('cell', { name: BUNDLE.title }).click();
+  await row(page, 'Hades').getByText('Hades').click();
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let hit!: () => void;
+  const requested = new Promise<void>((resolve) => (hit = resolve));
+  await page.route('**/api/game-details/1145360**', async (route) => {
+    hit();
+    await released;
+    const req = route.request();
+    const reply = respond(req.method(), new URL(req.url()), null, new Set(['client-limited']));
+    await route.fulfill({ status: reply.status, contentType: reply.contentType, body: reply.body });
+  });
+  await page.locator('.panel-refresh-btn').click();
+  await requested;
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Next bundle' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: PICK_BUNDLE.title })).toBeVisible();
+  await expect(rows(page)).not.toHaveCount(0);
+  release();
+  // The late reply still lands on the Hades row both bundles share.
+  await expect(row(page, 'Hades').getByTitle(/HowLongToBeat didn't answer/)).toHaveCount(1);
+  await expect(page.locator('.list-status')).not.toContainText(LIMITED);
+});
+
+test("D2 edge: a Refresh details that fails after stepping to another bundle doesn't say so on the new one", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/bundles');
+  await page.getByRole('cell', { name: BUNDLE.title }).click();
+  await row(page, 'Hades').getByText('Hades').click();
+  await page.route('**/api/game-details/1145360?refresh=1', (route) =>
+    route.fulfill({ status: 502, json: { error: 'Steam is down' } }),
+  );
+  const refresh = await gate(page, '**/api/game-details/1145360?refresh=1'); // registered last: runs first
+  await page.locator('.panel-refresh-btn').click();
+  await refresh.requested;
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Next bundle' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: PICK_BUNDLE.title })).toBeVisible();
+  await expect(rows(page)).not.toHaveCount(0);
+  refresh.release();
+  // The button is disabled until the refresh has settled.
+  await row(page, 'Hades').getByText('Hades').click();
+  await expect(page.locator('.panel-refresh-btn')).toBeEnabled();
+  await expect(page.locator('.list-status')).not.toContainText('Refresh failed');
+});
+
+test("D2 edge: a lookup answered past its share after stepping to another bundle doesn't mark the new one", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.route('**/api/game-details/9000*', (route) =>
+    route.fulfill({ json: { appid: 900001, name: 'Test DLC', meta: null, failed: ['meta'], limited: LIMITED } }),
+  );
+  const lookup = await gate(page, '**/api/game-details/9000*'); // registered last: runs first
+  await page.goto('/bundles');
+  await page.getByRole('cell', { name: BUNDLE.title }).click();
+  await row(page, 'Hades').getByText('Hades').click();
+  const card = page.locator('#panel-section-dlc');
+  await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+  await card.locator('.panel-dlc-item').first().click();
+  await lookup.requested;
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Next bundle' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: PICK_BUNDLE.title })).toBeVisible();
+  await expect(rows(page)).not.toHaveCount(0);
+  lookup.release();
+  // Recorded as looked up once its reply has landed.
+  await page.getByPlaceholder('Look up any game…').click();
+  await expect(page.locator('.game-search-result').first()).toContainText('Test DLC');
+  await expect(page.locator('.list-status')).not.toContainText(LIMITED);
+});
 
 test("D2.3: once the upstream is back, the panel's Refresh details fills in what didn't answer", async ({ page }) => {
   await mockApi(page, { states: ['upstream-down'] });
@@ -7650,6 +8185,37 @@ test(
   },
 );
 
+test('F1 edge: a second Esc in the nav search box hands focus back to where it came from', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned');
+  await expect(rows(page)).toHaveCount(6);
+  const box = page.getByPlaceholder('Look up any game…');
+  const share = page.getByRole('button', { name: 'Share layout' });
+  await share.focus();
+  await page.keyboard.press('/');
+  await expect(box).toBeFocused();
+  await page.keyboard.type('zz');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(share).toBeFocused();
+
+  // From nowhere in particular (the page's top), to the main content rather than <body>.
+  await page.locator('body').evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('/');
+  await expect(box).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('main.app-content')).toBeFocused();
+
+  // Not to one scrolled out of sight since, which would jump the page back to it.
+  await page.setViewportSize({ width: page.viewportSize()!.width, height: 360 });
+  await rows(page).first().focus();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(rows(page).first()).not.toBeInViewport();
+  await page.keyboard.press('/');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('main.app-content')).toBeFocused();
+});
+
 test('F1 edge: the nav search box’s Clear search button empties it and keeps it focused, back on the recents', async ({
   page,
 }) => {
@@ -8995,7 +9561,7 @@ test('I2 edge: a click outside closes each nav popover, and opening one closes t
   }
 });
 
-test('I2 edge: a hidden achievement is revealed by Enter, and by Space', { tag: '@any-width' }, async ({ page }) => {
+test('I2 edge: a hidden achievement is revealed by Enter, and by Space, keeping focus on it', async ({ page }) => {
   await page.route('**/api/achievements/**', (route) => {
     const req = route.request();
     const body = JSON.parse(respond(req.method(), new URL(req.url()), req.postData()).body);
@@ -9013,10 +9579,13 @@ test('I2 edge: a hidden achievement is revealed by Enter, and by Space', { tag: 
   await page.keyboard.press('Enter');
   await expect(card).toContainText('First steps');
   await expect(hidden).toHaveCount(1);
+  // Focus stays on what was just revealed, so it's read out, not dropped to <body>.
+  await expect(card.locator('.panel-achievement-row').filter({ hasText: 'First steps' })).toBeFocused();
   await hidden.focus();
   await page.keyboard.press(' ');
   await expect(card).toContainText('Completionist');
   await expect(hidden).toHaveCount(0);
+  await expect(card.locator('.panel-achievement-row').filter({ hasText: 'Completionist' })).toBeFocused();
 });
 
 test("I2 edge: Enter or Space on the panel's hero opens the lightbox once", { tag: '@any-width' }, async ({ page }) => {
@@ -9141,7 +9710,7 @@ test("S1: share my wishlist's view; a fresh browser sees my games with my layout
     (window as unknown as { copied: string[] }).copied = [];
     navigator.clipboard.writeText = async (text) => void (window as unknown as { copied: string[] }).copied.push(text);
   });
-  await page.getByRole('button', { name: /Share view/ }).click();
+  await page.getByRole('button', { name: /Share layout/ }).click();
   const link = await page.evaluate(() => (window as unknown as { copied: string[] }).copied[0]);
   expect(new URL(link).searchParams.get('u')).toBe(ALICE.steamid);
 
@@ -9162,7 +9731,7 @@ test('S1 edge: sharing an unchanged layout sends no layout, so no shared-layout 
     (window as unknown as { copied: string[] }).copied = [];
     navigator.clipboard.writeText = async (text) => void (window as unknown as { copied: string[] }).copied.push(text);
   });
-  await page.getByRole('button', { name: /Share view/ }).click();
+  await page.getByRole('button', { name: /Share layout/ }).click();
   const link = await page.evaluate(() => (window as unknown as { copied: string[] }).copied[0]);
   expect(new URL(link).searchParams.has('tv')).toBe(false);
 });
@@ -9205,7 +9774,25 @@ test("Y1.1,3: signed in on a new device, the account's lists win over this brows
   await expect(page.getByText('Signed in — your accounts/lists/settings sync')).toBeVisible();
 });
 
-test('Y1 edge: signing out switches the account menu back to signing in', { tag: '@any-width' }, async ({ page }) => {
+test("Y3 edge: a game's lists edited in one tab show in the other without a reload", async ({ page }) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620])] });
+  await page.goto('/game/1145360');
+  const other = await page.context().newPage(); // same context: the tabs share localStorage
+  other.on('pageerror', (err) => pageErrors.push(err.message));
+  await other.goto('/game/1145360');
+  const panel = page.locator('#game-panel');
+  const otherPanel = other.locator('#game-panel');
+
+  await panel.getByRole('button', { name: 'Add to list' }).click();
+  await panel.getByRole('checkbox', { name: 'Picks' }).check();
+  await expect(otherPanel.getByRole('button', { name: 'In 1 list: add or remove' })).toBeVisible();
+
+  await otherPanel.getByRole('button', { name: 'In 1 list: add or remove' }).click();
+  await otherPanel.getByRole('checkbox', { name: 'Picks' }).uncheck();
+  await expect(panel.getByRole('button', { name: 'Add to list' })).toBeVisible();
+});
+
+test('Y1 edge: signing out switches the account menu back to signing in', async ({ page }) => {
   await mockApi(page, { states: ['signed-in'] });
   await page.route('**/auth/logout', (route) => route.fulfill({ json: { ok: true } }));
   await page.goto('/about');

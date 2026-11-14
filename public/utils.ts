@@ -228,7 +228,7 @@ export const DEAL_RECORD_TIERS: DealRecordTier[] = [
 // no need to destructure at the call site. `<=`, not `<` — the current deal genuinely can BE the
 // historical low itself (it's what set it), not only ever beat it. Returns `null` (not a tier)
 // when `price` is missing or doesn't beat any of the three windows.
-// No tier for a deal with no discount: ITAD's historyLow includes full prices (integrations.md).
+// No tier for a deal with no discount: ITAD's historyLow includes full prices (bundles-and-prices.md).
 export function dealRecordTier(
   price: number | null | undefined,
   lows?: {
@@ -396,10 +396,13 @@ export function hoursFromMinutes(minutes: number): number {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  // The accounts whose games aren't public, on a private-library 400.
+  accounts?: { steamid: string; name: string }[];
+  constructor(message: string, status: number, accounts?: { steamid: string; name: string }[]) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.accounts = accounts;
   }
 }
 
@@ -412,7 +415,7 @@ export const refusalMessage = (err: unknown): string | undefined =>
 export async function fetchJson<T>(url: string, init: RequestInit | undefined, fallback: string): Promise<T> {
   const res = await fetch(url, init);
   const data = await res.json().catch(() => undefined);
-  if (!res.ok || data === undefined) throw new ApiError(data?.error || fallback, res.status);
+  if (!res.ok || data === undefined) throw new ApiError(data?.error || fallback, res.status, data?.accounts);
   return data as T;
 }
 
@@ -461,12 +464,22 @@ export function metaOrBasics(details: GameDetails | null | undefined): GameBasic
   return details?.meta ?? details?.basics ?? null;
 }
 
+// One game's details; `limited` says why sources are missing when it's this client's spent share, not an upstream.
+export function fetchGameDetails(appid: number, { refresh = false } = {}): Promise<GameDetailsReply> {
+  return fetchJson<GameDetailsReply>(
+    `/api/game-details/${appid}${refresh ? '?refresh=1' : ''}`,
+    undefined,
+    refresh ? 'Refresh failed' : 'Lookup failed',
+  );
+}
+
 // What a /api/game-details reply sets on a game outside a list's table (ListRoute's rows: applyDetailsEvent).
 export function detailsFields(
   data: GameDetailsReply,
 ): Pick<Game, 'details' | 'loading' | 'detailsFetchedAt' | 'detailsFetchedAts' | 'failedSources'> {
+  const { limited: _limited, ...details } = data; // the reply's status, not the game's
   return {
-    details: data,
+    details,
     loading: false,
     detailsFetchedAt: data.fetchedAt, // absent when nothing was fetched: no age
     detailsFetchedAts: data.fetchedAts ?? null,

@@ -1,4 +1,5 @@
 import type { JSX } from 'solid-js';
+import { focusVisible, keepFocus } from './focusHandoff.ts';
 import { dismissPrefsWriteFailure } from './prefs.ts';
 
 // Shown while setPref's writes fail (prefs.ts): the edit would otherwise look kept, then snap back.
@@ -18,11 +19,9 @@ export function StorageFullBanner(): JSX.Element {
         type="button"
         class="btn"
         onClick={(e) => {
-          const hadFocus = e.currentTarget === document.activeElement;
-          dismissPrefsWriteFailure();
-          if (!hadFocus) return;
-          const target = returnTo instanceof HTMLElement && returnTo.isConnected ? returnTo : null;
-          (target ?? document.querySelector<HTMLElement>('main.app-content'))?.focus();
+          void keepFocus(e.currentTarget, dismissPrefsWriteFailure, () =>
+            focusVisible(returnTo instanceof HTMLElement ? returnTo : null),
+          );
         }}
       >
         Dismiss

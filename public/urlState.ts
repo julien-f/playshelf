@@ -11,8 +11,10 @@
 // screen at a time, so there's never a moment where two of these could coexist in the same URL
 // the way e.g. `game`/`shot` can. See tableViewPrefs.ts's own layoutDraft/shareTableView
 // (VIEW_PARAM). Unlike most other params here, it's not
-// written automatically on every table interaction — only by the table's own "🔗 Share view" button.
-const PARAM_ORDER = ['u', 'op', 'q', 'game', 'shot', 'tv'];
+// written automatically on every table interaction — only by the table's own "🔗 Share layout" button.
+
+// The params naming the list (`f`, `name`) and its saved table layout (`view`) come before the overlays opened on it.
+const PARAM_ORDER = ['u', 'op', 'f', 'name', 'view', 'q', 'game', 'shot', 'tv'];
 
 export function reorderUrlParams(params: URLSearchParams): URLSearchParams {
   const ordered = new URLSearchParams();
@@ -35,8 +37,18 @@ export function reorderUrlParams(params: URLSearchParams): URLSearchParams {
 // and it makes two visits to an identical state serialize differently, exactly what
 // reorderUrlParams above exists to prevent.
 export function urlWithParams(params: URLSearchParams, pathname: string = location.pathname): string {
-  const qs = reorderUrlParams(params).toString();
+  const qs = queryString(params);
   return qs ? `${pathname}?${qs}` : pathname;
+}
+
+// reorderUrlParams' query, with a shared formula (`?f=`) as readable as the address bar allows: the
+// characters shareListUrl leaves literal are unescaped back.
+function queryString(params: URLSearchParams): string {
+  return reorderUrlParams(params)
+    .toString()
+    .split('&')
+    .map((pair) => (pair.startsWith('f=') ? pair.replace(/%(21|28|29|2C|3A|3B|7E)/g, decodeURIComponent) : pair))
+    .join('&');
 }
 
 // `?game=<appid>` / `&shot=<idx>` — the panel/lightbox deep-link params every page with a side
@@ -203,7 +215,7 @@ export function withAccountParam(path: string, search: string = location.search)
   const [pathname, ownQuery] = path.split('?');
   const params = new URLSearchParams(ownQuery ?? '');
   if (!params.has('u')) values.forEach((v) => params.append('u', v));
-  return `${pathname}?${reorderUrlParams(params)}`;
+  return `${pathname}?${queryString(params)}`;
 }
 
 // The current URL with `u=` stripped back out — what an explicit account pick navigates to,

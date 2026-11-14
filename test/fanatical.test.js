@@ -141,7 +141,7 @@ test('withPickAndMix: enriches only null-price Fanatical bundles, one cached fet
   const [a, b, c] = await withPickAndMix([fanaticalBundle(), priced, humble]);
   assert.equal(a.pickAndMix.length, 2);
   assert.equal(a.pickAndMixNames, undefined);
-  // Fanatical's own end date replaces ITAD's, which runs early (integrations.md).
+  // Fanatical's own end date replaces ITAD's, which runs early (bundles-and-prices.md).
   assert.equal(a.expiry, '2026-11-13T23:59:00.000Z');
   assert.equal(b, priced);
   assert.equal(c, humble);

@@ -6,7 +6,17 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
-const { buildInputsHash, claimPort, listening, passKey, planRun } = require('../scripts/e2e');
+const {
+  buildInputsHash,
+  claimPort,
+  inputsHash,
+  listening,
+  passKey,
+  passedOn,
+  planRun,
+  recordPass,
+  waitTurn,
+} = require('../scripts/e2e');
 
 test('planRun: records a pass only for the projects a run covers in full', () => {
   const none = new Set();
@@ -48,7 +58,7 @@ test('claimPort: skips a port another live run holds or something listens on', a
   fs.writeFileSync(path.join(lockDir, 'e2e-5000.lock'), String(process.pid));
   const { port, file } = await claimPort(5000, { lockDir, isBusy: async (p) => p === 5001 });
   assert.equal(port, 5002);
-  assert.equal(fs.readFileSync(file, 'utf8'), String(process.pid));
+  assert.equal(fs.readFileSync(file, 'utf8').split('\n')[0], String(process.pid));
   assert.deepEqual(fs.readdirSync(lockDir).sort(), ['e2e-5000.lock', 'e2e-5002.lock']);
 });
 
@@ -108,4 +118,57 @@ test("passKey: the pre-push phone subset's pass is recorded apart from a full ph
   assert.equal(passKey('phone', true), 'phone-subset');
   assert.equal(passKey('phone', false), 'phone');
   assert.equal(passKey('desktop', true), 'desktop');
+});
+
+test('inputsHash: the same build hashes the same whatever its port directory', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-hash-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const builds = ['41234', '41999'].map((port) => {
+    const dir = path.join(root, port);
+    fs.mkdirSync(path.join(dir, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'index.html'), '<html>');
+    fs.writeFileSync(path.join(dir, 'assets/app.js'), 'x');
+    return dir;
+  });
+  assert.equal(inputsHash(builds[0]), inputsHash(builds[1]));
+});
+
+test("recordPass: keeps each build's passed projects apart, so another checkout's pass stays readable", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-pass-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'e2e-pass.json');
+  assert.deepEqual([...passedOn('a', file)], []);
+  recordPass('a', ['desktop'], file);
+  recordPass('b', ['phone'], file);
+  recordPass('a', ['phone'], file);
+  assert.deepEqual([...passedOn('a', file)].sort(), ['desktop', 'phone']);
+  assert.deepEqual([...passedOn('b', file)], ['phone']);
+  for (let i = 0; i < 50; i++) recordPass(`h${i}`, ['desktop'], file);
+  assert.deepEqual([...passedOn('a', file)], [], 'the oldest builds are dropped');
+  assert.deepEqual([...passedOn('h49', file)], ['desktop']);
+});
+
+test('waitTurn: waits while another live run holds the turn, naming it, then takes it', async (t) => {
+  const lockDir = tmpDir(t);
+  const held = path.join(lockDir, 'e2e-run.lock');
+  fs.writeFileSync(held, `${process.pid}\n/other/checkout`);
+  const said = [];
+  let waits = 0;
+  // The holder finishes during the second wait.
+  const sleep = async () => {
+    if (++waits === 2) fs.rmSync(held);
+  };
+  const file = await waitTurn({ lockDir, sleep, say: (m) => said.push(m) });
+  assert.equal(waits, 2);
+  assert.equal(said.length, 1, 'says once whom it waits on');
+  assert.match(said[0], new RegExp(`/other/checkout.*pid ${process.pid}`));
+  assert.equal(fs.readFileSync(file, 'utf8').split('\n')[0], String(process.pid));
+});
+
+test("waitTurn: takes a dead run's turn at once", async (t) => {
+  const lockDir = tmpDir(t);
+  fs.writeFileSync(path.join(lockDir, 'e2e-run.lock'), '99999999\n/gone');
+  let waits = 0;
+  await waitTurn({ lockDir, sleep: async () => waits++, say: () => {} });
+  assert.equal(waits, 0);
 });

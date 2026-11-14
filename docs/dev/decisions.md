@@ -12,6 +12,18 @@ Choices that look wrong without their reasoning: the numbers this app derives it
 - **Steam %**: the raw ratio, hidden by default.
 - **The side panel** shows only the Weighted Rating, as one chip linking to the game's Steam reviews and captioned with the raw ratio and review count ("Weighted · 99% of 465k") — no Wilson score, no Steam summary tier ("Very Positive"). A table showing Wilson Score beside the panel reports two different numbers for the same game: expected.
 
+## Ratings — Steam purchasers' reviews, from the store browse batch
+
+- **Population**: the ratings count reviews from Steam purchasers only, as Steam's own store score does (key activations left out), from the store browse item's `reviews.summary_filtered` (`review_count`, `percent_positive`) — not `GetAppReviews`' all-purchase counts. Built by C275 ([code-backlog.md](code-backlog.md)); until then `getGameRating` still counts every purchase.
+- **Why** (2026-11-13, 32 games, one pass of each endpoint):
+  - Paid games' browse counts are 0.45–1.00× the all-purchase totals (median 0.80); free-to-play games' are equal (`counts_all_purchases`). Language and the off-topic filter explain none of the gap: both sources are all-language and off-topic-filtered.
+  - Above 1k reviews the Weighted Rating moves ≤ 1.8 points (median 0.4); below, up to 17 (3d Bridges 37.6 → 20.6, A Long Way Home 61 → 75): key reviews on small games swing either way, and those are the least reliable. The Weighted Rating's shrinkage already handles small counts.
+  - Steam's word differs on 5 of 32 games, and the browse one is the word the store page shows.
+  - One browse call covers 50 games, against one `GetAppReviews` call per game.
+- **Costs**: browse's whole-number percent moves a rating by up to 0.5 point (±1 displayed on some games), and positives become `review_count × percent / 100`, an estimate the Wilson Score also reads.
+- **Not a hybrid** (browse above 1k reviews, all purchases below): one column would rank games measured two ways, a game would jump at the threshold, and the extra reviews would land only on small games, where they're least reliable.
+- The review variants (U196–U199) stay panel-only, one `GetAppReviews` call per opened game, until a volume review (P76).
+
 ## Production Tier — a heuristic, not Steam-provided data
 
 Steam has no budget or studio-size field, so "Production Tier (est.)" (hidden by default) is a best-effort AAA/AA/Indie guess, `computeProductionTier` in `public/utils.ts`, from three signals every row already has:
@@ -23,11 +35,11 @@ Steam has no budget or studio-size field, so "Production Tier (est.)" (hidden by
 Decision order:
 
 1. DLC (`meta.fullgame` set) and non-game types (`dlc`/`demo`/`music`/`video`/`series`/`episode`/`mod`/`hardware`/`advertising`) → `null`: a cheap DLC of a AAA game would read as Indie, and looking up the parent costs a fetch.
-2. Free-to-play → judged on review volume alone, against a high bar (200k+).
+2. Free-to-play → judged on review volume alone, against a high bar (`FREE_AAA_REVIEW_THRESHOLD`).
 3. Paid with no known price → `null`.
-4. ≥ $50 → AAA. $20–$50 → AA with 20k+ reviews or a Metacritic entry, else Indie. < $20 → Indie whatever the reviews (Vampire Survivors, Stardew Valley, Terraria stay Indie).
+4. From `AAA_PRICE_CENTS` → AAA. From `AA_PRICE_CENTS` → AA with `AA_REVIEW_THRESHOLD` reviews or a Metacritic entry, else Indie. Below it → Indie whatever the reviews (Vampire Survivors, Stardew Valley, Terraria stay Indie).
 
-It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vectors, so Similar in this list and Group fit weigh budget, which no Steam tag says; Plays mostly never shows it.
+It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vectors, so Similar in this list and Group Fit weigh budget, which no Steam tag says; Plays mostly never shows it.
 
 - **No publisher/developer allowlist**: it would be the strongest signal, but needs externally maintained knowledge (name variants, acquisitions, spin-offs); the heuristic stays self-updating from Steam's data.
 - **Accepted misclassifications**: cheap rereleases of old AAA IP, prestige-priced niche sims from small studios, veteran-founded studios shipping a small polished game. Hence "(est.)" in the label.
@@ -38,6 +50,11 @@ It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vector
 - A raw cosine of two play profiles is high for almost any pair (common tags dominate even after IDF), so "65% similar" can mean "typical".
 - Centering it needs a typical player to subtract. The only one available is built from the compared players' own libraries, and players mostly own what they play: with two players it's their midpoint, so any pair comes out opposite (two players sharing 11 of 12 games scored −0.98).
 - A count states a fact the shared tags beside it explain, and needs no calibration. A score could come back once there are enough libraries to calibrate it against.
+
+## Young games — refetched as they age
+
+- Why [data.md](data.md#cache-tiers)'s half-age rule: on production's cache (2026-11-08), of 30 games released in the last 6 months and refetched, those cached in their first ~9 days changed review label (4 of 13), ProtonDB tier (9 of 13) or gained HLTB times (5 of 13); those cached later barely moved, except HLTB times resting on few submissions.
+- Its cost: [integrations.md](integrations.md#request-volume-and-pacing).
 
 ## Trailers — native HLS where the browser has it
 

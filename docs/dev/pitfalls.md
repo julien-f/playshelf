@@ -2,8 +2,6 @@
 
 Surprising behaviors, misleading errors and their fixes. One entry each: symptom first (exact error text when there is one), then cause and fix. Delete entries once obsolete.
 
-- A rule learnt from a pitfall goes in the doc its reader is in (testing.md, frontend.md, ui-guidelines.md, a skill), keeping the exact error text: on an unexpected error, `grep -ri '<fragment>' docs/ .claude/skills/`.
-
 ## Dev servers
 
 ### `is outside of Vite serving allow list`: a blank page after `npm run dev:mock`
@@ -28,16 +26,9 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 
 - **Symptom**: the page says a source "didn't answer"; `curl localhost:3000/api/<route>` returns Express's `Cannot GET /api/<route>` HTML; the `backend` log says `Error: cannot listen on <host>:3000: listen EADDRINUSE`.
 - **Cause**: another worktree's dev server already holds port 3000, so this checkout's backend never binds and Vite proxies `/api` to the other one, which runs older code.
-- **Fix**: `ss -ltnp 'sport = :3000'` names the process holding the port (`node scripts/session-end.js` lists only servers started through `mock-server.js`/`dev-server.js`); start this one on a free port with `PORT=3001 npm run dev` (Vite's proxy reads the same `PORT`), or stop the other.
+- **Fix**: `ss -ltnp 'sport = :3000'` names the process holding the port (`node scripts/session-end.js` lists only servers started through `mock-server.js`/`dev-server.js`); start this checkout's with `node scripts/dev-server.js up`, which gives a worktree its own ports, or stop the other.
 
 ## Tests
-
-### A unit test loads a second copy of a module: `window is not defined`, stale module state, an effect that never re-runs
-
-- **Cause**: a `.ts` module's own `import`s go through Node's ESM loader, while a test's `require` goes through CommonJS: the two keep separate module instances and caches.
-- `delete require.cache[…]` doesn't reset a module-level value (a memoized fetch, a counter) of a module that a `.ts` file imports: keep state a test must reset in a factory the test calls (like `createPanelDataCache()`).
-- An effect created with `require('solid-js')` runs once and never again on a `public/` module's signal: `require` loads solid-js's CommonJS build, the `.ts` modules its ESM one. Use `await import('solid-js')` (see `test/authStore.test.js`).
-- `require('../public/gameColumns.ts')` (or any module importing `@vates/data-table-solid`) throws `ReferenceError: window is not defined`: the library touches `window` when it loads. Resolve it to `@vates/data-table-core`, which provides the helpers, with a `module.registerHooks` resolve hook (see `test/gameColumns.test.js`).
 
 ### `TypeError: … is not a function` from the pre-commit hook in a test the commit doesn't include
 
@@ -45,21 +36,13 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 - **Cause**: the hook sets aside unstaged edits to tracked files but leaves untracked ones, so a new test for code you haven't staged runs against the old code.
 - **Fix**: commit a script and its new test together, and move other changes' untracked tests out of the tree until their commit.
 
-### A tainted-canvas fallback can't be tested through `page.route`
-
-- **Symptom**: an image served by `route.fulfill` without `Access-Control-Allow-Origin` still loads with `crossOrigin = 'anonymous'` and its canvas reads fine, so the "no CORS" path never runs (seen checking the panel tint, `artTint.ts`).
-- **Cause**: observed with Playwright's Chromium: a fulfilled cross-origin response passes the CORS check whatever its headers.
-- **Fix**: serve the image from a real server on another origin (`python3 -m http.server` on a spare port) and call the code from the page.
-
 ## Git, hooks and parallel agents
 
-- Agents in worktrees are fix-batch lanes: their own rules (branch from local `main`, per-lane message files, one command per call) live in [BATCH.md](../../.claude/skills/code-fix/BATCH.md)'s lane template.
+### `node_modules is behind package-lock.json` on a commit in the main checkout
 
-### `node_modules is behind package-lock.json` on a merge in the main checkout
-
-- **Symptom**: `scripts/check.js` (the hooks, `npm run check`) stops with `✗ node_modules is behind package-lock.json: <package> (…). Run npm ci.`, though the branch passed.
+- **Symptom**: `scripts/check.js` (the hooks, `npm run check`) stops with `✗ node_modules is behind package-lock.json: <package> (…). Run npm ci.`, though the branch passed (typically a merge that brings a lockfile change).
 - **Cause**: worktrees run their own `npm ci`; the main checkout's `node_modules` stays at whatever it last installed.
-- **Fix**: `npm ci` in the main checkout, then commit the merge again (it stays staged).
+- **Fix**: the `post-merge` hook runs `npm ci` after a merge that changes the lockfile, but not on a merge left pending by a conflict or a blocking hook: `npm ci` in the main checkout, then commit the merge again (it stays staged).
 
 ### `Connection to github.com closed by remote host` during `git push`
 
@@ -77,7 +60,7 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 
 - **Symptom**: `git log --graph` shows someone else's commit with a branch as second parent, but its tree lacks that branch's changes, which are still staged.
 - **Cause**: a merge left pending in the main checkout (`--no-commit`, conflicts, or a hook that blocked the merge commit) keeps `MERGE_HEAD`; the next `git commit` there, by any agent, becomes the merge and takes only what that agent staged. Another session may instead abort it (`reset: moving to HEAD` in the reflog, the merge's new files left untracked), even while its own commit runs the hook.
-- **Fix**: merge where nobody else commits, as CLAUDE.md's Git workflow says (a temp branch in the worktree, then `--ff-only`); `git merge --abort` one left pending. Once absorbed, commit the staged changes on top, naming the absorbing commit in the message.
+- **Fix**: merge in the branch's worktree with `node scripts/merge.js start|finish`, as CLAUDE.md's Git workflow says; `git merge --abort` one left pending. Once absorbed, commit the staged changes on top, naming the absorbing commit in the message.
 
 ### `fatal: this operation must be run in a work tree` after a commit
 
@@ -96,17 +79,3 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 - **Symptom**: `pre-commit` fails `format` on lines that look right in the working tree; the staged file (`git show :<file>`) has them inside another function.
 - **Cause**: a patch made with `git diff -U0` and staged with `git apply --cached --unidiff-zero` carries no context, so its line numbers count the hunks left out: it applies at the shifted line.
 - **Fix**: build the staged content from `HEAD` (`git show HEAD:<file>`, edit, then `git update-index --cacheinfo 100644,$(git hash-object -w <copy>),<file>`), or commit the hunks in the order they sit in the file.
-
-## App
-
-### A closed `[popover]` panel shows anyway
-
-- **Symptom**: a popover panel sits on the page, in flow under its button, before anything opened it; `toBeHidden()` on it fails.
-- **Cause**: the browser hides a closed popover with a user-agent `display: none`, which any `display` in the app's CSS (`.account-chip-panel`'s `flex`) overrides.
-- **Fix**: set a panel's `display` only while open, `:popover-open { display: flex }`, as `.account-chip-panel` does in `styles/components.css`.
-
-### `Unexpected token '<', "<!DOCTYPE "... is not valid JSON` from an upstream
-
-- **Symptom**: a `[tag]` warning in the server log with that error, for every uncached game, while cached ones still show.
-- **Cause**: the endpoint answered HTML: it was retired and redirects to a home page, or it serves a block page. `fetch` follows redirects, so metrics count the final page's 200. Steam store calls don't follow them: they fail with `Steam store: 302 redirect to …` and count as 302.
-- **Fix**: `curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' '<url>'`; then check the upstream's announcements for a replacement.

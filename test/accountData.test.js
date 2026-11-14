@@ -14,6 +14,7 @@ const {
   fetchAccountFriends,
   fetchAccountOwnedData,
   accountDataVersion,
+  cachedAccountFriends,
   clearAccountDataCache,
 } = require('../public/accountData.ts');
 const { CLIENT_CACHE_MAX_AGE_MS } = require('../public/utils.ts');
@@ -536,6 +537,20 @@ test('account cache: one request per kind and account, whatever the member order
   await Promise.all([fetchAccountWishlist(['1', '2']), fetchAccountWishlistData('1+2')]);
   await Promise.all([fetchAccountFriends(['1', '2']), fetchAccountFriends(['1', '2'])]);
   assert.deepEqual(urls, ['/api/common-games', '/api/wishlist', '/api/friends']);
+});
+
+test('cachedAccountFriends: a refresh in flight still reads the list it replaces', async (t) => {
+  let release;
+  const state = { games: [] };
+  const urls = countingFetch(t, state);
+  const first = await fetchAccountFriends(['1']);
+  state.hold = new Promise((resolve) => (release = resolve));
+  const refreshing = fetchAccountFriends(['1'], { refresh: true });
+  assert.equal(cachedAccountFriends(['1']), first);
+  release();
+  const refreshed = await refreshing;
+  assert.equal(cachedAccountFriends(['1']), refreshed);
+  assert.equal(urls.length, 2);
 });
 
 test('account cache: a refresh replaces an in-flight fetch rather than joining it', async (t) => {

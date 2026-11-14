@@ -20,8 +20,8 @@ import { addRecentGame } from './recentGames.ts';
 import { peekMyOwnershipStatus } from './myOwnership.ts';
 import { GAME_SEARCH_DEBOUNCE_MS, GAME_SEARCH_MIN_CHARS, ownershipMarkersHtml, searchGames } from './gameSearch.ts';
 import type { GameSearchResult } from './gameSearch.ts';
-import type { Game, GameDetailsReply } from './types.ts';
-import { detailsFields, failedLookupFields, fetchJson } from './utils.ts';
+import type { Game } from './types.ts';
+import { detailsFields, failedLookupFields, fetchGameDetails } from './utils.ts';
 import { SearchClearButton } from './SearchClearButton.tsx';
 
 // CORE_COLUMNS' thumb + Name pair over a bare GameSearchResult; a cell is a tracked scope, so renderName's badge follows ownership landing.
@@ -171,9 +171,10 @@ export default function SearchRoute() {
     });
     focusRow(appid);
     try {
-      const data = await fetchJson<GameDetailsReply>(`/api/game-details/${appid}`, undefined, 'Lookup failed');
+      const data = await fetchGameDetails(appid);
       if (token !== lookupToken) return; // a newer pick has since taken over
       setGames(appid, { ...detailsFields(data), name: data.name || name });
+      setStatusText(data.limited ?? '');
       addRecentGame(appid, data.name || name, data.meta?.capsule || tinyImage);
     } catch (err) {
       if (token !== lookupToken) return;
@@ -186,14 +187,10 @@ export default function SearchRoute() {
   async function refreshGame(game: Game): Promise<void> {
     const unresolved = !game.details?.meta;
     try {
-      const data = await fetchJson<GameDetailsReply>(
-        `/api/game-details/${game.appid}?refresh=1`,
-        undefined,
-        'Refresh failed',
-      );
+      const data = await fetchGameDetails(game.appid, { refresh: true });
       const name = data.name || game.name;
       setGames(game.appid, { ...detailsFields(data), name });
-      setStatusText('');
+      setStatusText(data.limited ?? '');
       // A lookup that failed lands only now.
       if (unresolved && data.meta) addRecentGame(game.appid, name, data.meta.capsule || null);
     } catch (err) {

@@ -1,6 +1,6 @@
 // "Buy on Fanatical": a pick-and-mix basket can only be filled from fanatical.com itself (it's keyed
 // to that site's own anonymous id), so the selection rides to its page in the URL and a
-// bookmarklet clicks each game's own "Add" button there. See docs/dev/integrations.md.
+// bookmarklet clicks each game's own "Add" button there. See docs/dev/bundles-and-prices.md.
 
 const PARAM = 'scg';
 

@@ -23,7 +23,15 @@ const PROJECTS = Object.keys(require('./e2e-projects'));
 
 const ROOT = path.join(__dirname, '..');
 const CACHE = path.join(ROOT, 'node_modules/.cache');
-const PASS_FILE = path.join(CACHE, 'e2e-pass');
+// Shared by every checkout: the pass record (a build passed in a feature worktree is skipped in another) and the
+// run queue.
+const GIT_COMMON = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+  cwd: ROOT,
+  encoding: 'utf8',
+}).trim();
+const PASS_FILE = path.join(GIT_COMMON, 'e2e-pass.json');
+// Builds whose passes are kept: enough for every live checkout's latest.
+const PASSES_KEPT = 20;
 // playwright.config.ts keeps the port below Linux's ephemeral range.
 const MAX_PORT = 32767;
 
@@ -31,7 +39,7 @@ const MAX_PORT = 32767;
 const NARROWING = /^(-g|--grep|--grep-invert|--last-failed|--only-changed|--shard)(=|$)/;
 const PROJECT_ARG = /^--project(?:=(.*))?$/;
 
-// Names relative to `base`, so a build on another port hashes the same.
+// Names relative to `base`, so a build on another port or in another checkout hashes the same.
 const filesUnder = (dir, base) =>
   fs
     .readdirSync(dir, { recursive: true })
@@ -44,7 +52,7 @@ const filesUnder = (dir, base) =>
 function inputsHash(outDir) {
   const hash = crypto.createHash('sha256').update(process.version);
   const files = [
-    ...filesUnder(outDir, path.dirname(outDir)),
+    ...filesUnder(outDir, outDir),
     ...filesUnder(path.join(ROOT, 'e2e'), ROOT),
     ...['playwright.config.ts', 'scripts/e2e-projects.js', 'package-lock.json'].map((f) => [f, path.join(ROOT, f)]),
   ];
@@ -75,21 +83,45 @@ const listening = (port) =>
     socket.once('connect', () => done(true)).once('error', () => done(false));
   });
 
-// Claims the lock file `<lockDir>/e2e-<port>.lock` for this process, or returns false while a live one holds it.
-function lock(lockDir, port) {
-  const file = path.join(lockDir, `e2e-${port}.lock`);
+// The pid and checkout written in a lock file.
+const holderOf = (file) => {
+  const [pid, checkout] = fs.readFileSync(file, 'utf8').split('\n');
+  return { pid: Number(pid), checkout };
+};
+
+// Claims the lock file `<lockDir>/e2e-<name>.lock` for this process, or returns false while a live one holds it.
+function lock(lockDir, name) {
+  const file = path.join(lockDir, `e2e-${name}.lock`);
   try {
-    fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
+    fs.writeFileSync(file, `${process.pid}\n${ROOT}`, { flag: 'wx' });
     return file;
   } catch (err) {
     if (err.code !== 'EEXIST') throw err;
   }
   try {
-    process.kill(Number(fs.readFileSync(file, 'utf8')), 0);
+    process.kill(holderOf(file).pid, 0);
     return false;
   } catch {
     fs.rmSync(file, { force: true }); // its run died without cleaning up
-    return lock(lockDir, port);
+    return lock(lockDir, name);
+  }
+}
+
+// Takes the machine's e2e turn, waiting while another checkout's run holds it: concurrent runs each slow down
+// several-fold and trip the load-sensitive flakes (setup-backlog.md P78). Returns its lock file.
+async function waitTurn({
+  lockDir = GIT_COMMON,
+  sleep = () => new Promise((resolve) => setTimeout(resolve, 2000)),
+  say = console.log,
+} = {}) {
+  for (let said = false; ; said = true) {
+    const file = lock(lockDir, 'run');
+    if (file) return file;
+    if (!said) {
+      const { pid, checkout } = holderOf(path.join(lockDir, 'e2e-run.lock'));
+      say(`e2e: waiting for the run in ${checkout} (pid ${pid}) to finish`);
+    }
+    await sleep();
   }
 }
 
@@ -110,15 +142,30 @@ async function claimPort(start, { fixed = false, lockDir = CACHE, isBusy = liste
 // the other way round.
 const passKey = (project, phoneSubset) => (project === 'phone' && phoneSubset ? 'phone-subset' : project);
 
-// The projects already passed on `hash`.
-const passedOn = (hash) => {
+// Build hash → projects passed on it, oldest first.
+const readPasses = (file) => {
   try {
-    const [passed, ...projects] = fs.readFileSync(PASS_FILE, 'utf8').trim().split('\n');
-    return new Set(passed === hash ? projects : []);
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
-    return new Set();
+    return {};
   }
 };
+
+// The projects already passed on `hash`.
+const passedOn = (hash, file = PASS_FILE) => new Set(readPasses(file)[hash] ?? []);
+
+// Adds `projects` to `hash`'s passes, keeping the PASSES_KEPT latest builds; written whole then renamed, so a
+// concurrent run never reads half a file.
+function recordPass(hash, projects, file = PASS_FILE) {
+  const passes = readPasses(file);
+  const merged = [...new Set([...(passes[hash] ?? []), ...projects])];
+  delete passes[hash];
+  passes[hash] = merged;
+  const kept = Object.fromEntries(Object.entries(passes).slice(-PASSES_KEPT));
+  const tmp = `${file}.${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(kept));
+  fs.renameSync(tmp, file);
+}
 
 // Splits Playwright args into the projects they run in full (null when they run part of a project's tests,
 // so a pass says nothing about the rest) and the other args.
@@ -159,6 +206,11 @@ async function main() {
     }
   }
 
+  const waitStart = Date.now();
+  const turn = await waitTurn();
+  process.on('exit', () => fs.rmSync(turn, { force: true }));
+  const waited = Math.round((Date.now() - waitStart) / 1000);
+
   const start = portOf('e2e');
   let claimed;
   try {
@@ -189,7 +241,9 @@ async function main() {
   const passed = new Set(PROJECTS.filter((p) => passedKeys.has(p) || passedKeys.has(passKey(p, phoneSubset))));
   const { running, runArgs } = planRun(pwArgs, passed, ifChanged);
   const log = (ok, seconds) =>
-    ifChanged && running && record('e2e-runs', { asked: splitProjects(pwArgs).projects, ran: running, ok, seconds });
+    ifChanged &&
+    running &&
+    record('e2e-runs', { asked: splitProjects(pwArgs).projects, ran: running, ok, seconds, waited });
   if (!runArgs) {
     log(true, 0);
     console.log('e2e: same build and tests as the last passing run, skipped');
@@ -206,13 +260,23 @@ async function main() {
   });
   log(status === 0, Math.round((Date.now() - started) / 1000));
   if (status === 0 && running)
-    fs.writeFileSync(
-      PASS_FILE,
-      `${[hash, ...new Set([...passedKeys, ...running.map((p) => passKey(p, phoneSubset))])].join('\n')}\n`,
+    recordPass(
+      hash,
+      running.map((p) => passKey(p, phoneSubset)),
     );
   process.exit(status ?? 1);
 }
 
 if (require.main === module) main();
 
-module.exports = { buildInputsHash, claimPort, listening, passKey, planRun };
+module.exports = {
+  buildInputsHash,
+  claimPort,
+  inputsHash,
+  listening,
+  passKey,
+  passedOn,
+  planRun,
+  recordPass,
+  waitTurn,
+};

@@ -1,7 +1,7 @@
 // Steam sign-in status, as a signal so anything reading getAuthUser() reactively follows it. Backed by lib/auth.js's cookie-session endpoints
 // (GET /api/me, POST /auth/logout); "signing in" itself is a plain page navigation to
 // /auth/steam/login (AccountChip.tsx), not something this module drives.
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
 import {
   getAllPrefEntries,
   adoptPrefEntry,
@@ -114,10 +114,8 @@ function markSyncedBefore(steamid: string): void {
 // Equal timestamps are left alone — indistinguishable from "already in sync".
 //
 // Returns whether anything was adopted from the server and every adoption was kept — the caller
-// reloads in that case (a partial one would reload into another first sync, forever), since
-// every store (accountsStore, listsStore, ...) seeds its in-memory state from localStorage once
-// at load; live-patching each of them to notice an external write isn't worth it for something
-// that, once merged, won't differ again until the next real edit on either side.
+// reloads in that case (a partial one would reload into another first sync, forever): getPref's
+// readers follow an adoption, but those that copy a pref at load don't (U274).
 //
 // Exported for unit testing (see test/authStore.test.js) — same reasoning as
 // autoPopulateAccountFromLogin's own comment below.
@@ -130,24 +128,27 @@ export async function syncPrefsWithServer(steamid: string, serverEntries: Record
   let unkept = false;
   const pushes: Promise<void>[] = [];
 
-  for (const key of keys) {
-    const local = localEntries[key];
-    const server = serverEntries[key];
-    if (server && (!local || firstSync || server.updatedAt > local.updatedAt)) {
-      // The same value under a newer time (a push from another device): nothing on screen changes, so no reload.
-      const sameValue = !!local && JSON.stringify(local.value) === JSON.stringify(server.value);
-      // Counted only once persisted: a reload re-reads storage, so an unkept adoption would reload forever.
-      if (adoptPrefEntry(key, server.value, server.updatedAt)) adopted ||= !sameValue;
-      else {
-        unkept = true;
-        console.warn(
-          `[auth] couldn't store the account's "${key}" pref locally; this device won't use the account's value`,
-        );
+  // Batched: readers rerun once the merge has written every key, not on a half-merged state.
+  batch(() => {
+    for (const key of keys) {
+      const local = localEntries[key];
+      const server = serverEntries[key];
+      if (server && (!local || firstSync || server.updatedAt > local.updatedAt)) {
+        // The same value under a newer time (a push from another device): nothing on screen changes, so no reload.
+        const sameValue = !!local && JSON.stringify(local.value) === JSON.stringify(server.value);
+        // Counted only once persisted: a reload re-reads storage, so an unkept adoption would reload forever.
+        if (adoptPrefEntry(key, server.value, server.updatedAt)) adopted ||= !sameValue;
+        else {
+          unkept = true;
+          console.warn(
+            `[auth] couldn't store the account's "${key}" pref locally; this device won't use the account's value`,
+          );
+        }
+      } else if (local && (!server || local.updatedAt > server.updatedAt)) {
+        pushes.push(pushPrefToServer(key, local.value, local.updatedAt));
       }
-    } else if (local && (!server || local.updatedAt > server.updatedAt)) {
-      pushes.push(pushPrefToServer(key, local.value, local.updatedAt));
     }
-  }
+  });
 
   await Promise.all(pushes);
   // Still unsynced while a server value isn't kept, or a later sync would let the stale local one win.
@@ -155,16 +156,8 @@ export async function syncPrefsWithServer(steamid: string, serverEntries: Record
   return adopted && !unkept;
 }
 
-// A verified Steam login already IS a resolved identity — nobody should have to retype their own
-// steamid into Home's picker right after signing in with it. Only fills in whichever of
-// myAccount/currentAccount is still unset, same "never overwrites the stored preference"
-// philosophy as the `?u=` override (see accountsStore.ts's own comment on that) — an existing
-// pick, from an earlier manual resolve or a prefs merge above, is left alone. Runs on every
-// sign-in check but is a no-op once both are set, so a failed resolve (e.g. a transient network
-// error) just retries on the next page load rather than needing its own one-time flag.
-// Exported for unit testing (see test/authStore.test.js) — same reasoning as lib/hltb.js's own
-// exported stringSimilarity/levenshtein: worth exercising directly rather than only through
-// initAuth's full fetch('/api/me') + merge + this call chain.
+// A verified login is a resolved identity: fills only an unset myAccount/currentAccount, so a failed resolve
+// retries on the next load. Exported for test/authStore.test.js.
 export async function autoPopulateAccountFromLogin(steamid: string): Promise<void> {
   if (getMyAccount() && getCurrentAccount()) return;
   try {

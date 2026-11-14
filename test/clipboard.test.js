@@ -100,7 +100,7 @@ test('copyWithFeedback: swaps label/title/class, then restores them', async (t) 
 test('copyWithFeedback: restores a label made of several nodes as they were', async (t) => {
   const tick = fakeTimers(t);
   withNavigator(t, { writeText: async () => {} });
-  const btn = fakeBtn(icon(), { text: ' Share view' });
+  const btn = fakeBtn(icon(), { text: ' Share layout' });
   const before = [...btn.childNodes];
   copyWithFeedback(btn, 'https://example.test/?tv=x');
   await settled();

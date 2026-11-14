@@ -1,6 +1,6 @@
 import { prefersReducedMotion } from './motion.ts';
 
-// Shared-element morphs (ui-guidelines.md's Motion). Not with the top layer in use: it paints over
+// Shared-element morphs (frontend.md's Motion). Not with the top layer in use: it paints over
 // every snapshot, so the morph would run under it.
 
 let updating = false;

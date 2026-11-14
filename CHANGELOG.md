@@ -19,7 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A tiered bundle's tier headers say what each step adds for you and whether it beats buying those games apart
 - Recently Looked Up shows when you last looked up each game.
 - An amber dot on the account chip when your Steam sign-in has expired, with Sign in again or Stay signed out in its menu
-- A Runs on Linux (ProtonDB) suggested view on Owned: games rated Native, Platinum or Gold on ProtonDB
+- Compare up to 5 friends straight from Home's friends list
+- Add a game to your lists, or start a new one with it, from its panel
+- A Runs on Linux (ProtonDB) suggested view on Owned and Wishlist: games rated Native, Platinum or Gold on ProtonDB
+- Compare's player boxes suggest the current account's friends
 
 ### Changed
 
@@ -45,13 +48,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Large lists load faster when several people use the app at once: names, ratings, tags, ProtonDB and HLTB fill in before genres, Metacritic and achievements
 - GET /api/metrics opens with what's wrong now (`alerts`), groups each upstream's live state together and dates its worst event-loop block
 - Each visit now extends the Steam sign-in, instead of it expiring a fixed time after signing in
+- The table's Share view and Default view buttons are now Share layout and Reset layout; Taste Fit, Group Fit and Tag Match columns are capitalized like the others
 - Large lists load HowLongToBeat times at a steadier pace so the site isn't blocked, and fewer requests go out for unreleased games, DLC, soundtracks and repeated refreshes
 - A list whose game details are all cached loads them with about a third less server CPU
 - Game details load with about a quarter less server CPU, reading only the store page fields the app uses
 - A recently released game's reviews, play times, ProtonDB rating and store data now refresh as it ages instead of staying a year old
 - Play next, Short games and the Barely played count leave out games not out yet, like a pre-order; a hidden Availability column says which are Coming soon
-- Play next lists best rated first when the account has too few games played for Taste fit, and says so
+- Play next lists best rated first when the account has too few games played for Taste Fit, and says so
 - Loading a large list makes about 50 times fewer calls to Steam for its tags and store details
+- The first account you look up on Home becomes your ★ account; an account opened from a link never does
+- Another open tab now follows a region picked, or a game added to or removed from a list, in this one without a reload
 
 ### Fixed
 
@@ -95,6 +101,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Humble Choice no longer shows as expired, or drops off the bundle list, in the two hours before it actually ends
 - Recently Looked Up no longer says your search history stays in the browser: it syncs when you're signed in with Steam.
 - A Steam sign-in that expires while the app is open now shows as signed out at the next change, instead of changes silently no longer syncing
+- Keyboard focus no longer drops to the page's top when the control holding it goes: the layout banners' buttons, the selection bar's actions, a revealed hidden achievement, a second Esc in the game search, and arriving on the rank screen.
+- A private Steam profile is named instead of shown by its ID, with the Steam setting that makes it public and a link to Steam's privacy settings; the same for a private friends list.
+- An unsaved table change in one comparison no longer carries over to a comparison of other players.
 - The site no longer stops answering for several seconds about once an hour.
 - Achievement icons show again for recently released games.
 - An unreleased game's store data, reviews, ProtonDB and HowLongToBeat results are refreshed within a day again, instead of staying up to a year
@@ -112,6 +121,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - After two quick refreshes of an account where the second failed, the owned and wishlist marks now show the first one's data
 - A saved comparison names its players instead of showing their Steam IDs, and so does a list saved from a shared link or a ranking made from someone else's link.
 - Reopening a game from the table morphs its picture into the panel again, not only on its first open
+- About now lists every data source, including Fanatical, PC Game Pass and Steam sign-in, and says what signing in stores and for how long data is kept.
+- Past your share of new lookups, a game lookup, Rank and Refresh details say so in the status line, as lists do
+- A shared list's link keeps its formula readable after opening a game, and its parameters in a stable order
 - Clearing the nav search no longer lets a late answer replace the recently looked-up games
 
 ### Development
@@ -136,6 +148,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - upstream-bugs.js asks to check a closed bug was really fixed before removing its workaround.
 - GET /api/metrics says when ITAD's bundle end dates match Fanatical's or Humble's again, so their overrides can be dropped.
 - session-end.js also lists what production's metrics show since its last run: warnings, event-loop blocks, server errors, unexpected upstream answers and an undeployed main.
+- Design docs: personas and core journeys, a UI glossary, and every unbuilt journey step tracked by a backlog item (checked by `npm run check`)
+- Mock data has avatars, public friends lists, a private profile and images, so design reviews can walk more journeys
 - `node scripts/prod-check.js --all` lists production's warnings over the whole daily window, for a metrics review.
 - Pushing after a UI commit runs only the phone e2e half: each width's pass is remembered
 - db-query.js reads the statement from stdin, so a multi-line query needs no shell quoting
@@ -147,6 +161,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - The real dev server runs on a worktree's own ports with the main checkout's settings and cache
 - A feature skill for new feature requests; backlog-run takes item ids and hands over the next one
 - Hook e2e runs log which projects they ran, summarized by `setup-facts.js --cost`
+- Reorganised the developer docs: bundles and prices, the presentation window and the taste model get their own docs, each fact has one owner, and CLAUDE.md is the only doc index.
+- A post-merge hook runs npm ci when a merge changes package-lock.json
+- An e2e pass in one checkout is skipped by the hooks in another
+- e2e runs from different checkouts take turns instead of running at once
 - Faster hooks: the pre-commit hook no longer runs e2e, Prettier and ESLint keep their caches, the pre-push hook runs at phone width only the tests that depend on it, and CI runs e2e in four shards
 - Steadier e2e: concurrent runs in one checkout no longer delete each other's traces, and six lightbox tests no longer race the clock
 

@@ -84,6 +84,7 @@ export interface GameDetailsReply extends GameDetails {
   fetchedAt?: number | null;
   fetchedAts?: DetailsAges | null;
   failed?: string[];
+  limited?: string; // the server's message when this client's spent share left sources unfetched
 }
 
 // One game in a table/panel — the shared base every page's row extends. `appid` is a

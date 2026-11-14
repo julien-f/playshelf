@@ -10,6 +10,9 @@ export interface Player {
   playtime?: Record<number, number>; // minutes
   recent?: Record<number, number>; // minutes in Steam's last two weeks
   wishlist?: number[];
+  friends?: string[]; // vanities; absent: a private friends list
+  noAvatar?: boolean; // the account chip's initial instead
+  private?: boolean; // Steam answers no library for a private profile
 }
 
 export const ALICE: Player = {
@@ -20,6 +23,7 @@ export const ALICE: Player = {
   playtime: { 620: 600, 105600: 1201, 1145360: 45 }, // 1201: hours that don't divide evenly
   // Apex Legends: Borked on ProtonDB; 3999990: no ProtonDB report at all.
   wishlist: [1426210, 728880, 1172470, 3999990],
+  friends: ['bob', 'carol', 'dave'],
 };
 
 export const BOB: Player = {
@@ -28,12 +32,14 @@ export const BOB: Player = {
   personaname: 'Bob',
   owned: [620, 105600, 322330, 728880],
   wishlist: [413150, 1145360], // games Alice owns: B4's gift that's already in the family
+  friends: ['alice', 'carol'], // Carol: a friend Alice shares, marked Mutual
 };
 
 export const CAROL: Player = {
   steamid: '76561198000000003',
   vanity: 'carol',
   personaname: 'Carol',
+  noAvatar: true,
   // Never played: Quiet Little Game is short (L5's Short games), Counter-Strike 2 has no HLTB entry.
   owned: [620, 322330, 1426210, 3999990, 730],
 };
@@ -91,7 +97,16 @@ export const ERIN: Player = {
   recent: { 359550: h(6), 548430: 90 }, // back on Deep Rock Galactic, which Dave plays too
 };
 
-export const PLAYERS = [ALICE, BOB, CAROL, DAVE, ERIN];
+// A private profile: no library, an empty wishlist, no friends list (A1's edge).
+export const FRANK: Player = {
+  steamid: '76561198000000006',
+  vanity: 'frank',
+  personaname: 'Frank',
+  owned: [],
+  private: true,
+};
+
+export const PLAYERS = [ALICE, BOB, CAROL, DAVE, ERIN, FRANK];
 
 export interface CatalogGame {
   appid: number;

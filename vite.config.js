@@ -34,7 +34,8 @@ const mockMiddleware = (loadMock) => async (req, res, next) => {
     const { respond } = await loadMock();
     answer = respond(
       req.method,
-      new URL(req.url, 'http://localhost'),
+      // The page's own host and port: mock image URLs are built on it.
+      new URL(req.url, `http://${req.headers.host ?? 'localhost'}`),
       chunks.length ? Buffer.concat(chunks).toString() : null,
       states,
     );

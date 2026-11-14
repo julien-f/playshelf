@@ -27,13 +27,13 @@ The smallest change that closes the item, following [frontend.md](../../../docs/
 
 ## 3. Look at it
 
-- `node scripts/mock-server.js up` (`dev:mock` on `:58993`, or `node scripts/ports.js mock` in a worktree; its own storage: no demo-prefs seed/restore; `down` when done). Check at **1440×900** and **390×844** with [ux-review](../ux-review/SKILL.md)'s Mechanics, starting clean (`ux-measure.js --fresh`), naming files `ux-U<n>` / `ux-U<n>-<what>.png`; measure what the item is about (bounding boxes before/after, accessible names).
+- `node scripts/mock-server.js up` (`dev:mock`, its port from `node scripts/ports.js mock`; its own storage: no demo-prefs seed/restore; `down` when done). Check at **1440×900** and **390×844** with [ux-review](../ux-review/SKILL.md)'s Mechanics, starting clean (`ux-measure.js --fresh`), naming files `ux-U<n>` / `ux-U<n>-<what>.png`; measure what the item is about (bounding boxes before/after, accessible names).
 - This is the item's re-check — no separate ux-review run.
 - A stale-module error after editing a widely imported file: restart the server (`down`, then `up`). A console error that appeared mid-edit: reload before believing it (pitfalls.md).
 
 ## 4. Close and commit
 
-- Remove the item from improvements.md, or narrow it to what's left and say so.
+- Remove the item from improvements.md, or narrow it to what's left and say so. A ◇ naming it in journeys.md goes in the same commit: drop the ◇ once built, or re-point it to the item left (`npm run check` fails otherwise).
 - Then CLAUDE.md's Development workflow and Changelog; the subject says what changed for the user, the body names `U<n>` and why.
 
 ## 5. Review the batch

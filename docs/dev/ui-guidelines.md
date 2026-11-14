@@ -21,18 +21,19 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 ## Feedback
 
 - Every action visibly changes something where the user is looking; a result with nothing to see (a copied link) is announced through a live region.
-- Reversible actions (sort, filter, hide a column, switch account) act at once, no confirmation. Clearing many at once (Default view) is where an undo is worth it; deleting is soft or confirmed.
+- Reversible actions (sort, filter, hide a column, switch account) act at once, no confirmation. Clearing many at once (Reset layout) is where an undo is worth it; deleting is soft or confirmed.
 - Disabled controls look it (`:disabled`, or `[aria-disabled='true']` when a press must say why: half opacity, `not-allowed` cursor) and say why in text, beside them or on press, not only a tooltip (touch and keyboard users never see one), or are hidden when there's nothing to act on.
 - Empty states say what emptied the screen (no games, a filter matching nothing, a private profile) and offer the way back.
 
 ## Keyboard
 
 - Every action is reachable from the keyboard with visible focus; `?` lists the shortcuts.
-- Focus follows reading order and is never dropped to `<body>`: closing a popover returns focus to its opener, activating a control keeps focus on it, removing the focused element moves focus to its nearest equivalent.
+- Focus follows reading order and is never dropped to `<body>`: closing a popover returns focus to its opener, activating a control keeps focus on it, removing the focused element moves focus to its nearest equivalent (`keepFocus`, `public/focusHandoff.ts`).
 - Esc closes the innermost thing first (search text, popover, lightbox, panel). No shortcut overrides a browser one or fires while typing in a field.
 
 ## Touch and phone
 
+- **Phone width** is 768 px and below (`max-width: 768px` in `public/styles/`); the other docs' "on a phone" means it.
 - Touch targets are at least 24×24 px (WCAG 2.5.8), 44×44 px where space allows; links in running text are exempt.
 - No information is hover-only — a `title` alone doesn't count.
 - At 390 px: no horizontal page scroll (tables scroll inside their own area), nothing clipped, popovers fit the screen, and the table starts as high as possible — secondary actions fold behind ⋯.
@@ -46,7 +47,9 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 
 ## Wording and numbers
 
-- User terms, not model terms: "Owned by Alice", not a formula; a list or comparison is named after what it shows.
+- User terms, not model terms: "Owned by Alice", not a formula; a list or comparison is named after what it shows. One word per thing, the [glossary](glossary.md)'s.
+- Title Case for a list's or column's name (Recently Looked Up, Best Deal); sentence case for actions and messages (Save as a list, "Keep as my layout").
+- A message says what happened, then what to do, with the button when there is one: "IsThereAnyDeal didn't answer" beside its retry, not "Error: …".
 - Numbers read as the user thinks of them: rounded, with units ("10.5 h to beat", "€5.99"), never raw floats or timestamps; filters, chips and group headers format values as their column does.
 - Dates: ISO everywhere (`YYYY-MM-DD`, plus `HH:MM` where the time matters), so one date reads the same in a table, a card and the panel; a coarse Steam release ("Q4 2026") stays as Steam wrote it.
 
@@ -60,33 +63,33 @@ How the UI should behave where [journeys.md](journeys.md) and the feature docs a
 
 - Sizes come from the `--fs-*` scale in `styles/tokens.css` (caps labels, meta and chips, tables and controls, prose, card titles, page titles, big figures); px sizes are for icon glyphs only. `test/typeScale.test.js` enforces it for the app's own CSS (the presentation window's `clamp()` TV sizes included), not the table library's.
 - Two weights: 400, and 600 for emphasis.
-- Two faces, the platform's own, so a page load downloads no font: `--font-sans` (a `system-ui` stack) for text; `--font-mono` (a `ui-monospace` stack) with tabular figures for a figure standing alone (`<time>`, `<output>`, `<data>`, a price, a score, a duration). Table cells stay in the text face, with tabular figures, since a cell can't be told numeric from CSS. A column of figures aligns to the end, so digits line up (data-table's default for `type: 'number'`); a number column whose cells read as text (Group fit's player) sets `align: 'start'`.
+- Two faces, the platform's own, so a page load downloads no font: `--font-sans` (a `system-ui` stack) for text; `--font-mono` (a `ui-monospace` stack) with tabular figures for a figure standing alone (`<time>`, `<output>`, `<data>`, a price, a score, a duration). Table cells stay in the text face, with tabular figures, since a cell can't be told numeric from CSS. A column of figures aligns to the end, so digits line up (data-table's default for `type: 'number'`); a number column whose cells read as text (Group Fit's player) sets `align: 'start'`.
 - The face differs per platform: don't size a layout to one face's metrics or rely on a symbol glyph matching its neighbours (key caps: `Kbd.tsx`).
 
 ## Icons
 
-- Drawn with Lucide (`lucide-solid`), one import per icon: `import X from 'lucide-solid/icons/x'`. `npm run lint` bans the `lucide-solid` and `lucide-solid/icons` barrels, which would make the dev server transform every icon.
-- Import an icon by its canonical name: an alias kept for a renamed icon ships as a source re-export with no `.d.ts`, so it renders but fails the typecheck with `TS2307: Cannot find module 'lucide-solid/icons/<alias>'`. The alias file names the canonical one (`history.jsx` imports `./rotate-ccw-clock`).
-- `.lucide` in `styles/base.css` sizes an icon at `1em` in `currentColor` (stroke 1.75): set its size and colour on the element around it.
+- Drawn with Lucide (`lucide-solid`); importing and sizing them: [frontend.md](frontend.md#icons).
 - Decorative: an icon gets no `aria-*`, `role` or `title`, so Lucide marks it `aria-hidden`; an icon-only control keeps its `aria-label`.
 - An icon is markup, so it can't go in an `<option>` or a `title`: an option's label drops it, and a tooltip names the control in words.
 - Kept as text, since they are data or keys rather than icons: ↗ on external links, a deal record's ★/☆/🔥, a table cell's ✓/☆/⚠/⏳ (sorted and copied as text), key caps (`Kbd.tsx` draws an arrow key's glyph as a Lucide arrow, keeping the glyph as hidden text), the set operators ∪∩−, ≈ for an estimate, and the table library's own glyphs.
 
 ## Motion
 
+How each rule is built (helpers, View Transitions, reduced motion): [frontend.md](frontend.md#motion).
+
 - Durations and easing from the `--dur-*` / `--ease-out` tokens in `styles/tokens.css` (`--dur-4`: the TV's room-paced fades); motion explains a change (something opening, arriving, pressed), never decorates.
 - Only `opacity` and `transform` (or `translate`/`scale`) move; layout properties never animate.
-  - Two exceptions. The lightbox's seek line thickens from 4 to 6 px in `height` on hover or focus (`.lb-vc-scrub`). A panel section's body slides open and shut in `height` (`CollapsibleCard`), on a click only. Measured on DLC's 25 items (991 px) at 390 px wide under Chromium's 6× CPU throttle: 0 to 4 frames over 17 ms per opening (33 ms at most, usually one), none closing, over 4 runs; smooth on a Galaxy S10 (Firefox for Android).
+  - Two exceptions, each measured smooth: the lightbox's seek line thickens from 4 to 6 px in `height` on hover or focus; a panel section's body slides open and shut in `height`, on a click only ([panel-and-lightbox.md](panel-and-lightbox.md#the-side-panel)).
 - Press feedback: buttons give to `scale: 0.98` while held, clickable rows to `0.995` (a full-width row would jump at 0.98), and both snap back on release, so a menu the click opens measures its trigger at full size.
 - Explore cards and account tiles lift 3 px under a mouse (`hover: hover`), a pseudo-element filling the gap below so a pointer at the bottom edge doesn't drop them; the ranking's picks don't, being clicked in quick succession.
-- A hero tile's number counts to its new value over 400 ms (`createCountUp`), from its last non-zero value: a list empties out before each reload, so a count from or to 0 would only replay it. The drawn steps are `aria-hidden` and unselectable; the final value beside them is what's read out and copied.
-- A banner comes into place from the edge it sits on (`@starting-style`): down for the view banners, up for the storage-full one at the bottom.
-- A sort, filter or grouping change slides each row from where it was to where it lands (`slideRowsOnViewChange`, positions read on the pointerdown or keydown that starts it); the text search doesn't, as it changes on every key.
-- A table's first rows come in staggered (`cascadeFirstRows`, the first 8, 30 ms apart), once per load: a list's ↻ refresh, a view change and a new search query don't replay it.
-- An image fades in once loaded (`fadeInOnLoad`), so a row or the panel never flashes a half-drawn picture; a cached one shows at once.
-- View Transitions only for a shared element (row thumbnail → panel hero, hero → lightbox), through `viewTransition.ts`'s `morph`: feature-detected, skipped under reduced motion or while another top-layer popover or dialog is open (the lightbox's own dialog morphs: the snapshots paint above it), its `view-transition-name` set on the two elements only for the transition's length, the root cross-fade off, focus moved after `updateCallbackDone`. Not for route changes: the router has no hook, and a lazy route would freeze the screen while its chunk loads.
-- CSS first; JS only where CSS can't (measuring positions or heights). Web Animations go through `motion.ts`'s `animate`, which resolves even when it skips or is cancelled, so cleanup waiting on it always runs.
-- Reduced motion: `styles/base.css` sets every transition to `0s` and every animation to a near-instant single run, so end states are reached at once; it doesn't reach the Web Animations API, hence `animate` skipping under it; JS smooth scrolls go through `smoothScroll()`.
+- A hero tile's number counts to its new value over 400 ms, from its last non-zero value: a list empties out before each reload, so a count from or to 0 would only replay it. The drawn steps are hidden from screen readers and unselectable; the final value beside them is what's read out and copied.
+- A banner comes into place from the edge it sits on: down for the view banners, up for the storage-full one at the bottom.
+- A sort, filter or grouping change slides each row from where it was to where it lands; the text search doesn't, as it changes on every key.
+- A table's first rows come in staggered (the first 8, 30 ms apart), once per load: a list's ↻ refresh, a view change and a new search query don't replay it.
+- An image fades in once loaded, so a row or the panel never flashes a half-drawn picture; a cached one shows at once.
+- View Transitions only for a shared element (row thumbnail → panel hero, hero → lightbox), skipped under reduced motion or while another popover or dialog is open; never for route changes.
+- CSS first; JS only where CSS can't (measuring positions or heights).
+- Reduced motion: every transition and animation, JS ones included, reaches its end state at once.
 
 ## Checklist for a new UI feature
 

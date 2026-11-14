@@ -367,6 +367,20 @@ export function removeAppidsFromList(id: string, appids: number[]): void {
   updateManualAppids(id, (current) => [...subtract([new Set(current), new Set(appids)])]);
 }
 
+// Adds games to a manual list, or to a new one, and says so: the selection bar's and the panel's add.
+export function addToManualList(
+  target: { listId: string } | { newName: string },
+  appids: number[],
+): { listId: string; message: string } {
+  const games = `${appids.length} game${appids.length === 1 ? '' : 's'}`;
+  if ('newName' in target) {
+    const list = createList({ name: target.newName, kind: 'manual', appids });
+    return { listId: list.id, message: `Added ${games} to new list "${list.name}".` };
+  }
+  addAppidsToList(target.listId, appids);
+  return { listId: target.listId, message: `Added ${games} to "${getList(target.listId)?.name ?? 'list'}".` };
+}
+
 // Edits a dynamic list's formula in place (same id/folder position) — the "Edit sources"
 // action reopens the same setup dialog used at creation, pre-filled, and calls this to save.
 export function updateDynamicList(id: string, op: CombineOp, sources: ListRef[]): void {

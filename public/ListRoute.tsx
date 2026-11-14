@@ -116,6 +116,7 @@ import {
   NO_DETAILS,
   FAST_DETAIL_SOURCES,
   STORE_DETAIL_SOURCES,
+  fetchGameDetails,
   fetchJson,
   fmtAge,
   fmtLastPlayed,
@@ -130,6 +131,7 @@ import {
   smoothScroll,
   refusalMessage,
 } from './utils.ts';
+import { inViewport, keepFocus, type FocusCandidate } from './focusHandoff.ts';
 import {
   shareTableView,
   resetTableView,
@@ -165,6 +167,7 @@ import {
   DEFAULT_COMPARE_OP,
 } from './urlState.ts';
 import { SharedViewBanner } from './SharedViewBanner.tsx';
+import { SteamPrivacyLink } from './SteamPrivacyLink.tsx';
 import { UnsavedChangesBanner, ViewActions } from './TableViewControls.tsx';
 import {
   PLAY_NEXT_MAX_HOURS,
@@ -278,7 +281,7 @@ import {
 import { encodeListFormula, decodeListFormula, shareListUrl, inMemoryDynamicList } from './listShare.ts';
 import { copyWithFeedback } from './clipboard.ts';
 import { setBaseTitle } from './pageTitle.ts';
-import type { AccountSlot, GameDetailsReply, Game, GameList, GameMeta, CombineOp, ListRef } from './types.ts';
+import type { AccountSlot, Game, GameList, GameMeta, CombineOp, ListRef } from './types.ts';
 import { applyDetailsEvent, type DetailsEvent } from './detailsEvent.ts';
 import {
   getList,
@@ -287,7 +290,7 @@ import {
   createList,
   updateDynamicList,
   updateRankedSource,
-  addAppidsToList,
+  addToManualList,
   removeAppidsFromList,
   setListTableView,
   getRanking,
@@ -389,20 +392,20 @@ const fmtPercent = (v: unknown) => (v == null ? '—' : `${v}%`);
 
 const TASTE_FIT_KEY = 'tasteFit';
 const PLAY_NEXT = 'play-next'; // listViews.ts's template id
-// What Taste fit is scored against; said in the list status (tasteFitNote), not only on hover.
+// What Taste Fit is scored against; said in the list status (tasteFitNote), not only on hover.
 interface TasteSource {
   label: string | null; // null: no current account
   taste: Taste | null; // null: its Owned list not opened on this device yet
   linked: boolean; // someone else's account from a `?u=` link, whose Owned the viewer has no reason to open
 }
 
-// `byFitThenRating`: with no profile, Taste fit leaves the order to the rating sorted next (Play next's).
+// `byFitThenRating`: with no profile, Taste Fit leaves the order to the rating sorted next (Play next's).
 function tasteFitNote({ label, taste, linked }: TasteSource, byFitThenRating: boolean): string | null {
-  if (!label) return 'Taste fit needs an account: pick one on Home';
-  if (!taste) return linked ? null : `Taste fit needs ${label}'s Owned list opened on this device`;
+  if (!label) return 'Taste Fit needs an account: pick one on Home';
+  if (!taste) return linked ? null : `Taste Fit needs ${label}'s Owned list opened on this device`;
   if (!taste.profile)
-    return `Taste fit: ${label} has too few games played${byFitThenRating ? ', so best rated first' : ''}`;
-  return `Taste fit: ${label}'s taste as of ${fmtLocalDate(new Date(taste.at))}`;
+    return `Taste Fit: ${label} has too few games played${byFitThenRating ? ', so best rated first' : ''}`;
+  return `Taste Fit: ${label}'s taste as of ${fmtLocalDate(new Date(taste.at))}`;
 }
 
 // How close a game is to the current account's taste.
@@ -410,7 +413,7 @@ function tasteFitColumn(source: () => TasteSource | null): ColumnDef<Record<stri
   const taste = () => source()?.taste;
   return {
     key: TASTE_FIT_KEY,
-    label: 'Taste fit',
+    label: 'Taste Fit',
     type: 'number',
     value: (row) => {
       const t = taste();
@@ -436,7 +439,7 @@ function groupFitColumn(fits: () => PlayerFits | null, labels: string[]): Column
   };
   return {
     key: GROUP_FIT_KEY,
-    label: 'Group fit',
+    label: 'Group Fit',
     type: 'number',
     align: 'start', // its cells read as text
     value: (row) => least(row.appid)?.score ?? null,
@@ -871,7 +874,7 @@ export default function ListRoute() {
   const [emptyText, setEmptyText] = createSignal('');
   // kind === 'bundle' only, alongside bundleTitle above — ITAD's own page for this bundle
   // (`details`) and the real shop/affiliate purchase link exactly as ITAD returned it (`url`,
-  // never rewritten or stripped of tracking params — see docs/dev/integrations.md on why), and the
+  // never rewritten or stripped of tracking params — see docs/dev/bundles-and-prices.md on why), and the
   // gid -> Fanatical name map "Buy on Fanatical" needs (pick-and-mix bundles only).
   const [bundleLinks, setBundleLinks] = createSignal<{
     details: string | null;
@@ -950,6 +953,10 @@ export default function ListRoute() {
   // up by the one appid being opened.
   const [standaloneRows, setStandaloneRows] = createStore<Record<number, Game>>({});
   const loadGuard = createStaleGuard();
+  // A `{ limited }` reply marks only the load it was asked for, not one stepped to since.
+  function noteLimited(gen: number, limited: string | undefined): void {
+    if (limited && !loadGuard.isStale(gen)) setDetailsLimited(limited);
+  }
   let table: TableState<Game> | null = null;
   let disposeTable: (() => void) | null = null;
   let unsyncView: (() => void) | null = null;
@@ -963,7 +970,7 @@ export default function ListRoute() {
     if (adjusted !== applied) table.setViewState(adjusted);
   }
   const viewTable = { setViewState: applyView, getViewState: () => table?.getViewState() ?? {} };
-  // The table whose tag filter the Tag match column scores against; a signal so it re-sorts.
+  // The table whose tag filter the Tag Match column scores against; a signal so it re-sorts.
   const [filterTable, setFilterTable] = createSignal<TableState<Game> | null>(null);
   // The game the Similarity column ranks the list against (the panel's Sort list by similarity).
   const [similarTo, setSimilarTo] = createSignal<number | null>(null);
@@ -1221,7 +1228,7 @@ export default function ListRoute() {
     const rows = selectedRows();
     applyRanking(rows.reduce((s, row) => exclude(s, row.appid), state));
     showSelectionStatus(`Excluded ${rows.length} game${rows.length === 1 ? '' : 's'} from the ranking.`);
-    table?.selection.clear();
+    void keepFocus(selectionBar, () => table?.selection.clear(), focusSelectedRow(rows.map((r) => r.appid)));
   }
   // ── kind === 'shared' ─────────────────────────────────────────────────────────────────────
   // /lists/shared?f=<formula> — another dynamic list's formula, decoded straight from the URL
@@ -1298,7 +1305,10 @@ export default function ListRoute() {
   const [compareAccounts, setCompareAccounts] = createSignal<AccountSlot[]>([]);
   const [editingPlayers, setEditingPlayers] = createSignal(false);
   // Players the last comparison couldn't resolve, with why — the rest still compare (U14).
-  const [compareFailures, setCompareFailures] = createSignal<{ identifiers: string[]; message: string }[]>([]);
+  // `label`: the player's name once known (a private profile), else as typed.
+  const [compareFailures, setCompareFailures] = createSignal<
+    { identifiers: string[]; label: string; message: string; isPrivate: boolean }[]
+  >([]);
   function compareOthers(): void {
     const failed = new Set(compareFailures().map((f) => f.identifiers.join(',')));
     navigate(
@@ -1390,7 +1400,7 @@ export default function ListRoute() {
       },
     };
   }
-  // True once load() has built the table, false while loading. Gates the "🔗 Share view"/"Default
+  // True once load() has built the table, false while loading. Gates the "🔗 Share layout"/"Default
   // view" toolbar's own <Show> rather than leaving it visible-but-broken against a `table` that
   // doesn't exist yet.
   const [tableReady, setTableReady] = createSignal(false);
@@ -1399,7 +1409,8 @@ export default function ListRoute() {
 
   // ── Row-selection-based add/remove-to-list (see this file's own header comment) ────────────
   const [selectedRows, setSelectedRows] = createSignal<Game[]>([]);
-  const [manualLists, setManualLists] = createSignal<GameList[]>(getLists().filter((l) => l.kind === 'manual'));
+  // getLists reads a tracked pref: a list made in the panel or synced in is offered at once.
+  const manualLists = createMemo(() => getLists().filter((l) => l.kind === 'manual'));
   const NEW_LIST_OPTION = '__new__';
   const [addTarget, setAddTarget] = createSignal('');
   const [newListName, setNewListName] = createSignal('');
@@ -1422,45 +1433,36 @@ export default function ListRoute() {
     selectionStatusTimer = setTimeout(() => setSelectionActionStatus(null), 6000);
   }
 
-  function refreshManualLists(): void {
-    setManualLists(getLists().filter((l) => l.kind === 'manual'));
-  }
-
   async function handleAddSelectedToList(): Promise<void> {
     const target = addTarget();
     const rows = selectedRows();
     if (!target || rows.length === 0) return;
     const appids = rows.map((r) => r.appid);
-    if (target === NEW_LIST_OPTION) {
-      const name = newListName().trim();
-      if (!name) return;
-      const list = createList({ name, kind: 'manual', appids });
-      refreshManualLists();
-      showSelectionStatus(
-        `Added ${appids.length} game${appids.length === 1 ? '' : 's'} to new list "${list.name}".`,
-        list.id,
-      );
-    } else {
-      const list = getList(target);
-      addAppidsToList(target, appids);
-      showSelectionStatus(
-        `Added ${appids.length} game${appids.length === 1 ? '' : 's'} to "${list?.name ?? 'list'}".`,
-        target,
-      );
-    }
+    const name = newListName().trim();
+    if (target === NEW_LIST_OPTION && !name) return;
+    const added = addToManualList(target === NEW_LIST_OPTION ? { newName: name } : { listId: target }, appids);
+    showSelectionStatus(added.message, added.listId);
     setAddTarget('');
     setNewListName('');
-    const main = document.querySelector<HTMLElement>('main');
-    // One the user can see, so focusing it doesn't scroll back to the first one added.
-    const focusTo =
-      appids.find((appid) => {
-        const rect = gameRowEl(main, appid)?.getBoundingClientRect();
-        return rect && rect.bottom > 0 && rect.top < window.innerHeight;
-      }) ?? appids[0];
-    table?.selection.clear();
-    // Clearing the selection unmounts the bar that held focus: back to a row it added, not the
-    // toast's Open list, which would hold the toast up for as long as it kept focus.
-    if (!focusGameRow(main, focusTo)) main?.focus();
+    // Back to a row it added, not the toast's Open list, which would hold the toast up while focused.
+    void keepFocus(selectionBar, () => table?.selection.clear(), focusSelectedRow(appids));
+  }
+  // The selection bar unmounts once nothing is selected: focus it held goes to a row instead.
+  let selectionBar: HTMLDivElement | undefined;
+  // One the user can see, so focusing it doesn't scroll back to the first one.
+  function focusSelectedRow(appids: number[]): FocusCandidate {
+    return () => {
+      const main = document.querySelector<HTMLElement>('main');
+      const onScreen = appids.find((appid) => {
+        const el = gameRowEl(main, appid);
+        return el && inViewport(el);
+      });
+      return focusGameRow(main, onScreen ?? appids[0]);
+    };
+  }
+  function handleClearSelection(): void {
+    const appids = selectedRows().map((r) => r.appid);
+    void keepFocus(selectionBar, () => table?.selection.clear(), focusSelectedRow(appids));
   }
 
   // Only ever called while viewing a manual list (`kind === 'user' && userList().kind ===
@@ -1479,8 +1481,20 @@ export default function ListRoute() {
     const rows = selectedRows();
     if (!list || rows.length === 0) return;
     const appids = rows.map((r) => r.appid);
-    removeAppidsFromList(list.id, appids);
-    await load();
+    // The row now where the first removed one was, so focus stays at the same place in the table.
+    const at = table?.processedData().findIndex((r) => appids.includes(r.appid)) ?? -1;
+    await keepFocus(
+      selectionBar,
+      async () => {
+        removeAppidsFromList(list.id, appids);
+        await load();
+      },
+      () => {
+        const left = table?.processedData() ?? [];
+        const next = left[Math.min(Math.max(at, 0), left.length - 1)];
+        return !!next && focusGameRow(document.querySelector<HTMLElement>('main'), next.appid);
+      },
+    );
     showSelectionStatus(`Removed ${appids.length} game${appids.length === 1 ? '' : 's'} from "${list.name}".`);
   }
   let total = 0;
@@ -1799,6 +1813,7 @@ export default function ListRoute() {
 
   async function openStandaloneInPlace(appid: number): Promise<void> {
     const token = ++standaloneLookupToken;
+    const gen = loadGuard.current();
     if (!isValidAppid(appid)) return;
     // No `App <appid>` placeholder in the data — panel.tsx's own title renders that fallback, so
     // the empty name here stays honest ("not resolved yet") for everything else that reads it.
@@ -1806,8 +1821,9 @@ export default function ListRoute() {
     const game = standaloneRows[appid];
     openGame(game);
     try {
-      const data = await fetchJson<GameDetailsReply>(`/api/game-details/${appid}`, undefined, 'Lookup failed');
+      const data = await fetchGameDetails(appid);
       if (token !== standaloneLookupToken) return; // a newer lookup has since taken over
+      noteLimited(gen, data.limited);
       setStandaloneRows(
         appid,
         produce((draft) => {
@@ -1976,7 +1992,7 @@ export default function ListRoute() {
           }
           if (event.done) continue;
           if (event.limited) {
-            if (!loadGuard.isStale(gen)) setDetailsLimited(event.limited);
+            noteLimited(gen, event.limited);
             continue;
           }
           const parts = event.part ? [event.part] : (['fast', 'store'] as const);
@@ -2069,12 +2085,10 @@ export default function ListRoute() {
   // has its own store (see standaloneRows).
   async function refreshGame(game: Game): Promise<void> {
     const unresolved = !game.details?.meta;
+    const gen = loadGuard.current();
     try {
-      const data = await fetchJson<DetailsEvent>(
-        `/api/game-details/${game.appid}?refresh=1`,
-        undefined,
-        'Refresh failed',
-      );
+      const data: DetailsEvent = { ...(await fetchGameDetails(game.appid, { refresh: true })), appid: game.appid };
+      noteLimited(gen, data.limited);
       const updated = rowStore.mutateRow(game.appid, (draft) => applyDetailsEvent(draft, data));
       if (!updated && standaloneRows[game.appid]) {
         setStandaloneRows(
@@ -2086,7 +2100,7 @@ export default function ListRoute() {
       }
       restorePendingShot();
     } catch (err) {
-      setStatusText(`Refresh failed: ${(err as Error).message}`);
+      if (!loadGuard.isStale(gen)) setStatusText(`Refresh failed: ${(err as Error).message}`);
     }
   }
 
@@ -2136,12 +2150,12 @@ export default function ListRoute() {
   // kept total anyway so a stray call never returns undefined.
   function viewPrefKey(): string {
     if (kind === 'wishlist') return 'wishlistListView';
-    // Shared across every comparison, like the bundle key above: a comparison has no stored list
-    // of its own to hang a view on.
+    // Saved once for every comparison, like the bundle key above: a comparison has no stored list
+    // of its own to hang a view on. Its draft is per comparison (storedLayout).
     if (kind === 'compare') return 'compareListView';
     // Shared across every /lists/shared link, not per-link — the "kind has no stored list of its
     // own to hang a view on" reasoning above applies just as much here, and a link is one-off by
-    // nature (a bookmark of *this* view specifically is what "🔗 Share view" is already for).
+    // nature (a bookmark of *this* view specifically is what "🔗 Share layout" is already for).
     if (kind === 'shared') return 'sharedListView';
     // Pick-and-mix bundles share their own layout: grouped and sorted for picking, not by tier.
     if (kind === 'bundle') return untrack(bundleMeta)?.model === 'pick' ? 'pickBundleListView' : 'bundleListView';
@@ -2176,7 +2190,15 @@ export default function ListRoute() {
         store: { load: () => getList(id)?.tableView ?? {}, save: (view) => setListTableView(id, view) },
       };
     const key = viewPrefKey();
-    return { id: key + account, store: prefViewStore(key) };
+    // A comparison's draft stays with its players: tonight's filter shouldn't open the next group's.
+    const players =
+      kind === 'compare'
+        ? `:${untrack(compareAccounts)
+            .map((a) => a.id)
+            .sort()
+            .join('|')}`
+        : '';
+    return { id: key + account + players, store: prefViewStore(key) };
   }
   // The layout on screen as a draft over its stored one, rebound on each table build and view switch.
   let tableDefaults: TableViewState = {};
@@ -2230,9 +2252,9 @@ export default function ListRoute() {
     const keys = [...Object.keys(view.filters ?? {}), ...Object.keys(view.rangeFilters ?? {})];
     return keys.some((k) => PRICE_KEYS.has(k)) && tableData().some((row) => row.bestDealPrice === undefined);
   });
-  // "🔗 Share view"/"Default view" — see tableViewPrefs.ts for the share-on-demand-only reasoning
+  // "🔗 Share layout"/"Reset layout" — see tableViewPrefs.ts for the share-on-demand-only reasoning
   // (a link written to the live URL goes stale the moment the table changes again).
-  // A 🔗 Share view link's layout, on screen but not saved (see layoutDraft's restore).
+  // A 🔗 Share layout link's layout, on screen but not saved (see layoutDraft's restore).
   const [viewingShared, setViewingShared] = createSignal(false);
   const [sharedViewEdited, setSharedViewEdited] = createSignal(false);
   function handleDiscardSharedView(): void {
@@ -2272,7 +2294,7 @@ export default function ListRoute() {
     const defined = definedList();
     return kind === 'game-pass' || (!!defined && listHasGamePassSource(defined.list, defined.get));
   }
-  // A /lists/<id> link only opens here; a dynamic list's 🔗 Share list replaces Share view outright.
+  // A /lists/<id> link only opens here; a dynamic list's 🔗 Share list replaces Share layout outright.
   function isDynamicList(): boolean {
     return kind === 'user' && userList()?.kind === 'dynamic';
   }
@@ -2476,14 +2498,20 @@ export default function ListRoute() {
       setStatusText('Resolving accounts…');
       const settled = await Promise.allSettled(slots.map((identifiers) => resolveAccountSlot(identifiers)));
       if (loadGuard.isStale(gen)) return;
-      const failures = settled.flatMap((r, i) =>
-        r.status === 'rejected' ? [{ identifiers: slots[i], message: (r.reason as Error).message }] : [],
-      );
+      const failures = settled.flatMap((r, i) => {
+        if (r.status === 'fulfilled') return [];
+        const accounts = r.reason instanceof ApiError ? r.reason.accounts : undefined;
+        // A Family slot keeps its typed label: the message names the member.
+        const named = slots[i].length === 1 && accounts?.length === 1 ? accounts[0].name : undefined;
+        const label = named ?? slots[i].join(' + ');
+        return [{ identifiers: slots[i], label, message: (r.reason as Error).message, isPrivate: !!accounts }];
+      });
       if (failures.length) {
         // Named as far as known: a resolved player by name, a failed one as typed.
+        const failedLabel = new Map(failures.map((f) => [f.identifiers, f.label]));
         setListTitle(
           settled
-            .map((r, i) => (r.status === 'fulfilled' ? accountDisplayLabel(r.value) : slots[i].join(' + ')))
+            .map((r, i) => (r.status === 'fulfilled' ? accountDisplayLabel(r.value) : failedLabel.get(slots[i])))
             .join(' vs. '),
         );
         setCompareFailures(failures);
@@ -2913,7 +2941,7 @@ export default function ListRoute() {
                     : kind === 'creator' || kind === 'game-pass'
                       ? [...RECENT_DEFAULT_VISIBLE, TASTE_FIT_KEY]
                       : OWNED_DEFAULT_VISIBLE;
-      // A Taste fit with no taste on this device would be a column of "—": hidden until there is one.
+      // A Taste Fit with no taste on this device would be a column of "—": hidden until there is one.
       const defaultVisible = kindDefaultVisible.filter((key) => key !== TASTE_FIT_KEY || !!tasteSource.taste);
       const sort = isRanked
         ? RANKED_DEFAULT_SORT
@@ -3682,7 +3710,7 @@ export default function ListRoute() {
     return { players, ground: commonGround(rows, compared), compared, rows };
   });
   // Defaults to the first player with a profile who isn't me (my ★ or current account): suggesting
-  // to myself is what Taste fit does.
+  // to myself is what Taste Fit does.
   const [suggestTarget, setSuggestTarget] = createSignal<number | null>(null);
   const suggestTo = () => {
     const chosen = suggestTarget();
@@ -3921,13 +3949,13 @@ export default function ListRoute() {
     if (kind === 'compare' && visible?.has(GROUP_FIT_KEY) && loadedRows() && !(playerProfiles() && playersOpen())) {
       const fits = groupFits();
       const left = comparePlayers.filter((_, i) => !fits?.profiled[i]).map((p) => p.label);
-      if (left.length) notes.push(`Group fit leaves out ${left.join(', ')}: too few games played here`);
+      if (left.length) notes.push(`Group Fit leaves out ${left.join(', ')}: too few games played here`);
     }
     return notes;
   });
   // Owned's profile alone (no other list renders it), once every row's details are in, so it doesn't reshuffle as they stream.
   const profileRows = () => (kind === 'owned' ? loadedRows() : null);
-  // Owned learns its account's taste for Taste fit elsewhere.
+  // Owned learns its account's taste for Taste Fit elsewhere.
   createEffect(() => {
     const rows = profileRows();
     if (!rows) return;
@@ -3937,7 +3965,7 @@ export default function ListRoute() {
     const keep = untrack(() => [getMyAccount()?.id, getCurrentAccount()?.id]).filter((id) => id != null);
     if (!taste) return;
     saveTaste(account.id, taste, keep);
-    // So Owned's own Taste fit scores on a first visit, and not from a taste stored before a change.
+    // So Owned's own Taste Fit scores on a first visit, and not from a taste stored before a change.
     setTasteFitSource((source) => source && { ...source, taste });
   });
   const playsMostlyProfile = createMemo(() => {
@@ -3972,7 +4000,7 @@ export default function ListRoute() {
     if (backlogShown()) return navigate(viewHref(routerLocation, null));
     let view = templateView('owned', PLAY_NEXT);
     if (!view) {
-      view = createFromTemplate(VIEW_TEMPLATES.find((t) => t.id === PLAY_NEXT)!);
+      view = createFromTemplate(VIEW_TEMPLATES.find((t) => t.kind === 'owned' && t.id === PLAY_NEXT)!);
       showSelectionStatus(`Saved view ${view.name}`);
     }
     navigate(viewHref(routerLocation, view.id));
@@ -4281,6 +4309,10 @@ export default function ListRoute() {
       openGame: handleOpenGameRequest,
       onGameClose: handleGameClose,
       refreshGame,
+      // The panel changed this list's games: rows come from its stored appids, read at load.
+      onListChanged: (listId) => {
+        if (untrack(userList)?.id === listId) void load();
+      },
       onTagClick,
       isTagActive,
       getOwners: (appid) =>
@@ -4434,7 +4466,11 @@ export default function ListRoute() {
           <For each={compareFailures()}>
             {(f) => (
               <p>
-                <TriangleAlert /> <strong>{f.identifiers.join(' + ')}</strong> — {f.message}
+                <TriangleAlert /> <strong>{f.label}</strong> — {f.message}
+                <Show when={f.isPrivate}>
+                  {' '}
+                  <SteamPrivacyLink />
+                </Show>
               </p>
             )}
           </For>
@@ -4611,7 +4647,7 @@ export default function ListRoute() {
       </Show>
       {/* Last, and stuck to the bottom: appearing above the table shifted every row under the pointer. */}
       <Show when={selectedRows().length > 0}>
-        <div class="selection-toolbar">
+        <div ref={selectionBar} class="selection-toolbar">
           <span class="selection-count">{selectedRows().length} selected</span>
           <Show when={pickPlan()}>
             {(plan) => (
@@ -4733,7 +4769,7 @@ export default function ListRoute() {
               Exclude
             </button>
           </Show>
-          <button type="button" onClick={() => table?.selection.clear()}>
+          <button type="button" onClick={handleClearSelection}>
             Clear selection
           </button>
         </div>

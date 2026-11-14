@@ -17,20 +17,24 @@ Each doc, and when to read it — the section you need, not the whole file:
 - [docs/dev/architecture.md](docs/dev/architecture.md) — before adding or changing an API route, a backend module, the build or input validation
 - [docs/dev/frontend.md](docs/dev/frontend.md) — before any frontend change: the **reactivity rules**, the module map (where things live), routes, URL state
 - [docs/dev/game-table.md](docs/dev/game-table.md) — before changing a column, sorting, grouping, saved views, a list's hero or a list kind
-- [docs/dev/panel-and-lightbox.md](docs/dev/panel-and-lightbox.md) — before changing the side panel, the lightbox, trailers or the presentation window
+- [docs/dev/panel-and-lightbox.md](docs/dev/panel-and-lightbox.md) — before changing the side panel, the lightbox or trailers
+- [docs/dev/presentation.md](docs/dev/presentation.md) — before changing the presentation window or its messages
+- [docs/dev/taste.md](docs/dev/taste.md) — before changing a taste score, the profile card, Players or Similar in library
 - [docs/dev/lists-and-accounts.md](docs/dev/lists-and-accounts.md) — before changing accounts, `?u=`, lists, combine, ranking, sync or a localStorage key
-- [docs/dev/integrations.md](docs/dev/integrations.md) — before adding or changing any upstream call: trust tiers, what's undocumented, confirmed rules and assumptions
+- [docs/dev/integrations.md](docs/dev/integrations.md) — before adding an upstream or changing a Steam, HLTB or ProtonDB call: trust tiers, request volume, what's undocumented, confirmed rules and assumptions
+- [docs/dev/bundles-and-prices.md](docs/dev/bundles-and-prices.md) — before changing bundles, prices, Fanatical, Humble Choice or PC Game Pass
 - [docs/dev/data.md](docs/dev/data.md) — before changing a cache key, a TTL, a refresh path or a migration
 - [docs/dev/observability.md](docs/dev/observability.md) — before adding an outbound group, a rate limiter or a log warning
 - [docs/dev/journeys.md](docs/dev/journeys.md) — before a design review, an end-to-end test or a user-facing feature plan
 - [docs/dev/ui-guidelines.md](docs/dev/ui-guidelines.md) — before any UI change; its checklist for a new UI feature
+- [docs/dev/glossary.md](docs/dev/glossary.md) — before naming anything a user reads: a label, a message, a list
 - [docs/dev/improvements.md](docs/dev/improvements.md) · [docs/dev/code-backlog.md](docs/dev/code-backlog.md) · [docs/dev/setup-backlog.md](docs/dev/setup-backlog.md) — open UX, code and setup work: check before proposing something (it may be filed, or declined)
 - [docs/dev/decisions.md](docs/dev/decisions.md) — before changing a computed value or a tooling choice that looks wrong
-- [docs/dev/testing.md](docs/dev/testing.md) — before writing or fixing a test, looking at the UI, or touching the hooks
+- [docs/dev/testing.md](docs/dev/testing.md) — before writing or fixing a test, looking at the UI, measuring performance, running skill evals, or touching the hooks and checks
 - [docs/dev/pitfalls.md](docs/dev/pitfalls.md) — on an unexpected error: `grep -ri '<fragment>' docs/ .claude/skills/` first
 - [docs/images/](docs/images) — the screenshots the docs embed; shooting them is the `screenshots` skill
 
-Two are load-bearing: **frontend.md's reactivity rules** (`npm run lint` enforces the no-reactive-`const` one), and **integrations.md's trust tiers** — several upstreams are undocumented and unsanctioned, so don't scale request volume without revisiting them.
+Two are load-bearing: **frontend.md's reactivity rules** (`npm run lint` enforces the no-reactive-`const` one), and **[integrations.md's trust tiers](docs/dev/integrations.md#trust-tiers)** — several upstreams are undocumented and unsanctioned, so don't scale request volume without revisiting them.
 
 ## Code conventions
 
@@ -48,8 +52,8 @@ These add to the user-level `~/.claude/CLAUDE.md` working style.
   - Code comments: one line (two at most, for a _why_ that needs it), stating the _why_, only when it isn't obvious from the code; skip the comment entirely if the code speaks for itself. This governs new comments; leave the long-form ones already in the tree alone.
   - Doc prose (this file, `README.md`, `CHANGELOG.md`, `docs/`): short bullets over paragraphs; no preamble, no summary section, lead with the point. Docs state current behavior and its why, never how it got there (that's commits and `CHANGELOG.md`); each number lives in one place (`default.env`, or the doc that owns it) and the others link it.
 - Saying something is done includes where to see it: the route and steps for a UI change, the link to a posted comment or issue after checking it exists.
-- A user-facing feature's plan review includes one as the app's users ([journeys.md](docs/dev/journeys.md)'s _Who / goal_): would they use it, is it worth its place?
-- When code models an upstream's behavior (pricing, limits, matching rules) from inference rather than its docs, state the assumption in the plan and confirm it before building on it; record confirmed rules and remaining assumptions in [integrations.md](docs/dev/integrations.md).
+- A user-facing feature's plan review includes one as the app's users ([journeys.md](docs/dev/journeys.md#who-uses-it)'s personas): would they use it, is it worth its place?
+- When code models an upstream's behavior (pricing, limits, matching rules) from inference rather than its docs, state the assumption in the plan and confirm it before building on it; record confirmed rules and remaining assumptions in [integrations.md](docs/dev/integrations.md) or [bundles-and-prices.md](docs/dev/bundles-and-prices.md).
 
 ## Ask first
 

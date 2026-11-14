@@ -758,7 +758,7 @@ export const TAG_MATCH_KEY = 'tagMatch';
 export function tagMatchColumn(selected: () => ReadonlySet<string> | undefined, all: () => boolean): ColumnDef<Row> {
   return {
     key: TAG_MATCH_KEY,
-    label: 'Tag match',
+    label: 'Tag Match',
     type: 'number',
     value: (row) => tagMatchScore(row.details?.tagWeights, selected(), all()),
     format: (v) => (v == null ? '—' : `${v}%`),

@@ -26,9 +26,17 @@ import { setBaseTitle } from './pageTitle.ts';
 import { panelOpen, panelClose, isPanelOpen, getPanelGame } from './panel.tsx';
 import { isLightboxOpen } from './lightbox.tsx';
 import { withAccountParam } from './urlState.ts';
-import { computeSteamdbRating, detailsFields, fetchJson, isTextEntry, scoreColor, steamAppAsset } from './utils.ts';
+import {
+  computeSteamdbRating,
+  detailsFields,
+  fetchGameDetails,
+  isTextEntry,
+  scoreColor,
+  steamAppAsset,
+} from './utils.ts';
 import { registerRouteHandlers } from './AppShell.tsx';
 import Kbd from './Kbd.tsx';
+import { focusFirst, focusLost, handOffFocus } from './focusHandoff.ts';
 import type { Game, GameDetails, GameDetailsReply } from './types.ts';
 
 const MAX_UNDO = 100;
@@ -60,6 +68,10 @@ export default function RankRoute() {
   }
   const [title, setTitle] = createSignal('');
   const [status, setStatus] = createSignal('Resolving list…');
+  // A failed Refresh outranks a `{ limited }` reply, until that game's next Refresh succeeds.
+  const [refreshFailure, setRefreshFailure] = createSignal<{ appid: number; text: string } | null>(null);
+  const [limited, setLimited] = createSignal('');
+  const shownStatus = () => status() || refreshFailure()?.text || limited();
   const [source, setSource] = createSignal<Set<number> | null>(null);
   // "Haven't played" only fits games you own; a wishlist or a bundle is about wanting them.
   const excludeLabel = (): string =>
@@ -111,28 +123,24 @@ export default function RankRoute() {
       showNext(nextPair(stored, appids, opts()), false);
       setUndoStack([]);
       setStatus('');
+      setRefreshFailure(null);
+      setLimited('');
     } catch (err) {
       if (token !== loadToken) return;
       setStatus(`Error: ${(err as Error).message}`);
     }
   }
 
-  function getDetails(appid: number, refresh = false): Promise<GameDetailsReply> {
-    return fetchJson<GameDetailsReply>(
-      `/api/game-details/${appid}${refresh ? '?refresh=1' : ''}`,
-      undefined,
-      refresh ? 'Refresh failed' : 'Details failed',
-    );
-  }
   function setDetails(appid: number, data: GameDetailsReply): void {
     setGames(appid, { ...detailsFields(data), name: data.name || `App ${appid}` });
+    if (data.limited) setLimited(data.limited);
   }
 
   // Cached per appid for this mount; the server's own cache makes a repeat cheap anyway.
   function fetchDetails(appid: number): void {
     if (appid in games) return;
     setGames(appid, { appid, name: `App ${appid}`, loading: true, details: null });
-    getDetails(appid)
+    fetchGameDetails(appid)
       .then((data) => setDetails(appid, data))
       .catch(() => {
         /* card falls back to the header image and appid */
@@ -147,6 +155,14 @@ export default function RankRoute() {
     }
   });
 
+  // Arriving from a list's button (Rank N games, Re-rank, Continue ranking) leaves focus on <body>.
+  let arrived = false;
+  createEffect(() => {
+    if (arrived || !pair()) return;
+    arrived = true;
+    if (focusLost()) handOffFocus(focusFirst('.rank-card-pick'));
+  });
+
   // Focused before opening, so closing returns focus there however the panel was opened (I + ←/→ too).
   const detailsButtons = new Map<number, HTMLButtonElement>();
   function openPanel(appid: number): void {
@@ -157,9 +173,11 @@ export default function RankRoute() {
   // The panel's ↻ Refresh; tags stay plain pills, since nothing here filters by them.
   async function refreshGame(game: Game): Promise<void> {
     try {
-      setDetails(game.appid, await getDetails(game.appid, true));
+      const data = await fetchGameDetails(game.appid, { refresh: true });
+      if (refreshFailure()?.appid === game.appid) setRefreshFailure(null);
+      setDetails(game.appid, data);
     } catch (err) {
-      setStatus(`Refresh failed: ${(err as Error).message}`);
+      setRefreshFailure({ appid: game.appid, text: `Refresh failed: ${(err as Error).message}` });
     }
   }
   onMount(() => onCleanup(registerRouteHandlers({ refreshGame })));
@@ -352,8 +370,8 @@ export default function RankRoute() {
         </A>
         <h1>{title()}</h1>
       </header>
-      <Show when={status()}>
-        <div class="list-status">{status()}</div>
+      <Show when={shownStatus()}>
+        <div class="list-status">{shownStatus()}</div>
       </Show>
       <Show when={focus()}>
         {(f) => (
