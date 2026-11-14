@@ -313,14 +313,11 @@ test('deleteList: soft-deletes a list still referenced by a dynamic list, hides 
     getLists().some((l) => l.id === source.id),
     false,
   );
-  assert.equal(
-    getLists({ includeDeleted: true }).some((l) => l.id === source.id),
-    true,
-  );
+  assert.equal(getList(source.id) !== undefined, true);
 });
 
 test('dropping the last reference to a soft-deleted list purges it, and leaves a still-referenced one', () => {
-  const { createList, deleteList, updateDynamicList, sweepDeletedLists, getLists } = store();
+  const { createList, deleteList, updateDynamicList, sweepDeletedLists, getList } = store();
   const source = createList({ name: 'Source', kind: 'manual', appids: [1] });
   const stillReferenced = createList({ name: 'StillReferenced', kind: 'manual', appids: [2] });
   const watcher = createList({
@@ -340,15 +337,8 @@ test('dropping the last reference to a soft-deleted list purges it, and leaves a
 
   // updateDynamicList sweeps on its own; nothing is left for an explicit sweep.
   assert.equal(sweepDeletedLists(), 0);
-  const all = getLists({ includeDeleted: true });
-  assert.equal(
-    all.some((l) => l.id === source.id),
-    false,
-  );
-  assert.equal(
-    all.some((l) => l.id === stillReferenced.id),
-    true,
-  );
+  assert.equal(getList(source.id) !== undefined, false);
+  assert.equal(getList(stillReferenced.id) !== undefined, true);
 });
 
 test('a soft-deleted list keeps its sources: deleting along a chain soft-deletes, and the sweep purges it head-first', () => {

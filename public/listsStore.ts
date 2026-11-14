@@ -69,10 +69,9 @@ export function folderPaths(folders: Folder[] = readFolders()): { id: string; pa
   return out;
 }
 
-// Excludes soft-deleted lists by default — pass includeDeleted for a "Trash" view.
-export function getLists({ includeDeleted = false }: { includeDeleted?: boolean } = {}): GameList[] {
-  const lists = readLists();
-  return includeDeleted ? lists : lists.filter((l) => !l.deletedAt);
+// Excludes soft-deleted lists; getList still finds them.
+export function getLists(): GameList[] {
+  return readLists().filter((l) => !l.deletedAt);
 }
 
 export function getList(id: string): GameList | undefined {

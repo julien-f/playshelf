@@ -11,7 +11,7 @@
 // stores in for routes to use — the same seam listResolve.ts's own createDefaultFetchers() is.
 import type { CombineOp, GameList, ListRef } from './types.ts';
 import { getRecentAccounts, getMyAccount, getEffectiveCurrentAccount, accountDisplayLabel } from './accountsStore.ts';
-import { getLists, listDeps } from './listsStore.ts';
+import { getList, listDeps } from './listsStore.ts';
 import { membersFromAccountId } from './accountData.ts';
 import { getBundleSnapshot } from './bundleSnapshots.ts';
 import { creatorListPath, creatorTitle } from './creatorData.ts';
@@ -203,7 +203,7 @@ export function createDefaultNaming(depth = 0): ListNaming {
       return members.length ? { label: members.join(' + '), identifiers: members } : null;
     },
     list(listId) {
-      const found = getLists({ includeDeleted: true }).find((l) => l.id === listId);
+      const found = getList(listId);
       if (!found) return null;
       // An unnamed source list is described by its own formula, parenthesized: a formula reading
       // "Alice — Owned ∩ Bob — Owned − Demos" would otherwise be unparseable as one term.
