@@ -271,7 +271,7 @@ export function createDefaultFetchers({
 // A bundle source, backed by its bundleSnapshots.ts entry: refreshed on every successful fetch
 // (for a bundle a saved list uses), turned into an orphan list once ITAD no longer lists it
 // (listsStore.ts's orphanBundle), and standing in for it through any other failure — so one
-// bundle can't fail the whole list. `fetchContents` is injectable for tests.
+// bundle can't fail the whole list. `fetchContents`: the bundle fetch (tests pass a stub).
 export async function resolveBundleSource(
   bundleId: string,
   fetchContents: typeof fetchBundleContents,

@@ -32,7 +32,7 @@ export interface StreamBatcher<E> {
   flushNow(): void;
 }
 
-// Matches the debounce this replaced.
+// Few enough table recomputes to keep a large stream responsive, often enough to look live.
 export const FLUSH_MS = 150;
 
 export function createStreamBatcher<E>(opts: {

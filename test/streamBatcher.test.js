@@ -64,6 +64,8 @@ test('createStreamBatcher: schedules exactly one timer regardless of how many pu
   batcher.push('a', 1);
   batcher.push('b', 1);
   batcher.push('c', 1);
-  t.mock.timers.tick(FLUSH_MS);
+  t.mock.timers.tick(FLUSH_MS - 1);
+  assert.deepEqual(applied, []);
+  t.mock.timers.tick(1);
   assert.deepEqual(applied, ['a', 'b', 'c']);
 });
