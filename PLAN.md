@@ -20,7 +20,7 @@ Sources: `.git/dev-metrics/checks.jsonl` (hook runs since 2026-10-25), transcrip
 | permission denials       | `setup-facts.js --transcripts`                      | 0 by the classifier (11 AskUserQuestion rejections: ~/.claude, P65)                    |
 | volume                   | git                                                 | 784 commits since 2026-10-13 for 57 pushes (~14/push); 204 UI commits since 2026-10-25 |
 
-Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` — pending.
+Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` (load 46.8, max 86.7, 2231 s): 43 flagged, 41 of them ENOENT on traces caused by my own concurrent e2e runs in the same checkout (fixed, L4); real: Clear search [desktop] 1/5 (`toBeVisible`), screenshot zoom [phone] 1/5 (timeout, C234). Its flakes.jsonl row is polluted by the 41.
 
 ## Levers (estimated gain / cost)
 
@@ -40,6 +40,7 @@ Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` — pending.
 - **L1c eslint cache** (P76): `--cache` (no type-aware rule): 3.3–3.6 s → 0.56–0.61 s CPU, 6.6–11.5 s → 1.6–3.4 s wall at load ~42; one large file touched: 1.24 s CPU.
 - **L2 CI e2e in 4 shards** (P77): unmeasured until the branch runs CI (needs a push: asked). Estimate from the last run: test step 6 min 37 s / 4 + ~45 s of setup ≈ 2.5 min, plus a ~20 s summary job, vs 7 min 14 s.
 - **L3 e2e build skip** (P78): `scripts/e2e.js` skips `vite build` when public/, static/, configs and lockfile hash as the build in place; 502 of 848 transcript e2e runs had no frontend change since the previous. One-test run (`node scripts/e2e.js --project=desktop -g 'A1: first visit'`): 20.8–23.0 s → 8.7–9.6 s at load ~40 (3 alternating pairs).
+- **L4 per-port e2e output dir** (P79): two e2e runs in one checkout (sessions sharing the main checkout; `claimPort` allows it) shared `test-results/`, which each run empties on start, deleting the other's traces. Reproduction (40 phone tests, a second run started mid-way): 6 failed, 12 ENOENT → 0 failed in 5 of 5.
 
 ## Negative results
 

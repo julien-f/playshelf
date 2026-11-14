@@ -15,6 +15,8 @@ const OUT_DIR = path.join(__dirname, 'node_modules/.cache/e2e-dist', String(PORT
 
 export default defineConfig({
   testDir: 'e2e',
+  // Per port: a run empties its outputDir on start, which would delete a concurrent run's traces (ENOENT failures).
+  outputDir: `test-results/${PORT}`,
   fullyParallel: true,
   reporter: 'dot',
   use: {
@@ -25,7 +27,7 @@ export default defineConfig({
     timezoneId: 'Europe/Paris',
     // Transitions and smooth scrolls end at once, so a test never waits on or measures one mid-way.
     reducedMotion: 'reduce',
-    // `E2E_SHOTS=1 npm run test:e2e` keeps every test's final screen in test-results/, to look at a UI change under mocks.
+    // `E2E_SHOTS=1 npm run test:e2e` keeps every test's final screen in test-results/<port>/, to look at a UI change under mocks.
     screenshot: process.env.E2E_SHOTS ? 'on' : 'off',
     // The committed DejaVu fonts, not the machine's: layouts measure the same locally and in CI (Linux only: fontconfig).
     launchOptions: { env: { ...process.env, FONTCONFIG_FILE: path.join(__dirname, 'e2e/fonts/fonts.conf') } },

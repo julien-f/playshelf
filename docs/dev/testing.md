@@ -22,7 +22,7 @@
 - Each run skips `vite build` when `public/`, `static/`, `vite.config.js`, `tsconfig.json` and the lockfile are those of the build already in its directory (`node_modules/.cache/e2e-dist/<port>.inputs`); delete that file to force one.
 - `npm run test:e2e -- --since=<ref>` skips the run when the commits since `<ref>` touch none of those files (`check.js`'s `touchesUi`): a fix-batch lane's doc- or backend-only work.
 - `node scripts/e2e-flakes.js [--repeat=N] [--load=THREADS] [playwright args…]` runs the suite N times (default 5), beside THREADS busy-looping threads, and prints each test's failure rate and the slowest tests. The added load stacks on other sessions', so it logs the load sampled during the run (`.git/dev-metrics/flakes.jsonl`; `setup-facts.js --cost` shows the last one). 5 repeats find candidates; confirming a flake or a fix takes 20. A full passing run records the e2e pass like any other.
-- `E2E_SHOTS=1 npm run test:e2e` keeps each test's final screen, plus any `shot(page, name)` (`e2e/state.ts`), under `test-results/`, one folder per test and width — a way to look at a UI change without touching real prefs.
+- `E2E_SHOTS=1 npm run test:e2e` keeps each test's final screen, plus any `shot(page, name)` (`e2e/state.ts`), under `test-results/<port>/`, one folder per test and width — a way to look at a UI change without touching real prefs.
 
 ## Writing reliable tests
 
