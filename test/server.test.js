@@ -23,6 +23,8 @@ const path = require('node:path');
 const supertest = require('supertest');
 const morgan = require('morgan');
 const { app } = require('../server');
+// Read per request (requireItad); set once the app has loaded, as each ITAD test used to set it.
+process.env.ITAD_API_KEY = 'test-itad-key';
 const { _reset, setCache, getCachedAt, getCacheEntryCounts } = require('../lib/cache');
 const { db } = require('../lib/db');
 const { PREFS_MAX_BYTES, SYNCED_PREF_KEYS, getUserPrefs, setUserPref } = require('../lib/auth');
@@ -2541,7 +2543,6 @@ test('GET /api/creator-games: 502 when the store search fails', async (t) => {
 // ── GET /api/game-pass ───────────────────────────────────────────────────────
 
 test('GET /api/game-pass: 200 with appids, games not on Steam and fetchedAt; refresh=1 re-fetches', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-shop:microsoft store', 48);
   setCache('itad-appid:g1', 10);
   setCache('msstore-title:B', 'Bee');
@@ -2570,7 +2571,6 @@ test('GET /api/game-pass: 200 with appids, games not on Steam and fetchedAt; ref
 });
 
 test('GET /api/game-pass: 502 when the catalog fails', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   const res = await api.get('/api/game-pass');
   assert.equal(res.status, 502);
@@ -2990,7 +2990,6 @@ test('POST /api/bundles/resolve: 503 when ITAD_API_KEY is not configured', async
 });
 
 test('GET /api/bundles: 200 with bundle list, defaults applied', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const bundles = [{ id: 1, title: 'Test Bundle' }];
   t.mock.method(globalThis, 'fetch', async (url) => {
     // No Humble Choice listed: findEarlyExpired looks for it on the expired pages.
@@ -3010,7 +3009,6 @@ test('GET /api/bundles: 200 with bundle list, defaults applied', async (t) => {
 });
 
 test('POST /api/prices: reports fetchedAt for the batch', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => [{ id: 61, title: 'Steam' }] };
     return { ok: true, json: async () => [{ id: GID1, deals: [], historyLow: { all: null, y1: null, m3: null } }] };
@@ -3021,7 +3019,6 @@ test('POST /api/prices: reports fetchedAt for the batch', async (t) => {
 });
 
 test('GET /api/bundles: clamps limit and validates country', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url) => {
     assert.match(url, /country=US/); // invalid country falls back to default
     assert.match(url, /limit=50/); // clamped from 999
@@ -3032,14 +3029,12 @@ test('GET /api/bundles: clamps limit and validates country', async (t) => {
 });
 
 test('GET /api/bundles: 502 when the upstream call fails', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   const res = await api.get('/api/bundles');
   assert.equal(res.status, 502);
 });
 
 test('GET /api/bundles and /api/game-bundles: a non-array 200 is a 502, refetched next time', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(console, 'error', () => {});
   setCache('itad-gid:400', 'gid-1');
   let calls = 0;
@@ -3055,7 +3050,6 @@ test('GET /api/bundles and /api/game-bundles: a non-array 200 is a 502, refetche
 });
 
 test('an unexpected error answers 500 with a generic message, an unreadable reply 502 without quoting it', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const logged = t.mock.method(console, 'error', () => {});
   t.mock.method(globalThis, 'fetch', async () => ({
     ok: true,
@@ -3089,13 +3083,11 @@ test('GET /api/game-bundles/:appid: 503 when ITAD_API_KEY is not configured', as
 });
 
 test('GET /api/game-bundles/abc: 400 for non-numeric appid', async () => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const res = await api.get('/api/game-bundles/abc');
   assert.equal(res.status, 400);
 });
 
 test('GET /api/game-bundles/:appid: empty without an ITAD listing, no bundle lookup', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:400', null);
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   const res = await api.get('/api/game-bundles/400');
@@ -3105,7 +3097,6 @@ test('GET /api/game-bundles/:appid: empty without an ITAD listing, no bundle loo
 });
 
 test('GET /api/game-bundles/:appid: 200 with the bundles the game is in', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:400', 'gid-1');
   t.mock.method(globalThis, 'fetch', async (url) => {
     assert.match(String(url), /\/games\/bundles\/v2\?.*id=gid-1.*country=DE/);
@@ -3140,7 +3131,6 @@ test('GET /api/game-bundles/:appid: 200 with the bundles the game is in', async 
 });
 
 test('GET /api/game-bundles/:appid: ?refresh=1 re-fetches the bundles despite the cache', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:402', 'gid-2');
   const fetchMock = t.mock.method(globalThis, 'fetch', async (url) => {
     assert.match(String(url), /\/games\/bundles\/v2\?/);
@@ -3155,7 +3145,6 @@ test('GET /api/game-bundles/:appid: ?refresh=1 re-fetches the bundles despite th
 });
 
 test('GET /api/game-bundles/:appid: adds Fanatical pick-and-mix tiers to a null-price bundle', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:400', 'gid-1');
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).startsWith('https://www.fanatical.com/'))
@@ -3185,7 +3174,6 @@ test('GET /api/game-bundles/:appid: adds Fanatical pick-and-mix tiers to a null-
 });
 
 test('GET /api/game-bundles/:appid: 502 when the upstream call fails', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:400', 'gid-1');
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
   const res = await api.get('/api/game-bundles/400');
@@ -3193,7 +3181,6 @@ test('GET /api/game-bundles/:appid: 502 when the upstream call fails', async (t)
 });
 
 test("GET /api/bundles: a Fanatical pick-and-mix ITAD expired early is appended to the active list, with Fanatical's end date", async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const killer = {
     id: 16542,
     title: 'Build Your Own Killer Bundle',
@@ -3243,7 +3230,6 @@ test("GET /api/bundles: a Fanatical pick-and-mix ITAD expired early is appended 
 
 // The list's age is its oldest contributor's, and ↻ refreshes every page the list came from (data.md).
 test('GET /api/bundles: the expired pages a first page walks date it, and ?refresh=1 forces them too', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const now = Date.now();
   const killer = {
     id: 16542,
@@ -3290,7 +3276,6 @@ test('GET /api/bundles: the expired pages a first page walks date it, and ?refre
 });
 
 test('GET /api/bundles?refresh=1: a forced expired page that fails falls back to its cached row', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const now = Date.now();
   const killer = {
     id: 16542,
@@ -3326,7 +3311,6 @@ test('GET /api/bundles?refresh=1: a forced expired page that fails falls back to
 });
 
 test('GET /api/game-bundles/:appid: a bundle ITAD expired early is added from the cached list pages', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   setCache('itad-gid:400', 'gid-k');
   const killer = {
     id: 16542,
@@ -3373,13 +3357,11 @@ test('GET /api/bundles/:id: 503 when ITAD_API_KEY is not configured', async () =
 });
 
 test('GET /api/bundles/abc: 400 for non-numeric id', async () => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const res = await api.get('/api/bundles/abc');
   assert.equal(res.status, 400);
 });
 
 test('GET /api/bundles/:id: 200 with the matching bundle', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url) => {
     const u = new URL(url);
     if (u.searchParams.get('expired') === 'true') return { ok: true, json: async () => [] };
@@ -3391,7 +3373,6 @@ test('GET /api/bundles/:id: 200 with the matching bundle', async (t) => {
 });
 
 test('GET /api/bundles/:id: adds Fanatical pick-and-mix tiers and product names to a null-price bundle', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const bundle = {
     id: 43,
     title: 'BYO',
@@ -3422,20 +3403,17 @@ test('GET /api/bundles/:id: adds Fanatical pick-and-mix tiers and product names 
 });
 
 test('GET /api/bundles/:id: 404 when the id is never found', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [] }));
   const res = await api.get('/api/bundles/999999');
   assert.equal(res.status, 404);
 });
 
 test('POST /api/bundles/resolve: 400 without gids', async () => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const res = await api.post('/api/bundles/resolve').send({});
   assert.equal(res.status, 400);
 });
 
 test('POST /api/bundles/resolve: 200 with resolved appids map', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => [{ id: 61, title: 'Steam' }] };
     const gids = JSON.parse(opts.body);
@@ -3448,7 +3426,6 @@ test('POST /api/bundles/resolve: 200 with resolved appids map', async (t) => {
 });
 
 test('POST /api/bundles/resolve: a gid whose Steam expansion errored is reported as failed, not as no Steam listing', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     const u = String(url);
     if (u.includes('/service/shops/')) return { ok: true, json: async () => [{ id: 61, title: 'Steam' }] };
@@ -3477,19 +3454,16 @@ test('POST /api/prices: 503 when ITAD_API_KEY is not configured', async () => {
 });
 
 test('POST /api/prices: 400 with neither gids nor appids', async () => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const res = await api.post('/api/prices').send({});
   assert.equal(res.status, 400);
 });
 
 test('POST /api/prices: 400 with both gids and appids', async () => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const res = await api.post('/api/prices').send({ gids: [GID1], appids: [400] });
   assert.equal(res.status, 400);
 });
 
 test('POST /api/prices: 200 with Steam regular price and historical lows, by gids', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => [{ id: 61, title: 'Steam' }] };
     if (String(url).includes('/games/prices/v3')) {
@@ -3530,7 +3504,6 @@ test('POST /api/prices: 200 with Steam regular price and historical lows, by gid
 });
 
 test('POST /api/prices: refresh=1 bypasses the price cache and re-fetches, without re-resolving gids', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   let priceCalls = 0;
   let resolveCalls = 0;
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
@@ -3578,13 +3551,11 @@ test('POST /api/prices: refresh=1 bypasses the price cache and re-fetches, witho
 });
 
 test('POST /api/prices: 400 with appids that are not positive integers', async () => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const res = await api.post('/api/prices').send({ appids: [400, 'nope'] });
   assert.equal(res.status, 400);
 });
 
 test('POST /api/prices: 200 by appids — resolves to gids first, then prices, keyed back by appid', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     if (String(url).includes('/service/shops/')) return { ok: true, json: async () => [{ id: 61, title: 'Steam' }] };
     if (String(url).includes('/lookup/id/shop/')) {
@@ -3655,7 +3626,6 @@ for (const [name, path, body, error] of [
 ]) {
   test(name, async (t) => {
     _reset();
-    process.env.ITAD_API_KEY = 'test-itad-key';
     const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
     const res = await api.post(path).send(body);
     assert.equal(res.status, 400);
@@ -3675,7 +3645,6 @@ for (const [name, request] of [
   test(`${name}: 502 when the upstream call fails`, async (t) => {
     _reset();
     _resetCircuitBreakers();
-    process.env.ITAD_API_KEY = 'test-itad-key';
     t.mock.method(console, 'error', () => {});
     t.mock.method(console, 'warn', () => {});
     t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
@@ -3692,7 +3661,6 @@ const cacheRows = () => Object.values(getCacheEntryCounts()).reduce((a, b) => a 
 for (const path of ['/api/bundles/resolve', '/api/prices']) {
   test(`POST ${path}: 400 for a gid that isn't an ITAD id, nothing fetched or cached`, async (t) => {
     _reset();
-    process.env.ITAD_API_KEY = 'test-itad-key';
     const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({}) }));
     const res = await api.post(path).send({ gids: [GID1, 'x'.repeat(90_000)] });
     assert.equal(res.status, 400);
@@ -3751,7 +3719,6 @@ for (const member of [
 }
 
 test('GET /api/bundles: a country outside the region list falls back to US', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const urls = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
     urls.push(String(url));
@@ -3765,7 +3732,6 @@ test('GET /api/bundles: a country outside the region list falls back to US', asy
 });
 
 test('GET /api/bundles: an unknown sort falls back to the default, offset is an integer', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const urls = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
     urls.push(new URL(String(url)).searchParams);
@@ -3777,7 +3743,6 @@ test('GET /api/bundles: an unknown sort falls back to the default, offset is an 
 });
 
 test('GET /api/bundles: a non-finite offset reads as 0, a fractional limit clamps to 1', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const urls = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
     urls.push(new URL(String(url)).searchParams);
@@ -3792,7 +3757,6 @@ test('GET /api/bundles: a non-finite offset reads as 0, a fractional limit clamp
 
 // Load more stops at an empty page: a clamped offset would serve the cap's page again and again.
 test('GET /api/bundles: an empty page past the offset cap, without an upstream call', async (t) => {
-  process.env.ITAD_API_KEY = 'test-itad-key';
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ id: 1 }] }));
   const res = await api.get('/api/bundles?offset=1e9').expect(200);
   assert.deepEqual(res.body.bundles, []);
