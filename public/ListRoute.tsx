@@ -2123,14 +2123,7 @@ export default function ListRoute() {
   // Whether "do I own this" is a genuine question for this kind at all — an Owned/Wishlist list's
   // own rows are trivially owned/wishlisted, the same reason OWNERSHIP_STATUS_COLUMN is only part
   // of BUNDLE_COLUMNS/RECENT_COLUMNS.
-  const stampsOwnership =
-    kind === 'bundle' ||
-    kind === 'recent' ||
-    kind === 'user' ||
-    kind === 'compare' ||
-    kind === 'shared' ||
-    kind === 'creator' ||
-    kind === 'game-pass';
+  const stampsOwnership = kind !== 'owned' && kind !== 'wishlist';
 
   // Re-stamps when a row appears after the load (openOrAddRecentGame), the sets land, or the account changes.
   createEffect(
