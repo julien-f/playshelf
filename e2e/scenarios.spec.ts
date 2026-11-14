@@ -3016,12 +3016,17 @@ test('C1 edge: the comparison states its mode once, in its select', { tag: '@any
   await expect(page.locator('.list-hero-chip', { hasText: 'Grouped by membership' })).toHaveCount(0);
 });
 
+// A phone folds the hero's secondary actions behind More actions; a wider screen shows them.
+async function unfoldHeroActions(page: Page) {
+  const more = page.getByRole('button', { name: 'More actions' });
+  if (await more.isVisible()) await more.click();
+}
+
 test('C3 edge: a saved comparison keeps the name its page had', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/compare?u=alice&u=bob');
   await expect(page.getByRole('heading', { name: 'Alice vs. Bob' })).toBeVisible();
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Save behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   await page.getByRole('button', { name: 'Save as a list' }).click();
   await expect(page).toHaveURL(/\/lists\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('heading', { name: 'Alice vs. Bob' })).toBeVisible();
@@ -3033,8 +3038,7 @@ test('C3 edge: a saved comparison names its players, not their Steam IDs, withou
   await asPlayer(page, ALICE);
   await page.goto('/lists/compare?u=alice&u=bob');
   await expect(groupRows(page)).toHaveCount(3);
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Save behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   await page.getByRole('button', { name: 'Save as a list' }).click();
   await expect(page).toHaveURL(/\/lists\/[0-9a-f-]{36}$/);
   await page.reload();
@@ -3071,8 +3075,7 @@ test('C3 edge: a saved comparison offers Share list only, not a Share layout tha
   await page.goto('/lists/compare?u=alice&u=bob');
   await expect(groupRows(page)).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Share layout' })).toHaveCount(1);
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Save behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   await page.getByRole('button', { name: 'Save as a list' }).click();
   await expect(page).toHaveURL(/\/lists\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('button', { name: /Share list/ })).toHaveCount(1);
@@ -3084,8 +3087,7 @@ test('C3 edge: Save as a list moves focus into the saved list, not to the page',
   await asPlayer(page, ALICE);
   await page.goto('/lists/compare?u=alice&u=bob');
   await expect(groupRows(page)).toHaveCount(3);
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Save behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   await page.getByRole('button', { name: 'Save as a list' }).click();
   await expect(page).toHaveURL(/\/lists\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('main')).toBeFocused();
@@ -3224,8 +3226,7 @@ test('C1 edge: the player boxes suggest the friends Home fetched, below the stor
   await box.press('Escape');
   await page.getByRole('button', { name: 'Compare libraries' }).click();
   await expect(page.getByRole('heading', { name: 'Alice vs. Carol' })).toBeVisible();
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Edit players behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   // Read in the click's own task: named from the first render, never by Steam ID.
   const chips = await page.getByRole('button', { name: 'Edit players' }).evaluate((button: HTMLElement) => {
     button.click();
@@ -4612,8 +4613,7 @@ test("B1 edge: a bundle's hero keeps All bundles by its previous/next buttons, a
   const titlebar = page.locator('.list-hero-titlebar');
   await expect(titlebar.getByRole('button', { name: 'Previous bundle' })).toBeVisible();
   await expect(titlebar.getByRole('link', { name: 'All bundles' })).toBeVisible();
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds the rest behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   const classes = await page
     .locator('.list-hero-actions')
     .locator(':is(a, button, summary):visible')
@@ -4640,8 +4640,7 @@ test("B3 edge: a list built from a bundle says how many of its games aren't on S
   await asPlayer(page, ALICE);
   await page.goto(`/lists/bundle/${BUNDLE.id}`);
   await expect(rows(page)).toHaveCount(4);
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds it behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   await page.getByRole('link', { name: 'What does this add?' }).click();
   await expect(page.locator('.list-formula')).toContainText('1 not on Steam');
 });
@@ -4650,8 +4649,7 @@ test("B3 edge: what a bundle adds keeps the bundle's prices and links back to it
   await asPlayer(page, ALICE);
   await page.goto(`/lists/bundle/${BUNDLE.id}`);
   await expect(rows(page)).toHaveCount(4);
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds it behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   await page.getByRole('link', { name: 'What does this add?' }).click();
   await expect(rows(page)).toHaveCount(2);
   await expect(page.locator('thead th').filter({ hasText: /^Tier Price/ })).toHaveCount(1);
@@ -4676,8 +4674,7 @@ const saveWhatBundleAdds = async (page: Page) => {
   });
   await page.goto(sharedUrl(`subtract:(b:${BUNDLE.id};o:${ALICE.steamid})`));
   await expect(rows(page)).toHaveCount(2);
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Save behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   await page.getByRole('button', { name: 'Save as a list' }).click();
   await expect(page).toHaveURL(/\/lists\/(?!shared)/);
   await expect(row(page, 'Overcooked! 2')).toContainText('€12.00');
@@ -4763,8 +4760,7 @@ test("B3 edge: a saved list from a pick-and-mix bundle claims no per-game rate i
   await asPlayer(page, ALICE);
   await page.goto(sharedUrl(`subtract:(b:90002;o:${BOB.steamid})`));
   await expect(row(page, 'Hades')).toContainText('Varies');
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Save behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   await page.getByRole('button', { name: 'Save as a list' }).click();
   await expect(page).toHaveURL(/\/lists\/(?!shared)/);
   await expect(row(page, 'Hades')).toContainText('Varies');
@@ -9901,8 +9897,7 @@ test("F4.3: a publisher's games I don't own open as a shared list, linked back a
     /\/lists\/publisher\?name=indie\.io/,
   );
 
-  const more = page.getByRole('button', { name: 'More actions' }); // a phone folds Save behind More actions
-  if (await more.isVisible()) await more.click();
+  await unfoldHeroActions(page);
   await page.getByRole('button', { name: 'Save as a list' }).click();
   await expect(page).toHaveURL(/\/lists\/(?!shared)/);
   await expect(rows(page)).toHaveCount(2);
