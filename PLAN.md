@@ -55,6 +55,10 @@ Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` (load 46.8, ma
 - **auth.test.js nonce sweep** (O(n) per claim, O(n²) over the test's 10k sign-ins): stopping the sweep at the first live nonce saves 0.56 s CPU of the suite's ~19 s (< 5 %), in security code. Reverted.
 - **Playwright workers 10 vs 6** (default): full desktop suite, 3 alternating pairs at load 23–64: 6 → 79/96/155 s, 10 → 108/78/98 s (medians 96 vs 98), and one more failure at 10. Load noise dominates; kept the default.
 
+## Stop (2026-11-14)
+
+Three best remaining levers, none worth a loop: unit tests in one process (~25 % of the 6 s test step, the hook's long pole, but needs every one of 117 files made state-clean: tried, fails); C323 pinch (1/120 at load 75); desktop e2e at pre-push (486 tests, no cut without losing the primary width). Agent friction: 0 classifier denials, 0 bash-guard refusals since 2026-11-02: nothing to measure a gain against.
+
 ## At the merge
 
 - CHANGELOG (`node scripts/changelog-add.js`): Fixed "Clearing the nav search no longer lets a late answer replace the recently looked-up games"; Development "Faster hooks: the pre-commit hook no longer runs e2e, Prettier and ESLint keep their caches, the pre-push hook runs at phone width only the tests that depend on it, and CI runs e2e in four shards"; Development "Steadier e2e: concurrent runs in one checkout no longer delete each other's traces, and five lightbox tests no longer race the clock".
