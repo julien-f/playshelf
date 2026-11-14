@@ -55,7 +55,7 @@ export async function asPlayer(
 
 // Holds every request to `url` until `release()`, then lets the mock answer it: register before the
 // page asks. `requested` settles on the first; `count` says how many came. The page closing releases it.
-export async function gate(page: Page, url: string) {
+export async function gate(page: Page, url: string | RegExp) {
   let release!: () => void;
   const released = new Promise<void>((resolve) => (release = resolve));
   let hit!: () => void;

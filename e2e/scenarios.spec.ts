@@ -111,19 +111,14 @@ test(
 );
 
 test('A1 edge: Look up keeps focus while it resolves', { tag: '@any-width' }, async ({ page }) => {
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/common-games', async (route) => {
-    await held;
-    await route.fallback();
-  });
+  const held = await gate(page, '**/api/common-games');
   await page.goto('/');
   await page.getByPlaceholder('Steam name, profile URL, or 64-bit ID…').fill('alice');
   await page.getByRole('button', { name: 'Look up', exact: true }).click();
   const busy = page.getByRole('button', { name: 'Looking up…' });
   await expect(busy).toHaveAttribute('aria-disabled', 'true');
   await expect(busy).toBeFocused();
-  release();
+  held.release();
   await expect(page.getByRole('main')).toContainText('Owned: 6');
 });
 
@@ -1059,17 +1054,12 @@ test(
     });
     await page.goto('/lists/owned');
     await expect(page.locator('.profile').getByRole('heading')).toHaveText('Plays mostly');
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    await page.route('**/api/game-details/stream', async (route) => {
-      await held;
-      await route.fallback();
-    });
+    const held = await gate(page, '**/api/game-details/stream');
     refreshed = true;
     await page.getByRole('button', { name: /^Updated\b/ }).click();
     await expect(page.locator('.list-status')).toContainText('6 / 7 games loaded');
     await expect(page.locator('.profile').getByRole('heading')).toHaveText('Plays mostly');
-    release();
+    held.release();
     await expect(rows(page)).toHaveCount(7);
     await expect(page.locator('.list-status')).not.toContainText('games loaded');
     await expect(page.locator('.profile').getByRole('heading')).toHaveText('Plays mostly');
@@ -3998,15 +3988,10 @@ test('L5 edge: Bargains is suggested on Wishlist, and only with prices', { tag: 
   await expect(rows(page).first()).toContainText('1-Year Low');
 
   // Until prices arrive the view matches nothing, and says why.
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/prices**', async (route) => {
-    await held;
-    await route.fallback();
-  });
+  const held = await gate(page, '**/api/prices**');
   await page.reload();
   await expect(page.getByText('Prices are still loading: this view filters on them.')).toBeVisible();
-  release();
+  held.release();
   await expect(rows(page).first()).toContainText('1-Year Low');
   await expect(page.getByText('Prices are still loading')).toHaveCount(0);
   await page.unroute('**/api/prices**');
@@ -4717,18 +4702,13 @@ test(
   async ({ page }) => {
     await asPlayer(page, ALICE);
     await saveWhatBundleAdds(page);
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    await page.route(/\/api\/bundles\/\d+\?(?!.*country=US)/, async (route) => {
-      await held;
-      await route.fallback();
-    });
+    const held = await gate(page, /\/api\/bundles\/\d+\?(?!.*country=US)/);
     const asked = page.waitForRequest(/\/api\/bundles\/\d+\?/);
     await page.reload();
     await asked;
     await page.getByTitle('Preferences').click();
     await page.locator('#nav-region-select').selectOption({ label: 'United States (USD)' });
-    release();
+    held.release();
     await expect(row(page, 'Overcooked! 2')).toContainText('$12.00');
   },
 );
@@ -4818,12 +4798,7 @@ test(
   { tag: '@any-width' },
   async ({ page }) => {
     await asPlayer(page, ALICE);
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    await page.route(/\/api\/bundles\/\d+/, async (route) => {
-      await held;
-      await route.fallback();
-    });
+    const held = await gate(page, /\/api\/bundles\/\d+/);
     await page.clock.install();
     await page.goto(sharedUrl(`subtract:(o:${ALICE.steamid};w:${ALICE.steamid})`));
     await expect(rows(page)).toHaveCount(6);
@@ -4838,7 +4813,7 @@ test(
     await bundleAsked;
     await page.goBack();
     await expect(rows(page)).toHaveCount(6);
-    release();
+    held.release();
     await page.waitForResponse(/\/api\/bundles\/\d+/);
     await page.clock.runFor(200); // let the late answer land, if it would
     await expect(page.locator('.list-hero-actions').getByRole('link', { name: BUNDLE.title })).toHaveCount(0);
@@ -5389,17 +5364,12 @@ test(
     await expect(rows(page)).toHaveCount(6);
     await row(page, 'Portal 2').getByRole('checkbox').check();
     // Holds the library refresh, so the table can be checked mid-way.
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    await page.route(/\/api\/common-games\?refresh=1$/, async (route) => {
-      await held;
-      await route.fallback();
-    });
+    const held = await gate(page, /\/api\/common-games\?refresh=1$/);
     await page.getByRole('button', { name: /^Updated\b/ }).click();
     await expect(page.locator('.list-stat', { hasText: 'Updated' })).toContainText('Refreshing');
     await expect(rows(page)).toHaveCount(6);
     await expect(row(page, 'Hades')).toContainText('44.5'); // details still on screen
-    release();
+    held.release();
     await expect(page.locator('.list-stat', { hasText: 'Updated' })).not.toContainText('Refreshing');
     await expect(rows(page)).toHaveCount(6);
     await expect(row(page, 'Portal 2').getByRole('checkbox')).toBeChecked();
@@ -5410,17 +5380,12 @@ test('D1 edge: the Updated tile keeps focus while it refreshes', { tag: '@any-wi
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(6);
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route(/\/api\/common-games\?refresh=1$/, async (route) => {
-    await held;
-    await route.fallback();
-  });
+  const held = await gate(page, /\/api\/common-games\?refresh=1$/);
   const tile = page.getByRole('button', { name: /^Updated/ });
   await tile.click();
   await expect(tile).toContainText('Refreshing');
   await expect(tile).toBeFocused();
-  release();
+  held.release();
   await expect(tile).not.toContainText('Refreshing');
   await expect(tile).toBeFocused();
 });
@@ -5981,18 +5946,13 @@ test(
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned?game=620');
     await expect(page.locator('.panel-bundle').first()).toBeVisible();
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    await page.route('**/api/game-bundles/**', async (route) => {
-      await held;
-      await route.fallback();
-    });
+    const held = await gate(page, '**/api/game-bundles/**');
     const asked = page.waitForRequest(/\/api\/game-bundles\//);
     await page.getByRole('button', { name: 'Next game' }).click();
     await asked;
     await expect(page.locator('#panel-section-price')).toBeVisible();
     await expect(page.locator('.panel-bundles')).toHaveCount(0);
-    release();
+    held.release();
     await expect(page.locator('.panel-bundles')).toBeVisible();
   },
 );
@@ -6171,12 +6131,7 @@ test(
   'F1 edge: DLC entries streamed in stay put, not redrawn, once the rest arrive',
   { tag: '@any-width' },
   async ({ page }) => {
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    await page.route('**/api/game-meta/900020', async (route) => {
-      await held;
-      await route.fallback();
-    });
+    const held = await gate(page, '**/api/game-meta/900020');
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned?game=1145360');
     const card = page.locator('#panel-section-dlc');
@@ -6187,7 +6142,7 @@ test(
     await card
       .locator('.panel-dlc-item')
       .evaluateAll((items) => items.forEach((el) => el.setAttribute('data-seen', '')));
-    release();
+    held.release();
     await expect(card.getByText('Loading 1 more…')).toHaveCount(0);
     await expect(card.locator('.panel-dlc-item')).toHaveCount(20);
     // Every entry already on screen is the same element, in the same order: no remount, no reload of its capsule.
@@ -8233,18 +8188,13 @@ test('F1 edge: a search answering after Clear search leaves the recents shown', 
   await page.clock.install();
   await page.goto('/about');
   const box = page.getByPlaceholder('Look up any game…');
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route('**/api/search-games?q=hollow*', async (route) => {
-    await held;
-    await route.fallback();
-  });
+  const held = await gate(page, '**/api/search-games?q=hollow*');
   const asked = page.waitForRequest(/search-games\?q=hollow/);
   await box.fill('hollow');
   await asked;
   await page.locator('.app-search-wrap').getByRole('button', { name: 'Clear search' }).click();
   await expect(page.getByRole('option', { name: /Overcooked! 2/ })).toBeVisible();
-  release();
+  held.release();
   await page.waitForResponse(/search-games\?q=hollow/);
   await page.clock.runFor(200); // let the late answer render, if it would
   await expect(page.getByRole('option', { name: /Overcooked! 2/ })).toBeVisible();
@@ -8295,17 +8245,12 @@ test(
     const box = page.getByPlaceholder('Look up any game…');
     const dropdown = page.locator('#app-search-results');
 
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    await page.route('**/api/search-games?q=hades*', async (route) => {
-      await held;
-      await route.fallback();
-    });
+    const held = await gate(page, '**/api/search-games?q=hades*');
     const asked = page.waitForRequest(/search-games\?q=hades/);
     await box.fill('hades');
     await asked;
     await page.keyboard.press('Escape');
-    release();
+    held.release();
     await page.waitForResponse(/search-games\?q=hades/);
     await page.clock.runFor(200); // let the late answer render, if it would
     await expect(dropdown).toBeHidden();
