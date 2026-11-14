@@ -125,30 +125,15 @@ test('createList: manual list stores appids, defaults to root/order 0', () => {
   assert.equal(l.parentId, null);
 });
 
-test("setListAppids: replaces a manual list's appids and bumps updatedAt", async () => {
-  const { createList, setListAppids, getList } = store();
-  const l = createList({ name: 'Backlog', kind: 'manual', appids: [1] });
-  await new Promise((r) => setTimeout(r, 2));
-  setListAppids(l.id, [1, 2, 3]);
-  const updated = getList(l.id);
-  assert.deepEqual(updated.appids, [1, 2, 3]);
-  assert.ok(updated.updatedAt >= l.updatedAt);
-});
-
-test('setListAppids: no-ops on a dynamic list', () => {
-  const { createList, setListAppids, getList } = store();
-  const l = createList({ name: 'Combo', kind: 'dynamic', op: 'union', sources: [] });
-  setListAppids(l.id, [1, 2]);
-  assert.equal(getList(l.id).appids, undefined);
-});
-
 // ── addAppidsToList / removeAppidsFromList (row-selection-based add/remove-to-list) ───────────
 
 test('addAppidsToList: unions new appids into a manual list, deduping against what is already there', () => {
   const { createList, addAppidsToList, getList } = store();
   const l = createList({ name: 'Backlog', kind: 'manual', appids: [1, 2] });
   addAppidsToList(l.id, [2, 3]);
-  assert.deepEqual([...getList(l.id).appids].sort(), [1, 2, 3]);
+  const updated = getList(l.id);
+  assert.deepEqual([...updated.appids].sort(), [1, 2, 3]);
+  assert.ok(updated.updatedAt >= l.updatedAt);
 });
 
 test('addAppidsToList: adding to an empty manual list just sets it', () => {

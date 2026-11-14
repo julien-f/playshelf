@@ -341,10 +341,6 @@ function updateManualAppids(id: string, next: (appids: number[]) => number[]): v
   writeLists(lists);
 }
 
-export function setListAppids(id: string, appids: number[]): void {
-  updateManualAppids(id, () => appids);
-}
-
 // Row-selection-based add/remove (ListRoute.tsx), with the same set arithmetic (combine.ts's
 // union/subtract) a dynamic list's own resolve uses.
 export function addAppidsToList(id: string, appids: number[]): void {

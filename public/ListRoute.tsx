@@ -33,7 +33,7 @@
 // Row-selection-based add/remove-to-list: any kind's table can select rows (`selectable: true`
 // on the single-table path) and add them to an existing manual list, or a brand-new one created
 // on the spot — the one piece of `listsStore.ts`'s already-built manual-list CRUD
-// (`addAppidsToList`/`removeAppidsFromList`, both thin wrappers over `setListAppids` built on
+// (`addAppidsToList`/`removeAppidsFromList`, both thin wrappers over `updateManualAppids` built on
 // `combine.ts`'s own `union`/`subtract`) that had no UI calling it until now. "Remove from this
 // list" only shows when the list actually being viewed is itself a manual one (`kind === 'user'
 // && userList.kind === 'manual'`) — removing from a dynamic list makes no sense, its contents
