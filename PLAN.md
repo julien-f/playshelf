@@ -41,8 +41,10 @@ Flake baseline: `node scripts/e2e-flakes.js --repeat=5 --load=12` (load 46.8, ma
 - **L2 CI e2e in 4 shards** (P77): unmeasured until the branch runs CI (needs a push: asked). Estimate from the last run: test step 6 min 37 s / 4 + ~45 s of setup ≈ 2.5 min, plus a ~20 s summary job, vs 7 min 14 s.
 - **L3 e2e build skip** (P78): `scripts/e2e.js` skips `vite build` when public/, static/, configs and lockfile hash as the build in place; 502 of 848 transcript e2e runs had no frontend change since the previous. One-test run (`node scripts/e2e.js --project=desktop -g 'A1: first visit'`): 20.8–23.0 s → 8.7–9.6 s at load ~40 (3 alternating pairs).
 - **L4 per-port e2e output dir** (P79): two e2e runs in one checkout (sessions sharing the main checkout; `claimPort` allows it) shared `test-results/`, which each run empties on start, deleting the other's traces. Reproduction (40 phone tests, a second run started mid-way): 6 failed, 12 ENOENT → 0 failed in 5 of 5.
+- **L5 Clear search flake** (P61): root cause an app bug, a search answering after × replaced the recents (any input now invalidates the in-flight search). New test fails before, passes after; `e2e-flakes.js --repeat=24 --load=24 --workers=12 -g 'Clear search'`: 0 of 144 at load median 40.5 (was 1/5 in the baseline run). Changelog at merge: "Clearing the nav search no longer lets a late answer replace the recently looked-up games".
 
 ## Negative results
 
 - **Unit tests in one process** (`--test-isolation=none`): fails (shared module state, e.g. `Date is already being mocked`), and 23 s wall vs 15 s default at load ~42, though 8.4 s vs 19.4 s CPU. Would need every file made state-clean: not worth it.
 - **auth.test.js nonce sweep** (O(n) per claim, O(n²) over the test's 10k sign-ins): stopping the sweep at the first live nonce saves 0.56 s CPU of the suite's ~19 s (< 5 %), in security code. Reverted.
+- **Playwright workers 10 vs 6** (default): full desktop suite, 3 alternating pairs at load 23–64: 6 → 79/96/155 s, 10 → 108/78/98 s (medians 96 vs 98), and one more failure at 10. Load noise dominates; kept the default.

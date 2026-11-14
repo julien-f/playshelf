@@ -7174,6 +7174,29 @@ test('F1 edge: the nav search box’s Clear search button empties it and keeps i
   await expect(page.getByRole('option', { name: /Overcooked! 2/ })).toBeVisible();
 });
 
+test('F1 edge: a search answering after Clear search leaves the recents shown', async ({ page }) => {
+  await asPlayer(page, ALICE, { recentGames: [728880] });
+  await page.clock.install();
+  await page.goto('/about');
+  const box = page.getByPlaceholder('Look up any game…');
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/api/search-games?q=hollow*', async (route) => {
+    await held;
+    await route.fallback();
+  });
+  const asked = page.waitForRequest(/search-games\?q=hollow/);
+  await box.fill('hollow');
+  await asked;
+  await page.locator('.app-search-wrap').getByRole('button', { name: 'Clear search' }).click();
+  await expect(page.getByRole('option', { name: /Overcooked! 2/ })).toBeVisible();
+  release();
+  await page.waitForResponse(/search-games\?q=hollow/);
+  await page.clock.runFor(200); // let the late answer render, if it would
+  await expect(page.getByRole('option', { name: /Overcooked! 2/ })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Hollow Knight/ })).toBeHidden();
+});
+
 test('F2 edge: the /search box’s Clear search button empties it, and refocusing it selects its text to type over', async ({
   page,
 }) => {
