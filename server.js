@@ -1215,10 +1215,14 @@ app.get(
   }),
 );
 
-app.get('/api/game-details/:appid', detailsLimit, async (req, res) => {
-  const { appid } = req;
-  res.json(await fetchGameDetails(appid, { force: isForceRefresh(req), priority: true }));
-});
+app.get(
+  '/api/game-details/:appid',
+  detailsLimit,
+  catchRouteError('game-details', async (req, res) => {
+    const { appid } = req;
+    res.json(await fetchGameDetails(appid, { force: isForceRefresh(req), priority: true }));
+  }),
+);
 
 app.get(
   '/api/game-meta/:appid',
