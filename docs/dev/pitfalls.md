@@ -38,12 +38,6 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 
 ## Git, hooks and parallel agents
 
-### `spawnSync git ENOBUFS` from `node scripts/backlog-next.js`
-
-- **Symptom**: the script throws `Error: spawnSync git ENOBUFS` with `spawnargs: [ 'log', '--all', '--format=%B' ]` and dumps the log.
-- **Cause**: the script reads every commit message through `execFileSync`, whose output buffer defaults to 1 MB; the history is past that.
-- **Fix**: until the script raises that buffer, take the next number by hand: `{ git log --all --format=%B; cat docs/dev/*.md; } | grep -oE '\bC[0-9]+\b' | sort -V | tail -1`, plus one.
-
 ### `node_modules is behind package-lock.json` on a commit in the main checkout
 
 - **Symptom**: `scripts/check.js` (the hooks, `npm run check`) stops with `✗ node_modules is behind package-lock.json: <package> (…). Run npm ci.`, though the branch passed (typically a merge that brings a lockfile change).

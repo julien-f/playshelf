@@ -167,6 +167,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - e2e runs from different checkouts take turns instead of running at once
 - Faster hooks: the pre-commit hook no longer runs e2e, Prettier and ESLint keep their caches, the pre-push hook runs at phone width only the tests that depend on it, and CI runs e2e in four shards
 - Steadier e2e: concurrent runs in one checkout no longer delete each other's traces, and six lightbox tests no longer race the clock
+- backlog-next.js works again on a commit history past 1 MB
 
 ## [0.12.0] - 2026-10-30
 

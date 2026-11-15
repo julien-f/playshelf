@@ -25,7 +25,12 @@ function main() {
   }
   const root = path.join(__dirname, '..');
   const backlog = fs.readFileSync(path.join(root, FILES[letter]), 'utf8');
-  const log = execFileSync('git', ['log', '--all', '--format=%B'], { cwd: root, encoding: 'utf8' });
+  // Every commit message, which outgrew execFileSync's 1 MB default buffer.
+  const log = execFileSync('git', ['log', '--all', '--format=%B'], {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 256 * 1024 * 1024,
+  });
   console.log(nextNumber(letter, [backlog, log]));
 }
 
