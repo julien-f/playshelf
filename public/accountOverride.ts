@@ -37,8 +37,7 @@ const NONE: AccountOverrideState = { state: 'none', identifiers: [] };
 // A factory rather than bare module-level state, same reason myOwnership.ts's
 // createMyOwnershipCache() is one: this module's real content is mutable state (the last
 // synced param, the in-flight resolve), and a test can't reload a TS-stripped ESM file to reset
-// a module-level `let`. The app uses the
-// single instance exported below; tests build their own.
+// a module-level `let`. The app uses the single instance exported below; tests build their own.
 export function createAccountOverrideSync() {
   // A signal: a reader shows "Resolving…" then the error even when the override itself stays null.
   const [state, setState] = createSignal<AccountOverrideState>(NONE);

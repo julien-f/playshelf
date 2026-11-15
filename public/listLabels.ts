@@ -19,7 +19,7 @@ import { GAME_PASS_PATH, GAME_PASS_TITLE } from './gamePassData.ts';
 import { OP_LABELS } from './combine.ts';
 
 // What each op actually does, for a picker where the reader may be meeting them for the first
-// time (Home's combine form appends this to the label above).
+// time (Home's combine form appends this to combine.ts's OP_LABELS).
 export const OP_DESCRIPTIONS: Record<CombineOp, string> = {
   union: 'games in any source',
   intersect: 'games in every source',
