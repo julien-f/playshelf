@@ -2,6 +2,10 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const {
   callers,
   argsWithoutUsage,
@@ -24,7 +28,25 @@ const {
   agentSummary,
   docReads,
   docReadStats,
+  transcriptDir,
 } = require('../scripts/setup-facts');
+
+test("transcriptDir is the main checkout's from a worktree too", () => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'setup-facts-')));
+  try {
+    const main = path.join(tmp, 'repo');
+    const git = (...args) => execFileSync('git', args, { cwd: main, stdio: 'ignore' });
+    fs.mkdirSync(main);
+    git('init', '-q');
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x');
+    git('worktree', 'add', '-q', path.join(main, '.claude', 'worktrees', 'wt'));
+    const expected = path.join(os.homedir(), '.claude', 'projects', main.replace(/[^\w]/g, '-'));
+    assert.equal(transcriptDir(main), expected);
+    assert.equal(transcriptDir(path.join(main, '.claude', 'worktrees', 'wt')), expected);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
 
 test('callers matches script paths and relative requires, not substrings', () => {
   const files = [

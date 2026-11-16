@@ -418,8 +418,17 @@ function agentSummary(lines) {
   };
 }
 
+// Claude Code files a worktree's sessions under the main checkout's project directory.
+function transcriptDir(root) {
+  const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  return path.join(os.homedir(), '.claude', 'projects', path.dirname(common.trim()).replace(/[^\w]/g, '-'));
+}
+
 function agents(sessionId) {
-  const dir = path.join(os.homedir(), '.claude', 'projects', ROOT.replace(/[^\w]/g, '-'));
+  const dir = transcriptDir(ROOT);
   const withAgents = fs
     .readdirSync(dir)
     .filter((d) => fs.existsSync(path.join(dir, d, 'subagents')))
@@ -534,7 +543,7 @@ function linesSince(lines, since) {
 
 // `{ limit }` or `{ since }` (ms): the newest `limit` sessions, or every entry after `since`.
 function transcripts({ limit, since }, digestDir) {
-  const dir = path.join(os.homedir(), '.claude', 'projects', ROOT.replace(/[^\w]/g, '-'));
+  const dir = transcriptDir(ROOT);
   const sorted = fs
     .readdirSync(dir)
     .filter((f) => f.endsWith('.jsonl'))
@@ -686,4 +695,5 @@ module.exports = {
   agentSummary,
   docReads,
   docReadStats,
+  transcriptDir,
 };
