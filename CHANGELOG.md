@@ -170,6 +170,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - backlog-next.js works again on a commit history past 1 MB
 - An unexpected failure of a single game's details is logged under its route, like every other API route's
 - `node scripts/setup-facts.js --transcripts` finds the sessions from a worktree too
+- `node scripts/setup-facts.js --cost` shows the load average beside the last run's, to tell a slower gate from a busy machine
 
 ## [0.12.0] - 2026-10-30
 

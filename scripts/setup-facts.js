@@ -4,7 +4,7 @@
 //   node scripts/setup-facts.js                    each script's callers (tests and the changelog excluded —
 //                                                  a script only they mention has no caller), and which read
 //                                                  arguments without printing a usage line
-//   node scripts/setup-facts.js --cost             time and output size of the gates an agent runs, and each
+//   node scripts/setup-facts.js --cost             the load average, time and output size of the gates an agent runs, each
 //                                                  gate's change since the last run, and the check runs (hooks
 //                                                  included) since then: blocked commits, timings (scripts/dev-metrics.js)
 //   node scripts/setup-facts.js --transcripts[=N|=DATE]  the last N (default 20) sessions', or everything
@@ -469,6 +469,8 @@ function cost() {
       .join(', ')}`,
   );
   const last = history('cost').at(-1);
+  const load = Number(os.loadavg()[0].toFixed(1));
+  console.log(loadLine(load, last));
   const seconds = {};
   for (const script of COST_SCRIPTS) {
     const start = Date.now();
@@ -477,7 +479,7 @@ function cost() {
     console.log(costLine(script, run, last));
     if (!status) seconds[script] = run.seconds;
   }
-  record('cost', { seconds });
+  record('cost', { seconds, load });
   const since = last?.at ?? '';
   console.log(
     `Check runs${since ? ` since ${since.slice(0, 10)}` : ''} (scripts/check.js): ${checkStats(history('checks').filter((r) => r.at > since))}`,
@@ -516,6 +518,12 @@ function e2eRunStats(rows) {
       return `${asked} ×${runs.length}: ${[...counts].map(([ran, rs]) => `${ran} ${rs.length}`).join(', ')}`;
     })
     .join(' · ');
+}
+
+// Timings swing with other sessions' load, so a ⚠ below is read against both runs' load.
+function loadLine(load, last) {
+  const before = last?.load === undefined ? 'not recorded' : `${last.load} on ${last.at.slice(0, 10)}`;
+  return `Load average: ${load} on ${os.cpus().length} cores (last run: ${before})`;
 }
 
 // A failed run (e.g. e2e's port taken by another checkout) is no baseline: it isn't recorded or compared.
@@ -679,6 +687,7 @@ module.exports = {
   commandKey,
   costDelta,
   costLine,
+  loadLine,
   checkStats,
   e2eRunStats,
   parseSession,

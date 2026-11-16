@@ -22,6 +22,7 @@ Last reviewed: 2026-11-16 · Transcripts read up to: 2026-11-16T10:43:03Z.
 
 - **P78 · e2e.js · S** — one e2e run at a time on the machine (`waitTurn`, a lock under the git common dir). 2026-11-13: a fix batch ran 9 e2e runs at once (5 lanes, a check, a probe), load ~90–100 on 16 cores; one width took 355–401 s against 165 s for both widths on a quiet machine, and lanes saw 10–21 flaky failures per pass; the batch's final full run alone took 2.4 min at load ~20 with 0 failures. Measure: `e2e-runs` failed runs in the next batch (`setup-facts.js --cost`) and its lanes' flaky failures per pass — 10–21 → 0, `waited` showing the queue's cost.
 - **P86 · setup-facts.js · S** — `--transcripts` and `--agents` find the sessions from a worktree too: Claude Code files them under the main checkout's project directory, which the script now takes from `git rev-parse --git-common-dir`. Measure: `node scripts/setup-facts.js --transcripts` from a worktree — ENOENT on a project directory that doesn't exist → the main checkout's sessions.
+- **P87 · setup-facts.js · S** — `--cost` prints and records the load average, beside the last run's. 2026-11-16: e2e +44% and build +153% flagged ⚠ at load 32 on 16 cores, with nothing to tell a slower gate from a busy machine. Measure: `node scripts/setup-facts.js --cost` ⚠ lines with no load to read them by — 2 → 0 from the second run on (the first compares against an unrecorded load).
 
 ## Open
 
