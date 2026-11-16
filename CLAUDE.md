@@ -28,7 +28,7 @@ Each doc, and when to read it — the section you need, not the whole file:
 - [docs/dev/journeys.md](docs/dev/journeys.md) — before a design review, an end-to-end test or a user-facing feature plan
 - [docs/dev/ui-guidelines.md](docs/dev/ui-guidelines.md) — before any UI change; its checklist for a new UI feature
 - [docs/dev/glossary.md](docs/dev/glossary.md) — before naming anything a user reads: a label, a message, a list
-- [docs/dev/improvements.md](docs/dev/improvements.md) · [docs/dev/code-backlog.md](docs/dev/code-backlog.md) · [docs/dev/setup-backlog.md](docs/dev/setup-backlog.md) — open UX, code and setup work: check before proposing something (it may be filed, or declined)
+- [docs/dev/improvements.md](docs/dev/improvements.md) · [docs/dev/code-backlog.md](docs/dev/code-backlog.md) · [docs/dev/setup-backlog.md](docs/dev/setup-backlog.md) — open UX, code and setup work: check before proposing something (it may be filed, or declined); a running setup loop's progress is in [docs/dev/setup-loop-state.md](docs/dev/setup-loop-state.md)
 - [docs/dev/decisions.md](docs/dev/decisions.md) — before changing a computed value or a tooling choice that looks wrong
 - [docs/dev/testing.md](docs/dev/testing.md) — before writing or fixing a test, looking at the UI, measuring performance, running skill evals, or touching the hooks and checks
 - [docs/dev/pitfalls.md](docs/dev/pitfalls.md) — on an unexpected error: `grep -ri '<fragment>' docs/ .claude/skills/` first

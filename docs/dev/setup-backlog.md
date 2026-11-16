@@ -24,6 +24,7 @@ Last reviewed: 2026-11-16 · Transcripts read up to: 2026-11-16T10:43:03Z.
 - **P86 · setup-facts.js · S** — `--transcripts` and `--agents` find the sessions from a worktree too: Claude Code files them under the main checkout's project directory, which the script now takes from `git rev-parse --git-common-dir`. Measure: `node scripts/setup-facts.js --transcripts` from a worktree — ENOENT on a project directory that doesn't exist → the main checkout's sessions.
 - **P87 · setup-facts.js · S** — `--cost` prints and records the load average, beside the last run's. 2026-11-16: e2e +44% and build +153% flagged ⚠ at load 32 on 16 cores, with nothing to tell a slower gate from a busy machine. Measure: `node scripts/setup-facts.js --cost` ⚠ lines with no load to read them by — 2 → 0 from the second run on (the first compares against an unrecorded load).
 - **P88 · backlog-run · S** — step 1 cites `~/.claude/CLAUDE.md`'s plan review as one specialist round, as that rule reads since 2026-10-30, not "until they agree". Routing evals 9/9 before and after. Measure: `backlog-run.jsonl` plan `rounds` above 1 — 1 of 5 runs since 2026-10-30 → 0.
+- **P93 · setup-review · S** — step 1 quotes `--cost` at ~2–3 min, not ~70 s: totals were 140, 131 and 190 s on 11-09, 11-14 and 11-16. Routing evals 18/18 before and after. Measure: `dev-metrics` `cost` total against the quoted time — 131–190 s vs 70 s → within 2–3 min.
 
 ## Open
 
