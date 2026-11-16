@@ -170,6 +170,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - backlog-next.js works again on a commit history past 1 MB
 - An unexpected failure of a single game's details is logged under its route, like every other API route's
 - Setup reviews read every session from any checkout, record the peak load beside cost timings, can leave out named sessions, and merge.js finish asks before landing on main
+- Commit-hook format check runs Prettier in one process, about four times less CPU; each check run records its load and checkout
 
 ## [0.12.0] - 2026-10-30
 

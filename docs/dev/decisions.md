@@ -67,3 +67,9 @@ It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vector
 - `eslint.config.mjs` parses with `@babel/eslint-parser`: TypeScript 7 (`tsgo`) ships no JavaScript compiler API, so `@typescript-eslint/parser` can't run here, and its peer range refuses `typescript@7`. None of the Solid rules are type-aware, so a syntax-only parser loses nothing.
 - `eslint-plugin-solid` still pulls `@typescript-eslint/utils` for its helpers; `package.json`'s `overrides` point those packages' `typescript` peer at the root spec, silencing the `ERESOLVE` warnings without changing what loads.
 - The `@babel/*` packages are explicit devDependencies rather than relying on `vite-plugin-solid` hoisting them.
+
+## Formatting: Prettier's experimental CLI, one process
+
+- `format` and `format:check` run `prettier --experimental-cli --no-parallel`: its cache hashes each file's content and skips the full re-check the legacy CLI does, so a warm check inside the pre-commit hook costs 0.24 s CPU against 1.00 s (2026-11-16, load ~36).
+- `--no-parallel`: the default worker pool cut a cold run's wall time but tripled its CPU (28 s vs 10 s), which loses under the load the hook runs in.
+- Neither CLI's cache can move between checkouts: the legacy one hashes each file's absolute path into its options hash, the experimental one hashes the absolute config and ignore paths into its cache version. A fresh worktree's first check is cold (~10 s CPU).

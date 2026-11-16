@@ -54,7 +54,7 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 
 - **Symptom**: `✓ format (40 s)` in the pre-commit output, though Prettier's cache was warm.
 - **Cause**: Prettier deletes its default cache (`node_modules/.cache/prettier/`) on any run without `--cache`, such as `npx prettier --write <file>`, so the next check re-reads the whole tree.
-- **Fix**: `format` and `format:check` keep their cache in `node_modules/.cache/prettier-own/`, which such runs leave alone; keep both scripts on that `--cache-location`.
+- **Fix**: `format` and `format:check` keep their cache in `node_modules/.cache/prettier-own/`, which such runs leave alone; keep both scripts on that `--cache-location` ([decisions.md](decisions.md#formatting-prettiers-experimental-cli-one-process)).
 
 ### Another agent's commit shows a branch as merged without its changes
 

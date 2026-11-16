@@ -7,7 +7,7 @@
 
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { record } = require('./dev-metrics');
+const { record, gitCommonDir } = require('./dev-metrics');
 const { portOf } = require('./ports');
 
 function main() {
@@ -16,8 +16,7 @@ function main() {
     console.error('Usage: node scripts/worktree.js <branch> [base]');
     process.exit(1);
   }
-  const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
-  const dir = path.join(path.dirname(common.trim()), '.claude/worktrees', branch.replaceAll('/', '-'));
+  const dir = path.join(path.dirname(gitCommonDir(process.cwd())), '.claude/worktrees', branch.replaceAll('/', '-'));
   const start = Date.now();
   let ok = false;
   try {

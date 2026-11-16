@@ -9,11 +9,18 @@ const { execFileSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 
+// The absolute git dir shared by every checkout of the repo `cwd` is in; its parent is the main checkout.
+function gitCommonDir(cwd) {
+  return execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    cwd,
+    encoding: 'utf8',
+  }).trim();
+}
+
 // METRICS_DIR: tests only.
 function file(name) {
   if (process.env.METRICS_DIR) return path.join(process.env.METRICS_DIR, `${name}.jsonl`);
-  const common = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: ROOT, encoding: 'utf8' }).trim();
-  return path.join(path.resolve(ROOT, common), 'dev-metrics', `${name}.jsonl`);
+  return path.join(gitCommonDir(ROOT), 'dev-metrics', `${name}.jsonl`);
 }
 
 // Appends `row`, stamped with the time; a failure only warns, so it never fails a check or a commit.
@@ -40,4 +47,4 @@ function history(name) {
   }
 }
 
-module.exports = { record, history };
+module.exports = { record, history, gitCommonDir };

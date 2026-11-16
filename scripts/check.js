@@ -5,6 +5,8 @@
 // checks the commit against <base> instead: typecheck, lint and the CSS check run only when something
 // they cover is staged; e2e is the pre-push hook's. Each run's step times and failures go to scripts/dev-metrics.js.
 
+const os = require('node:os');
+const path = require('node:path');
 const { execFileSync, spawn } = require('node:child_process');
 const { record } = require('./dev-metrics');
 
@@ -67,15 +69,20 @@ function staleDep(lock, installed) {
 }
 
 // A run's metrics row: a commit's (the pre-commit hook) or a full one's, each step's seconds and the failed ones.
-function runRow(staged, results) {
+// The load (sampled before the steps add theirs) and checkout let a p90 leave out runs under other sessions' load
+// or in a fresh worktree's cold caches.
+function runRow(staged, results, load) {
   return {
     run: staged === undefined ? 'full' : 'commit',
+    load: Number(load.toFixed(1)),
+    checkout: path.resolve(__dirname, '..'),
     seconds: Object.fromEntries(results.map((r) => [r.name, Number((r.ms / 1000).toFixed(1))])),
     failed: results.filter((r) => !r.ok).map((r) => r.name),
   };
 }
 
 async function main() {
+  const load = os.loadavg()[0];
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   const staged = process.argv
     .slice(2)
@@ -93,12 +100,12 @@ async function main() {
   }
   const stale = staleDep(require('../package-lock.json').packages, installed);
   if (stale) {
-    record('checks', { run: staged === undefined ? 'full' : 'commit', seconds: {}, failed: ['deps'] });
+    record('checks', { ...runRow(staged, [], load), failed: ['deps'] });
     console.log(`✗ node_modules is behind package-lock.json: ${stale}. Run npm ci.`);
     process.exit(1);
   }
   const results = await runAll(steps(staged, files).map(([name, args]) => [name, npm, ['run', '-s', ...args]]));
-  record('checks', runRow(staged, results));
+  record('checks', runRow(staged, results, load));
   for (const r of results) console.log(`${r.ok ? '✓' : '✗'} ${r.name} (${(r.ms / 1000).toFixed(1)} s)`);
   for (const r of results.filter((r) => !r.ok)) console.log(`\n── ${r.name} failed ──\n${r.output.trimEnd()}`);
   if (results.some((r) => !r.ok)) process.exit(1);
