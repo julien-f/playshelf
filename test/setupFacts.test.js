@@ -31,6 +31,7 @@ const {
   docReadStats,
   transcriptDirs,
 } = require('../scripts/setup-facts');
+const { gitCommonDir } = require('../scripts/dev-metrics');
 
 test("transcriptDirs: the main checkout's and its worktrees', from a worktree too", () => {
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'setup-facts-')));
@@ -61,10 +62,12 @@ test("transcriptDirs: the main checkout's and its worktrees', from a worktree to
 test('--transcripts --exclude leaves out the sessions named', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-facts-home-'));
   try {
-    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
-      encoding: 'utf8',
-    });
-    const dir = path.join(home, '.claude', 'projects', path.dirname(common.trim()).replace(/[^\w]/g, '-'));
+    const dir = path.join(
+      home,
+      '.claude',
+      'projects',
+      path.dirname(gitCommonDir(process.cwd())).replace(/[^\w]/g, '-'),
+    );
     fs.mkdirSync(dir, { recursive: true });
     const line = JSON.stringify({ type: 'user', timestamp: '2026-11-16T10:00:00Z', message: { content: 'hi' } });
     for (const id of ['a', 'b', 'c']) fs.writeFileSync(path.join(dir, `${id}.jsonl`), line + '\n');

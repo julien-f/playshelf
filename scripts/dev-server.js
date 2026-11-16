@@ -6,8 +6,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const util = require('node:util');
-const { execFileSync } = require('node:child_process');
 const { portOf } = require('./ports');
+const { gitCommonDir } = require('./dev-metrics');
 
 // The environment for a server in `root`, the main checkout being `main`: main's `.env`, then the overrides.
 function worktreeEnv(root, main) {
@@ -24,8 +24,7 @@ function worktreeEnv(root, main) {
 
 if (require.main === module) {
   const root = path.join(__dirname, '..');
-  const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: root });
-  const env = worktreeEnv(path.resolve(root), path.dirname(common.toString().trim()));
+  const env = worktreeEnv(path.resolve(root), path.dirname(gitCommonDir(root)));
   require('./background-server').cli({ name: 'dev-server', npmScript: 'dev', port: portOf('dev'), env });
 }
 

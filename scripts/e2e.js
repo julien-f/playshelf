@@ -18,17 +18,14 @@ const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 const { touchesUi } = require('./check');
 const { portOf } = require('./ports');
-const { record } = require('./dev-metrics');
+const { record, gitCommonDir } = require('./dev-metrics');
 const PROJECTS = Object.keys(require('./e2e-projects'));
 
 const ROOT = path.join(__dirname, '..');
 const CACHE = path.join(ROOT, 'node_modules/.cache');
 // Shared by every checkout: the pass record (a build passed in a feature worktree is skipped in another) and the
 // run queue.
-const GIT_COMMON = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
-  cwd: ROOT,
-  encoding: 'utf8',
-}).trim();
+const GIT_COMMON = gitCommonDir(ROOT);
 const PASS_FILE = path.join(GIT_COMMON, 'e2e-pass.json');
 // Builds whose passes are kept: enough for every live checkout's latest.
 const PASSES_KEPT = 20;

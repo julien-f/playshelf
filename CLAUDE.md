@@ -32,6 +32,7 @@ Each doc, and when to read it — the section you need, not the whole file:
 - [docs/dev/decisions.md](docs/dev/decisions.md) — before changing a computed value or a tooling choice that looks wrong
 - [docs/dev/testing.md](docs/dev/testing.md) — before writing or fixing a test, looking at the UI, measuring performance, running skill evals, or touching the hooks and checks
 - [docs/dev/pitfalls.md](docs/dev/pitfalls.md) — on an unexpected error: `grep -ri '<fragment>' docs/ .claude/skills/` first
+- [docs/dev/dev-speed-state.md](docs/dev/dev-speed-state.md) — the dev-speed branch's run state, deleted before its merge
 - [docs/images/](docs/images) — the screenshots the docs embed; shooting them is the `screenshots` skill
 
 Two are load-bearing: **frontend.md's reactivity rules** (`npm run lint` enforces the no-reactive-`const` one), and **[integrations.md's trust tiers](docs/dev/integrations.md#trust-tiers)** — several upstreams are undocumented and unsanctioned, so don't scale request volume without revisiting them.

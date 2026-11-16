@@ -27,7 +27,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
-const { record, history } = require('./dev-metrics');
+const { record, history, gitCommonDir } = require('./dev-metrics');
 const backlogRuns = require('./backlog-run-log');
 const { describeRun } = require('./e2e-flakes');
 
@@ -422,12 +422,8 @@ function agentSummary(lines) {
 // A session entering a worktree stays under the main checkout's project directory; one started in a
 // worktree is filed under the worktree's own.
 function transcriptDirs(root) {
-  const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
-    cwd: root,
-    encoding: 'utf8',
-  });
   const projects = path.join(os.homedir(), '.claude', 'projects');
-  const main = path.dirname(common.trim()).replace(/[^\w]/g, '-');
+  const main = path.dirname(gitCommonDir(root)).replace(/[^\w]/g, '-');
   const worktrees = fs.existsSync(projects)
     ? fs.readdirSync(projects).filter((d) => d.startsWith(`${main}--claude-worktrees-`))
     : [];

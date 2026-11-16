@@ -10,7 +10,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { record } = require('./dev-metrics');
+const { record, gitCommonDir } = require('./dev-metrics');
 const upstreamBugs = require('./upstream-bugs');
 const prodCheck = require('./prod-check');
 
@@ -43,8 +43,7 @@ function leftovers({ ahead, behind, worktrees, mergedBranches }) {
 }
 
 function state() {
-  const common = path.resolve(git(process.cwd(), 'rev-parse', '--git-common-dir'));
-  const root = path.dirname(common);
+  const root = path.dirname(gitCommonDir(process.cwd()));
   const count = (range) => Number(git(root, 'rev-list', '--count', range));
   const worktrees = git(root, 'worktree', 'list', '--porcelain')
     .split('\n\n')
