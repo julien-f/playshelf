@@ -58,7 +58,7 @@ test("transcriptDirs: the main checkout's and its worktrees', from a worktree to
   }
 });
 
-test('--transcripts runs to the end over every session', () => {
+test('--transcripts --exclude leaves out the sessions named', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-facts-home-'));
   try {
     const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
@@ -74,6 +74,7 @@ test('--transcripts runs to the end over every session', () => {
         env: { ...process.env, HOME: home },
       });
     assert.match(run(), /^3 sessions,/);
+    assert.match(run('--exclude=a,c'), /^1 sessions,/);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

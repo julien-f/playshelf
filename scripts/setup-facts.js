@@ -19,6 +19,7 @@
 //                                                  with the user's reason, questions and answers — long tokens
 //                                                  redacted, for the reader judging them
 //                                                  and which docs were read, how often whole
+//     --exclude=ID,…                               leaves out those sessions (e.g. the reviewing session's own)
 //   node scripts/setup-facts.js --agents[=ID]      per subagent of session ID (default: the newest with any):
 //                                                  time, turns, cache reads, failed calls, time in tests/e2e/commits, all tool time and its top commands
 
@@ -556,13 +557,13 @@ function linesSince(lines, since) {
   });
 }
 
-// `{ limit }` or `{ since }` (ms): the newest `limit` sessions, or every entry after `since`.
-function transcripts({ limit, since }, digestDir) {
+// `{ limit }` or `{ since }` (ms): the newest `limit` sessions, or every entry after `since`, but `exclude`'s ids.
+function transcripts({ limit, since }, digestDir, exclude = []) {
   const sorted = transcriptDirs(ROOT)
     .flatMap((dir) =>
       fs
         .readdirSync(dir)
-        .filter((f) => f.endsWith('.jsonl'))
+        .filter((f) => f.endsWith('.jsonl') && !exclude.includes(path.basename(f, '.jsonl')))
         .map((f) => path.join(dir, f)),
     )
     .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
@@ -662,10 +663,11 @@ function scripts() {
 
 if (require.main === module) {
   const [flag, ...more] = process.argv.slice(2);
-  const digestDir = flag?.startsWith('--transcripts')
-    ? more.find((a) => a.startsWith('--digest='))?.slice(9)
-    : undefined;
-  const rest = more.filter((a) => digestDir === undefined || a !== `--digest=${digestDir}`);
+  const option = (name) =>
+    flag?.startsWith('--transcripts') ? more.find((a) => a.startsWith(`--${name}=`)) : undefined;
+  const digestDir = option('digest')?.slice(9);
+  const exclude = option('exclude')?.slice(10).split(',') ?? [];
+  const rest = more.filter((a) => a !== option('digest') && a !== option('exclude'));
   const value = flag?.startsWith('--transcripts') ? (flag.split('=')[1] ?? '20') : '20';
   const range = /^\d+$/.test(value) ? { limit: Number(value) } : { since: Date.parse(value) };
   if (
@@ -674,7 +676,7 @@ if (require.main === module) {
     !(range.limit > 0 || range.since > 0)
   ) {
     console.error(
-      'Usage: node scripts/setup-facts.js [--cost | --transcripts[=N|=DATE] [--digest=DIR] | --agents[=SESSION_ID]]',
+      'Usage: node scripts/setup-facts.js [--cost | --transcripts[=N|=DATE] [--digest=DIR] [--exclude=ID,…] | --agents[=SESSION_ID]]',
     );
     process.exit(1);
   }
@@ -686,7 +688,7 @@ if (require.main === module) {
       process.exit(1);
     }
   } else if (flag === '--cost') cost();
-  else if (flag?.startsWith('--transcripts')) transcripts(range, digestDir);
+  else if (flag?.startsWith('--transcripts')) transcripts(range, digestDir, exclude);
   else scripts();
 }
 
