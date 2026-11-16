@@ -421,16 +421,16 @@ test('costLine: size and change since the last run; a failed run is marked not r
   );
 });
 
-test("loadLine: the load now and at the last run, so a ⚠ is read against other sessions' load", () => {
+test("loadLine: the run's peak load and the last run's, so a ⚠ is read against other sessions' load", () => {
   const cores = os.cpus().length;
-  assert.equal(loadLine(32.5, undefined), `Load average: 32.5 on ${cores} cores (last run: not recorded)`);
+  assert.equal(loadLine(32.5, undefined), `Peak load average: 32.5 on ${cores} cores (last run: not recorded)`);
   assert.equal(
     loadLine(32.5, { at: '2026-11-14T19:37:16Z', seconds: {} }),
-    `Load average: 32.5 on ${cores} cores (last run: not recorded)`,
+    `Peak load average: 32.5 on ${cores} cores (last run: not recorded)`,
   );
   assert.equal(
     loadLine(4, { at: '2026-11-14T19:37:16Z', seconds: {}, load: 30.2 }),
-    `Load average: 4 on ${cores} cores (last run: 30.2 on 2026-11-14)`,
+    `Peak load average: 4 on ${cores} cores (last run: 30.2 on 2026-11-14)`,
   );
 });
 
