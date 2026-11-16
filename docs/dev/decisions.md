@@ -71,5 +71,6 @@ It is also one dimension (`tier:<tier>`, weight 1) of `tagTaste.ts`'s tag vector
 ## Formatting: Prettier's experimental CLI, one process
 
 - `format` and `format:check` run `prettier --experimental-cli --no-parallel`: its cache hashes each file's content and skips the full re-check the legacy CLI does, so a warm check inside the pre-commit hook costs 0.24 s CPU against 1.00 s (2026-11-16, load ~36).
+- `prettier` is pinned exactly in `package.json`: the experimental CLI may change its flags or cache in any release, so an upgrade is a deliberate bump that reruns `npm run format:check`.
 - `--no-parallel`: the default worker pool cut a cold run's wall time but tripled its CPU (28 s vs 10 s), which loses under the load the hook runs in.
 - Neither CLI's cache can move between checkouts: the legacy one hashes each file's absolute path into its options hash, the experimental one hashes the absolute config and ignore paths into its cache version. A fresh worktree's first check is cold (~10 s CPU).
