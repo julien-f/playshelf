@@ -2,6 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
+const path = require('node:path');
 
 const { runAll, runRow, staleDep, steps, touchesUi } = require('../scripts/check');
 
@@ -36,7 +37,10 @@ test('runRow: full run or commit, seconds per step, the failed steps', () => {
     { name: 'test', ok: true, ms: 4321 },
     { name: 'lint', ok: false, ms: 1000 },
   ];
-  assert.deepStrictEqual(runRow('HEAD', results), { run: 'commit', seconds: { test: 4.3, lint: 1 }, failed: ['lint'] });
+  const { load, checkout, ...row } = runRow('HEAD', results);
+  assert.deepStrictEqual(row, { run: 'commit', seconds: { test: 4.3, lint: 1 }, failed: ['lint'] });
+  assert.strictEqual(typeof load, 'number');
+  assert.strictEqual(checkout, path.resolve(__dirname, '..'));
   assert.strictEqual(runRow(undefined, []).run, 'full');
 });
 

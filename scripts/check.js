@@ -5,6 +5,8 @@
 // checks the commit against <base> instead: typecheck, lint and the CSS check run only when something
 // they cover is staged; e2e is the pre-push hook's. Each run's step times and failures go to scripts/dev-metrics.js.
 
+const os = require('node:os');
+const path = require('node:path');
 const { execFileSync, spawn } = require('node:child_process');
 const { record } = require('./dev-metrics');
 
@@ -67,9 +69,12 @@ function staleDep(lock, installed) {
 }
 
 // A run's metrics row: a commit's (the pre-commit hook) or a full one's, each step's seconds and the failed ones.
+// The load and checkout let a p90 leave out runs under other sessions' load or in a fresh worktree's cold caches.
 function runRow(staged, results) {
   return {
     run: staged === undefined ? 'full' : 'commit',
+    load: Number(os.loadavg()[0].toFixed(1)),
+    checkout: path.resolve(__dirname, '..'),
     seconds: Object.fromEntries(results.map((r) => [r.name, Number((r.ms / 1000).toFixed(1))])),
     failed: results.filter((r) => !r.ok).map((r) => r.name),
   };
