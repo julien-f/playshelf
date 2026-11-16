@@ -10,7 +10,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { record, gitCommonDir } = require('./dev-metrics');
+const { record } = require('./dev-metrics');
+const { gitCommonDir } = require('./git');
 const upstreamBugs = require('./upstream-bugs');
 const prodCheck = require('./prod-check');
 

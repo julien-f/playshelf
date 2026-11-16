@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const util = require('node:util');
 const { portOf } = require('./ports');
-const { gitCommonDir } = require('./dev-metrics');
+const { gitCommonDir } = require('./git');
 
 // The environment for a server in `root`, the main checkout being `main`: main's `.env`, then the overrides.
 function worktreeEnv(root, main) {

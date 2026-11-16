@@ -18,7 +18,8 @@ const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 const { touchesUi } = require('./check');
 const { portOf } = require('./ports');
-const { record, gitCommonDir } = require('./dev-metrics');
+const { record } = require('./dev-metrics');
+const { gitCommonDir } = require('./git');
 const PROJECTS = Object.keys(require('./e2e-projects'));
 
 const ROOT = path.join(__dirname, '..');

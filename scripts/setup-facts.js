@@ -27,7 +27,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
-const { record, history, gitCommonDir } = require('./dev-metrics');
+const { record, history } = require('./dev-metrics');
+const { gitCommonDir } = require('./git');
 const backlogRuns = require('./backlog-run-log');
 const { describeRun } = require('./e2e-flakes');
 
