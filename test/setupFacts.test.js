@@ -2,12 +2,17 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const {
   callers,
   argsWithoutUsage,
   commandKey,
   costDelta,
   costLine,
+  loadLine,
   checkStats,
   e2eRunStats,
   parseSession,
@@ -24,7 +29,56 @@ const {
   agentSummary,
   docReads,
   docReadStats,
+  transcriptDirs,
 } = require('../scripts/setup-facts');
+
+test("transcriptDirs: the main checkout's and its worktrees', from a worktree too", () => {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'setup-facts-')));
+  const home = process.env.HOME;
+  try {
+    const main = path.join(tmp, 'repo');
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+    const git = (...args) => execFileSync('git', args, { cwd: main, stdio: 'ignore', env });
+    fs.mkdirSync(main);
+    git('init', '-q');
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x');
+    git('worktree', 'add', '-q', path.join(main, '.claude', 'worktrees', 'wt'));
+    process.env.HOME = path.join(tmp, 'home');
+    const projects = path.join(process.env.HOME, '.claude', 'projects');
+    const encoded = main.replace(/[^\w]/g, '-');
+    for (const d of [encoded, `${encoded}--claude-worktrees-wt`, `${encoded}-other`]) {
+      fs.mkdirSync(path.join(projects, d), { recursive: true });
+    }
+    const expected = [encoded, `${encoded}--claude-worktrees-wt`].map((d) => path.join(projects, d));
+    assert.deepEqual(transcriptDirs(main), expected);
+    assert.deepEqual(transcriptDirs(path.join(main, '.claude', 'worktrees', 'wt')), expected);
+  } finally {
+    process.env.HOME = home;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('--transcripts --exclude leaves out the sessions named', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-facts-home-'));
+  try {
+    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+      encoding: 'utf8',
+    });
+    const dir = path.join(home, '.claude', 'projects', path.dirname(common.trim()).replace(/[^\w]/g, '-'));
+    fs.mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify({ type: 'user', timestamp: '2026-11-16T10:00:00Z', message: { content: 'hi' } });
+    for (const id of ['a', 'b', 'c']) fs.writeFileSync(path.join(dir, `${id}.jsonl`), line + '\n');
+    const run = (...args) =>
+      execFileSync('node', [path.join(__dirname, '..', 'scripts', 'setup-facts.js'), '--transcripts', ...args], {
+        encoding: 'utf8',
+        env: { ...process.env, HOME: home },
+      });
+    assert.match(run(), /^3 sessions,/);
+    assert.match(run('--exclude=a,c'), /^1 sessions,/);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
 
 test('callers matches script paths and relative requires, not substrings', () => {
   const files = [
@@ -395,6 +449,19 @@ test('costLine: size and change since the last run; a failed run is marked not r
   assert.equal(
     costLine('test:e2e', { seconds: 9.9, out: 'x', status: 1 }, last),
     'npm run test:e2e: 9.9 s, 0.0 KB, 1 lines, exit 1, not recorded',
+  );
+});
+
+test("loadLine: the run's peak load and the last run's, so a ⚠ is read against other sessions' load", () => {
+  const cores = os.cpus().length;
+  assert.equal(loadLine(32.5, undefined), `Peak load average: 32.5 on ${cores} cores (last run: not recorded)`);
+  assert.equal(
+    loadLine(32.5, { at: '2026-11-14T19:37:16Z', seconds: {} }),
+    `Peak load average: 32.5 on ${cores} cores (last run: not recorded)`,
+  );
+  assert.equal(
+    loadLine(4, { at: '2026-11-14T19:37:16Z', seconds: {}, load: 30.2 }),
+    `Peak load average: 4 on ${cores} cores (last run: 30.2 on 2026-11-14)`,
   );
 });
 

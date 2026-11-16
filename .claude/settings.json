@@ -22,7 +22,12 @@
       "Bash(git log *)",
       "Bash(git show *)"
     ],
-    "ask": ["Bash(git push --force*)", "Bash(git push -f*)", "Bash(git reset --hard*)"]
+    "ask": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(node scripts/merge.js finish*)"
+    ]
   },
   "hooks": {
     "PreToolUse": [

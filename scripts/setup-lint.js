@@ -13,7 +13,7 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const MAX_DESCRIPTION = 1024; // the Agent Skills spec's limit
 
-// One command per ask-first action in CLAUDE.md and ~/.claude/CLAUDE.md; no allow may match any.
+// One command per ask-first action in CLAUDE.md and ~/.claude/CLAUDE.md; no allow may match one an ask rule doesn't.
 const ASK_FIRST = [
   'git commit -m x',
   'git push origin main',
@@ -34,6 +34,7 @@ const ASK_FIRST = [
   'gh pr comment 1',
   'gh issue comment 1',
   'ssh steam.isonoe.net',
+  'node scripts/merge.js finish x', // fast-forwards main
 ];
 
 // Claude Code's Bash rule syntax: `Bash` (any), `Bash(cmd)`, `Bash(prefix:*)`, `*` as a wildcard.
@@ -48,8 +49,9 @@ function ruleMatches(rule, command) {
 
 // `file`: path for messages; `settings`: its parsed JSON.
 function permissionProblems(file, settings) {
+  const asked = (command) => (settings.permissions?.ask ?? []).some((rule) => ruleMatches(rule, command));
   return (settings.permissions?.allow ?? []).flatMap((rule) =>
-    ASK_FIRST.filter((command) => ruleMatches(rule, command)).map(
+    ASK_FIRST.filter((command) => ruleMatches(rule, command) && !asked(command)).map(
       (command) => `${file}: allow "${rule}" pre-approves an ask-first action (\`${command}\`)`,
     ),
   );

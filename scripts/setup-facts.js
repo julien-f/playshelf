@@ -4,7 +4,7 @@
 //   node scripts/setup-facts.js                    each script's callers (tests and the changelog excluded —
 //                                                  a script only they mention has no caller), and which read
 //                                                  arguments without printing a usage line
-//   node scripts/setup-facts.js --cost             time and output size of the gates an agent runs, and each
+//   node scripts/setup-facts.js --cost             the peak load average, time and output size of the gates an agent runs, each
 //                                                  gate's change since the last run, and the check runs (hooks
 //                                                  included) since then: blocked commits, timings (scripts/dev-metrics.js)
 //   node scripts/setup-facts.js --transcripts[=N|=DATE]  the last N (default 20) sessions', or everything
@@ -19,6 +19,7 @@
 //                                                  with the user's reason, questions and answers — long tokens
 //                                                  redacted, for the reader judging them
 //                                                  and which docs were read, how often whole
+//     --exclude=ID,…                               leaves out those sessions (e.g. the reviewing session's own)
 //   node scripts/setup-facts.js --agents[=ID]      per subagent of session ID (default: the newest with any):
 //                                                  time, turns, cache reads, failed calls, time in tests/e2e/commits, all tool time and its top commands
 
@@ -418,18 +419,31 @@ function agentSummary(lines) {
   };
 }
 
+// A session entering a worktree stays under the main checkout's project directory; one started in a
+// worktree is filed under the worktree's own.
+function transcriptDirs(root) {
+  const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  const projects = path.join(os.homedir(), '.claude', 'projects');
+  const main = path.dirname(common.trim()).replace(/[^\w]/g, '-');
+  const worktrees = fs.existsSync(projects)
+    ? fs.readdirSync(projects).filter((d) => d.startsWith(`${main}--claude-worktrees-`))
+    : [];
+  return [main, ...worktrees].map((d) => path.join(projects, d));
+}
+
 function agents(sessionId) {
-  const dir = path.join(os.homedir(), '.claude', 'projects', ROOT.replace(/[^\w]/g, '-'));
-  const withAgents = fs
-    .readdirSync(dir)
-    .filter((d) => fs.existsSync(path.join(dir, d, 'subagents')))
-    .sort(
-      (a, b) =>
-        fs.statSync(path.join(dir, b, 'subagents')).mtimeMs - fs.statSync(path.join(dir, a, 'subagents')).mtimeMs,
-    );
-  const session = sessionId ?? withAgents[0];
-  if (!session || !withAgents.includes(session)) throw new Error(`no subagents for session ${session ?? '(none)'}`);
-  const sub = path.join(dir, session, 'subagents');
+  const subs = transcriptDirs(ROOT)
+    .filter((dir) => fs.existsSync(dir))
+    .flatMap((dir) => fs.readdirSync(dir).map((d) => path.join(dir, d, 'subagents')))
+    .filter((sub) => fs.existsSync(sub))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  const sessionOf = (sub) => path.basename(path.dirname(sub));
+  const session = sessionId ?? (subs[0] && sessionOf(subs[0]));
+  const sub = subs.find((s) => sessionOf(s) === session);
+  if (!sub) throw new Error(`no subagents for session ${session ?? '(none)'}`);
   for (const file of fs.readdirSync(sub).filter((f) => f.endsWith('.jsonl'))) {
     const metaFile = path.join(sub, file.replace(/\.jsonl$/, '.meta.json'));
     const label = fs.existsSync(metaFile) ? JSON.parse(fs.readFileSync(metaFile, 'utf8')).description : file;
@@ -460,15 +474,20 @@ function cost() {
       .join(', ')}`,
   );
   const last = history('cost').at(-1);
+  // The 1-minute load after each script, so another session's run during the timings shows.
+  const loads = [os.loadavg()[0]];
   const seconds = {};
   for (const script of COST_SCRIPTS) {
     const start = Date.now();
     const { status, stdout, stderr } = spawnSync(npm, ['run', '-s', script], { cwd: ROOT, encoding: 'utf8' });
+    loads.push(os.loadavg()[0]);
     const run = { seconds: Number(((Date.now() - start) / 1000).toFixed(1)), out: stdout + stderr, status };
     console.log(costLine(script, run, last));
     if (!status) seconds[script] = run.seconds;
   }
-  record('cost', { seconds });
+  const load = Number(Math.max(...loads).toFixed(1));
+  console.log(loadLine(load, last));
+  record('cost', { seconds, load });
   const since = last?.at ?? '';
   console.log(
     `Check runs${since ? ` since ${since.slice(0, 10)}` : ''} (scripts/check.js): ${checkStats(history('checks').filter((r) => r.at > since))}`,
@@ -509,6 +528,12 @@ function e2eRunStats(rows) {
     .join(' · ');
 }
 
+// Timings swing with other sessions' load, so a ⚠ below is read against both runs' load.
+function loadLine(load, last) {
+  const before = last?.load === undefined ? 'not recorded' : `${last.load} on ${last.at.slice(0, 10)}`;
+  return `Peak load average: ${load} on ${os.cpus().length} cores (last run: ${before})`;
+}
+
 // A failed run (e.g. e2e's port taken by another checkout) is no baseline: it isn't recorded or compared.
 function costLine(script, { seconds, out, status }, last) {
   const size = `${seconds} s, ${kb(out.length)}, ${out.split('\n').length} lines`;
@@ -532,18 +557,20 @@ function linesSince(lines, since) {
   });
 }
 
-// `{ limit }` or `{ since }` (ms): the newest `limit` sessions, or every entry after `since`.
-function transcripts({ limit, since }, digestDir) {
-  const dir = path.join(os.homedir(), '.claude', 'projects', ROOT.replace(/[^\w]/g, '-'));
-  const sorted = fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.jsonl'))
-    .map((f) => path.join(dir, f))
+// `{ limit }` or `{ since }` (ms): the newest `limit` sessions, or every entry after `since`, but `exclude`'s ids.
+function transcripts({ limit, since }, digestDir, exclude = []) {
+  const sorted = transcriptDirs(ROOT)
+    .flatMap((dir) =>
+      fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith('.jsonl') && !exclude.includes(path.basename(f, '.jsonl')))
+        .map((f) => path.join(dir, f)),
+    )
     .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
   const files = since === undefined ? sorted.slice(0, limit) : sorted.filter((f) => fs.statSync(f).mtimeMs > since);
   const read = files
-    .map((f) => [path.basename(f, '.jsonl'), fs.readFileSync(f, 'utf8').split('\n').filter(Boolean)])
-    .map(([id, lines]) => [id, since === undefined ? lines : linesSince(lines, since)])
+    .map((f) => [path.basename(f, '.jsonl'), fs.readFileSync(f, 'utf8').split('\n').filter(Boolean), f])
+    .map(([id, lines, f]) => [id, since === undefined ? lines : linesSince(lines, since), f])
     .filter(([, lines]) => lines.length);
   const logs = read.map(([, lines]) => lines);
   const sessions = logs.map(parseSession);
@@ -578,8 +605,8 @@ function transcripts({ limit, since }, digestDir) {
   console.log('\nDenied by the permission classifier · rejected by the user:');
   for (const d of denied) console.log(`  ${d.key}: ${d.denied} · ${d.rejected}`);
   // Subagents act on the session's behalf, so their transcripts count for skills followed and docs read.
-  const subagentLogs = read.map(([id]) => {
-    const sub = path.join(dir, id, 'subagents');
+  const subagentLogs = read.map(([, , f]) => {
+    const sub = path.join(f.replace(/\.jsonl$/, ''), 'subagents');
     return fs.existsSync(sub)
       ? fs
           .readdirSync(sub)
@@ -636,10 +663,11 @@ function scripts() {
 
 if (require.main === module) {
   const [flag, ...more] = process.argv.slice(2);
-  const digestDir = flag?.startsWith('--transcripts')
-    ? more.find((a) => a.startsWith('--digest='))?.slice(9)
-    : undefined;
-  const rest = more.filter((a) => digestDir === undefined || a !== `--digest=${digestDir}`);
+  const option = (name) =>
+    flag?.startsWith('--transcripts') ? more.find((a) => a.startsWith(`--${name}=`)) : undefined;
+  const digestDir = option('digest')?.slice(9);
+  const exclude = option('exclude')?.slice(10).split(',') ?? [];
+  const rest = more.filter((a) => a !== option('digest') && a !== option('exclude'));
   const value = flag?.startsWith('--transcripts') ? (flag.split('=')[1] ?? '20') : '20';
   const range = /^\d+$/.test(value) ? { limit: Number(value) } : { since: Date.parse(value) };
   if (
@@ -648,7 +676,7 @@ if (require.main === module) {
     !(range.limit > 0 || range.since > 0)
   ) {
     console.error(
-      'Usage: node scripts/setup-facts.js [--cost | --transcripts[=N|=DATE] [--digest=DIR] | --agents[=SESSION_ID]]',
+      'Usage: node scripts/setup-facts.js [--cost | --transcripts[=N|=DATE] [--digest=DIR] [--exclude=ID,…] | --agents[=SESSION_ID]]',
     );
     process.exit(1);
   }
@@ -660,7 +688,7 @@ if (require.main === module) {
       process.exit(1);
     }
   } else if (flag === '--cost') cost();
-  else if (flag?.startsWith('--transcripts')) transcripts(range, digestDir);
+  else if (flag?.startsWith('--transcripts')) transcripts(range, digestDir, exclude);
   else scripts();
 }
 
@@ -670,6 +698,7 @@ module.exports = {
   commandKey,
   costDelta,
   costLine,
+  loadLine,
   checkStats,
   e2eRunStats,
   parseSession,
@@ -686,4 +715,5 @@ module.exports = {
   agentSummary,
   docReads,
   docReadStats,
+  transcriptDirs,
 };
