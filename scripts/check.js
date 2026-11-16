@@ -5,6 +5,7 @@
 // checks the commit against <base> instead: typecheck, lint and the CSS check run only when something
 // they cover is staged; e2e is the pre-push hook's. Each run's step times and failures go to scripts/dev-metrics.js.
 
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawn } = require('node:child_process');
@@ -68,13 +69,24 @@ function staleDep(lock, installed) {
   return null;
 }
 
+// The steps whose npm script names a `--cache-location` missing under `root`: they start cold.
+function coldSteps(stepList, scripts, root) {
+  return stepList
+    .filter(([, [script]]) => {
+      const loc = /--cache-location (\S+)/.exec(scripts[script] ?? '')?.[1];
+      return loc && !fs.existsSync(path.join(root, loc));
+    })
+    .map(([name]) => name);
+}
+
 // A run's metrics row: a commit's (the pre-commit hook) or a full one's, each step's seconds and the failed ones.
-// The load (sampled before the steps add theirs) and checkout let a p90 leave out runs under other sessions' load
-// or in a fresh worktree's cold caches.
-function runRow(staged, results, load) {
+// `start`'s load (sampled before the steps add theirs) and cold steps let a p90 leave out
+// runs under other sessions' load or on empty caches.
+function runRow(staged, results, { load, cold }) {
   return {
     run: staged === undefined ? 'full' : 'commit',
     load: Number(load.toFixed(1)),
+    cold,
     checkout: path.resolve(__dirname, '..'),
     seconds: Object.fromEntries(results.map((r) => [r.name, Number((r.ms / 1000).toFixed(1))])),
     failed: results.filter((r) => !r.ok).map((r) => r.name),
@@ -82,7 +94,6 @@ function runRow(staged, results, load) {
 }
 
 async function main() {
-  const load = os.loadavg()[0];
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   const staged = process.argv
     .slice(2)
@@ -100,12 +111,17 @@ async function main() {
   }
   const stale = staleDep(require('../package-lock.json').packages, installed);
   if (stale) {
-    record('checks', { ...runRow(staged, [], load), failed: ['deps'] });
+    record('checks', { ...runRow(staged, [], { load: os.loadavg()[0], cold: [] }), failed: ['deps'] });
     console.log(`✗ node_modules is behind package-lock.json: ${stale}. Run npm ci.`);
     process.exit(1);
   }
-  const results = await runAll(steps(staged, files).map(([name, args]) => [name, npm, ['run', '-s', ...args]]));
-  record('checks', runRow(staged, results, load));
+  const stepList = steps(staged, files);
+  const start = {
+    load: os.loadavg()[0],
+    cold: coldSteps(stepList, require('../package.json').scripts, path.join(__dirname, '..')),
+  };
+  const results = await runAll(stepList.map(([name, args]) => [name, npm, ['run', '-s', ...args]]));
+  record('checks', runRow(staged, results, start));
   for (const r of results) console.log(`${r.ok ? '✓' : '✗'} ${r.name} (${(r.ms / 1000).toFixed(1)} s)`);
   for (const r of results.filter((r) => !r.ok)) console.log(`\n── ${r.name} failed ──\n${r.output.trimEnd()}`);
   if (results.some((r) => !r.ok)) process.exit(1);
@@ -113,4 +129,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { runAll, runRow, staleDep, steps, touchesUi };
+module.exports = { coldSteps, runAll, runRow, staleDep, steps, touchesUi };

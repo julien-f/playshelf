@@ -2,9 +2,11 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
-const { runAll, runRow, staleDep, steps, touchesUi } = require('../scripts/check');
+const { coldSteps, runAll, runRow, staleDep, steps, touchesUi } = require('../scripts/check');
 
 test('runAll: every step runs, in order, with its pass/fail and output', async () => {
   const node = process.execPath;
@@ -32,15 +34,43 @@ test('steps: never e2e (pre-push runs it); a commit has the UI checks only when 
   assert.deepStrictEqual(steps('HEAD~1')[1][1], ['check:changelog', '--', '--staged=HEAD~1']);
 });
 
-test('runRow: full run or commit, the load given, seconds per step, the failed steps', () => {
+test('runRow: full run or commit, the load and cold steps given, seconds per step, the failed steps', () => {
   const results = [
     { name: 'test', ok: true, ms: 4321 },
     { name: 'lint', ok: false, ms: 1000 },
   ];
-  const { checkout, ...row } = runRow('HEAD', results, 3.14);
-  assert.deepStrictEqual(row, { run: 'commit', load: 3.1, seconds: { test: 4.3, lint: 1 }, failed: ['lint'] });
+  const { checkout, ...row } = runRow('HEAD', results, { load: 3.14, cold: ['lint'] });
+  assert.deepStrictEqual(row, {
+    run: 'commit',
+    load: 3.1,
+    cold: ['lint'],
+    seconds: { test: 4.3, lint: 1 },
+    failed: ['lint'],
+  });
   assert.strictEqual(checkout, path.resolve(__dirname, '..'));
-  assert.strictEqual(runRow(undefined, [], 0).run, 'full');
+  assert.strictEqual(runRow(undefined, [], { load: 0, cold: [] }).run, 'full');
+});
+
+test('coldSteps: the steps whose script names a cache location not there yet', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cold-'));
+  try {
+    fs.mkdirSync(path.join(root, 'warm'));
+    const scripts = { a: 'x --cache-location warm/', b: 'y --cache-location cold/c.json', c: 'z' };
+    assert.deepStrictEqual(
+      coldSteps(
+        [
+          ['A', ['a']],
+          ['B', ['b']],
+          ['C', ['c']],
+        ],
+        scripts,
+        root,
+      ),
+      ['B'],
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true });
+  }
 });
 
 test('touchesUi: frontend, e2e and their configs count; backend, docs and scripts do not', () => {
