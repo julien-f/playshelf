@@ -67,6 +67,7 @@ The user-level rules apply; here:
 
 - Substantial detail goes in a `docs/` file linked from Where things are documented above, not duplicated in this file.
 - `.env` is gitignored; `default.env` documents every setting.
+- A long run's temporary state (lanes, queue, where it paused) goes on its branch as `.claude/<branch>-state.md`, deleted before the merge: under `docs/` it would need a CLAUDE.md index line (doc-lint).
 
 ## Git workflow
 
