@@ -34,6 +34,15 @@ test('permissionProblems covers the user-level ask-first list', () => {
   }
 });
 
+test('permissionProblems flags merge.js finish, which lands on main, unless an ask rule covers it', () => {
+  const allow = ['Bash(node scripts/*)'];
+  assert.deepEqual(permissionProblems('s.json', { permissions: { allow } }), [
+    's.json: allow "Bash(node scripts/*)" pre-approves an ask-first action (`node scripts/merge.js finish x`)',
+  ]);
+  const ask = ['Bash(node scripts/merge.js finish*)'];
+  assert.deepEqual(permissionProblems('s.json', { permissions: { allow, ask } }), []);
+});
+
 test('skillProblems checks the name, the "Use when" and the description length', () => {
   const skill = (name, description) => `---\nname: ${name}\ndescription: ${description}\n---\n\n# X`;
   assert.deepEqual(skillProblems('a', skill('a', 'Does x. Use when asked.')), []);
