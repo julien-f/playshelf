@@ -32,16 +32,15 @@ test('steps: never e2e (pre-push runs it); a commit has the UI checks only when 
   assert.deepStrictEqual(steps('HEAD~1')[1][1], ['check:changelog', '--', '--staged=HEAD~1']);
 });
 
-test('runRow: full run or commit, seconds per step, the failed steps', () => {
+test('runRow: full run or commit, the load given, seconds per step, the failed steps', () => {
   const results = [
     { name: 'test', ok: true, ms: 4321 },
     { name: 'lint', ok: false, ms: 1000 },
   ];
-  const { load, checkout, ...row } = runRow('HEAD', results);
-  assert.deepStrictEqual(row, { run: 'commit', seconds: { test: 4.3, lint: 1 }, failed: ['lint'] });
-  assert.strictEqual(typeof load, 'number');
+  const { checkout, ...row } = runRow('HEAD', results, 3.14);
+  assert.deepStrictEqual(row, { run: 'commit', load: 3.1, seconds: { test: 4.3, lint: 1 }, failed: ['lint'] });
   assert.strictEqual(checkout, path.resolve(__dirname, '..'));
-  assert.strictEqual(runRow(undefined, []).run, 'full');
+  assert.strictEqual(runRow(undefined, [], 0).run, 'full');
 });
 
 test('touchesUi: frontend, e2e and their configs count; backend, docs and scripts do not', () => {
