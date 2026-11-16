@@ -29,22 +29,31 @@ const {
   agentSummary,
   docReads,
   docReadStats,
-  transcriptDir,
+  transcriptDirs,
 } = require('../scripts/setup-facts');
 
-test("transcriptDir is the main checkout's from a worktree too", () => {
+test("transcriptDirs: the main checkout's and its worktrees', from a worktree too", () => {
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'setup-facts-')));
+  const home = process.env.HOME;
   try {
     const main = path.join(tmp, 'repo');
-    const git = (...args) => execFileSync('git', args, { cwd: main, stdio: 'ignore' });
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+    const git = (...args) => execFileSync('git', args, { cwd: main, stdio: 'ignore', env });
     fs.mkdirSync(main);
     git('init', '-q');
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x');
     git('worktree', 'add', '-q', path.join(main, '.claude', 'worktrees', 'wt'));
-    const expected = path.join(os.homedir(), '.claude', 'projects', main.replace(/[^\w]/g, '-'));
-    assert.equal(transcriptDir(main), expected);
-    assert.equal(transcriptDir(path.join(main, '.claude', 'worktrees', 'wt')), expected);
+    process.env.HOME = path.join(tmp, 'home');
+    const projects = path.join(process.env.HOME, '.claude', 'projects');
+    const encoded = main.replace(/[^\w]/g, '-');
+    for (const d of [encoded, `${encoded}--claude-worktrees-wt`, `${encoded}-other`]) {
+      fs.mkdirSync(path.join(projects, d), { recursive: true });
+    }
+    const expected = [encoded, `${encoded}--claude-worktrees-wt`].map((d) => path.join(projects, d));
+    assert.deepEqual(transcriptDirs(main), expected);
+    assert.deepEqual(transcriptDirs(path.join(main, '.claude', 'worktrees', 'wt')), expected);
   } finally {
+    process.env.HOME = home;
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });

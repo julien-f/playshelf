@@ -418,27 +418,31 @@ function agentSummary(lines) {
   };
 }
 
-// Claude Code files a worktree's sessions under the main checkout's project directory.
-function transcriptDir(root) {
+// A session entering a worktree stays under the main checkout's project directory; one started in a
+// worktree is filed under the worktree's own.
+function transcriptDirs(root) {
   const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
     cwd: root,
     encoding: 'utf8',
   });
-  return path.join(os.homedir(), '.claude', 'projects', path.dirname(common.trim()).replace(/[^\w]/g, '-'));
+  const projects = path.join(os.homedir(), '.claude', 'projects');
+  const main = path.dirname(common.trim()).replace(/[^\w]/g, '-');
+  const worktrees = fs.existsSync(projects)
+    ? fs.readdirSync(projects).filter((d) => d.startsWith(`${main}--claude-worktrees-`))
+    : [];
+  return [main, ...worktrees].map((d) => path.join(projects, d));
 }
 
 function agents(sessionId) {
-  const dir = transcriptDir(ROOT);
-  const withAgents = fs
-    .readdirSync(dir)
-    .filter((d) => fs.existsSync(path.join(dir, d, 'subagents')))
-    .sort(
-      (a, b) =>
-        fs.statSync(path.join(dir, b, 'subagents')).mtimeMs - fs.statSync(path.join(dir, a, 'subagents')).mtimeMs,
-    );
-  const session = sessionId ?? withAgents[0];
-  if (!session || !withAgents.includes(session)) throw new Error(`no subagents for session ${session ?? '(none)'}`);
-  const sub = path.join(dir, session, 'subagents');
+  const subs = transcriptDirs(ROOT)
+    .filter((dir) => fs.existsSync(dir))
+    .flatMap((dir) => fs.readdirSync(dir).map((d) => path.join(dir, d, 'subagents')))
+    .filter((sub) => fs.existsSync(sub))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  const sessionOf = (sub) => path.basename(path.dirname(sub));
+  const session = sessionId ?? (subs[0] && sessionOf(subs[0]));
+  const sub = subs.find((s) => sessionOf(s) === session);
+  if (!sub) throw new Error(`no subagents for session ${session ?? '(none)'}`);
   for (const file of fs.readdirSync(sub).filter((f) => f.endsWith('.jsonl'))) {
     const metaFile = path.join(sub, file.replace(/\.jsonl$/, '.meta.json'));
     const label = fs.existsSync(metaFile) ? JSON.parse(fs.readFileSync(metaFile, 'utf8')).description : file;
@@ -554,11 +558,13 @@ function linesSince(lines, since) {
 
 // `{ limit }` or `{ since }` (ms): the newest `limit` sessions, or every entry after `since`.
 function transcripts({ limit, since }, digestDir) {
-  const dir = transcriptDir(ROOT);
-  const sorted = fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.jsonl'))
-    .map((f) => path.join(dir, f))
+  const sorted = transcriptDirs(ROOT)
+    .flatMap((dir) =>
+      fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith('.jsonl'))
+        .map((f) => path.join(dir, f)),
+    )
     .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
   const files = since === undefined ? sorted.slice(0, limit) : sorted.filter((f) => fs.statSync(f).mtimeMs > since);
   const read = files
@@ -707,5 +713,5 @@ module.exports = {
   agentSummary,
   docReads,
   docReadStats,
-  transcriptDir,
+  transcriptDirs,
 };
