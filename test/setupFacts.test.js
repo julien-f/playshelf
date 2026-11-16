@@ -58,6 +58,27 @@ test("transcriptDirs: the main checkout's and its worktrees', from a worktree to
   }
 });
 
+test('--transcripts runs to the end over every session', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-facts-home-'));
+  try {
+    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+      encoding: 'utf8',
+    });
+    const dir = path.join(home, '.claude', 'projects', path.dirname(common.trim()).replace(/[^\w]/g, '-'));
+    fs.mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify({ type: 'user', timestamp: '2026-11-16T10:00:00Z', message: { content: 'hi' } });
+    for (const id of ['a', 'b', 'c']) fs.writeFileSync(path.join(dir, `${id}.jsonl`), line + '\n');
+    const run = (...args) =>
+      execFileSync('node', [path.join(__dirname, '..', 'scripts', 'setup-facts.js'), '--transcripts', ...args], {
+        encoding: 'utf8',
+        env: { ...process.env, HOME: home },
+      });
+    assert.match(run(), /^3 sessions,/);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('callers matches script paths and relative requires, not substrings', () => {
   const files = [
     ['package.json', '"check": "node scripts/check.js"'],

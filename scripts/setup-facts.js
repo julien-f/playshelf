@@ -568,8 +568,8 @@ function transcripts({ limit, since }, digestDir) {
     .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
   const files = since === undefined ? sorted.slice(0, limit) : sorted.filter((f) => fs.statSync(f).mtimeMs > since);
   const read = files
-    .map((f) => [path.basename(f, '.jsonl'), fs.readFileSync(f, 'utf8').split('\n').filter(Boolean)])
-    .map(([id, lines]) => [id, since === undefined ? lines : linesSince(lines, since)])
+    .map((f) => [path.basename(f, '.jsonl'), fs.readFileSync(f, 'utf8').split('\n').filter(Boolean), f])
+    .map(([id, lines, f]) => [id, since === undefined ? lines : linesSince(lines, since), f])
     .filter(([, lines]) => lines.length);
   const logs = read.map(([, lines]) => lines);
   const sessions = logs.map(parseSession);
@@ -604,8 +604,8 @@ function transcripts({ limit, since }, digestDir) {
   console.log('\nDenied by the permission classifier · rejected by the user:');
   for (const d of denied) console.log(`  ${d.key}: ${d.denied} · ${d.rejected}`);
   // Subagents act on the session's behalf, so their transcripts count for skills followed and docs read.
-  const subagentLogs = read.map(([id]) => {
-    const sub = path.join(dir, id, 'subagents');
+  const subagentLogs = read.map(([, , f]) => {
+    const sub = path.join(f.replace(/\.jsonl$/, ''), 'subagents');
     return fs.existsSync(sub)
       ? fs
           .readdirSync(sub)
