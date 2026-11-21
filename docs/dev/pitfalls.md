@@ -32,9 +32,9 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 
 ### `TypeError: … is not a function` from the pre-commit hook in a test the commit doesn't include
 
-- **Symptom**: the hook's `test` step fails in a new test file that isn't staged, e.g. `TypeError: needsRestart is not a function`.
+- **Symptom**: the hook's `test` step fails in a new test file that isn't staged, e.g. `TypeError: needsRestart is not a function`. Same for `doc-refs`: `no heading #log in .claude/skills/backlog-run/SKILL.md` from an untracked new skill linking an unstaged heading.
 - **Cause**: the hook sets aside unstaged edits to tracked files but leaves untracked ones, so a new test for code you haven't staged runs against the old code.
-- **Fix**: commit a script and its new test together, and move other changes' untracked tests out of the tree until their commit.
+- **Fix**: commit a script and its new test together, and move other changes' untracked files (tests, a new skill directory) out of the tree until their commit.
 
 ## Git, hooks and parallel agents
 

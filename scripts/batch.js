@@ -1,6 +1,6 @@
 'use strict';
 
-// Parallel fix batches (.claude/skills/code-fix/BATCH.md): plan lanes, track progress, merge a lane.
+// Parallel fix batches (.claude/skills/fix/BATCH.md): plan lanes, track progress, merge a lane.
 //   node scripts/batch.js plan [--lanes=6] <C66 U12 …>   lanes sharing no cited code + estimate; writes the manifest
 //   node scripts/batch.js status                         done/total and time left, per lane
 //   node scripts/batch.js merge <branch>                 merge --no-ff --no-commit, union CHANGELOG, apply the lane's closed and narrowed items

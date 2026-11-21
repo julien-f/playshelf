@@ -22,7 +22,7 @@
     },
     {
       "prompt": "fix C70",
-      "expect": "code-fix"
+      "expect": "fix"
     }
   ],
   "dryRun": "/code-audit simplify scripts/"

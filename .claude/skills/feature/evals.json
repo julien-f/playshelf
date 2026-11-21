@@ -14,7 +14,7 @@
     },
     {
       "prompt": "implement U167",
-      "expect": "ux-fix"
+      "expect": "fix"
     }
   ]
 }

@@ -18,12 +18,16 @@ const RUN = {
 test('runProblems: a complete run passes; triage is optional; a missing count or a bad item is named', () => {
   assert.deepEqual(runProblems(RUN), []);
   assert.deepEqual(runProblems({ ...RUN, phases: { ...RUN.phases, triage: { tokens: 5 } } }), []);
+  assert.deepEqual(runProblems({ ...RUN, items: ['feature:wishlist-notes'] }), []);
   const bad = {
     ...RUN,
     items: ['fix it'],
     phases: { plan: RUN.phases.plan, code: { ...RUN.phases.code, tokens: -1 } },
   };
-  assert.deepEqual(runProblems(bad), ['items: a non-empty list of C<n>/U<n>', 'phases.code.tokens: a count']);
+  assert.deepEqual(runProblems(bad), [
+    'items: a non-empty list of C<n>/U<n>/feature:<slug>',
+    'phases.code.tokens: a count',
+  ]);
 });
 
 test('runFor: the run whose merge brought the commit in, not one that already had it', () => {

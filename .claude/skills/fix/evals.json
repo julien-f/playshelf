@@ -1,0 +1,32 @@
+{
+  "routing": [
+    {
+      "prompt": "fix C91",
+      "expect": "fix"
+    },
+    {
+      "prompt": "do the code fixes C40 and C70",
+      "expect": "fix"
+    },
+    {
+      "prompt": "fix U73",
+      "expect": "fix"
+    },
+    {
+      "prompt": "do the UX fixes U28, U70, U80",
+      "expect": "fix"
+    },
+    {
+      "prompt": "implement U167",
+      "expect": "fix"
+    },
+    {
+      "prompt": "Re-check U73 in the browser now that it is fixed",
+      "expect": "fix"
+    },
+    {
+      "prompt": "fix the failing test in test/cache.test.js",
+      "expect": "-"
+    }
+  ]
+}

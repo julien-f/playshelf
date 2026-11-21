@@ -2,9 +2,13 @@
 
 // Read-only checks for the dependency-audit skill: declared packages nothing references, and bare
 // imports nothing declares. Exits 1 when either finds something.
+//   node scripts/deps-audit.js [--full]
+// --full also runs npm's own checks and prints only their problems: vulnerabilities, a lockfile out of
+// sync, an invalid tree (exit 1), outdated packages and collapsible duplicates (listed, not failing).
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { builtinModules } = require('node:module');
 
 const ROOT = path.join(__dirname, '..');
@@ -49,7 +53,79 @@ function phantomImports(imported, declared) {
   return [...imported].filter((name) => !declared.includes(name)).sort();
 }
 
+const npm = (args) => {
+  const r = spawnSync('npm', args, { cwd: ROOT, encoding: 'utf8' });
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+};
+
+// `run(args)` returns { status, stdout, stderr }; injectable for tests. Each entry: { title, items, fails }.
+function npmChecks(run = npm) {
+  const lines = (r) => (r.stdout + r.stderr).split('\n');
+  // npm ≥ 10 prints `npm error`, older ones `npm ERR!`; a failure matching neither still shows its exit.
+  const failure = (r) => {
+    const found = lines(r).filter((l) => /npm error|npm ERR!|invalid|ERESOLVE/i.test(l));
+    return found.length ? found.slice(0, 5) : [`exit ${r.status}`];
+  };
+  const json = (r) => {
+    try {
+      return JSON.parse(r.stdout || '{}');
+    } catch {
+      return undefined;
+    }
+  };
+
+  const auditRun = run(['audit', '--json']);
+  const audit = json(auditRun);
+  const vulns = audit?.metadata
+    ? Object.entries(audit.metadata.vulnerabilities)
+        .filter(([level, n]) => level !== 'total' && n > 0)
+        .map(([level, n]) => `${n} ${level}`)
+    : [`npm audit failed: ${audit?.error?.summary ?? failure(auditRun)[0]}`];
+  const ci = run(['ci', '--dry-run']);
+  const ciItems = !ci.status
+    ? []
+    : /EUSAGE/.test(ci.stdout + ci.stderr)
+      ? failure(ci)
+      : [`failed, not a sync problem: ${failure(ci)[0]}`];
+  const ls = run(['ls', '--all']);
+  const peerWarnings = [...new Set([ci, ls].flatMap((r) => lines(r).filter((l) => /ERESOLVE/.test(l))))];
+  const outdatedRun = run(['outdated', '--json']);
+  const outdated = Object.entries(json(outdatedRun) ?? {});
+  // One line per nested copy: the same change repeats.
+  const dedupe = [
+    ...new Set(
+      run(['dedupe', '--dry-run'])
+        .stdout.split('\n')
+        .filter((l) => /^(add|change|remove) /.test(l)),
+    ),
+  ];
+  return [
+    { title: 'Vulnerabilities (npm audit)', items: vulns, fails: true },
+    { title: 'Lockfile out of sync (npm ci --dry-run)', items: ciItems, fails: true },
+    { title: 'Invalid tree (npm ls --all)', items: ls.status ? failure(ls) : [], fails: true },
+    { title: 'Peer warnings (ERESOLVE)', items: peerWarnings },
+    {
+      title: 'Behind its own range: npm update',
+      items: outdated
+        .filter(([, v]) => v.current !== v.wanted)
+        .map(([n, v]) => (v.current ? `${n} ${v.current} → ${v.wanted}` : `${n} not installed (npm ci)`)),
+    },
+    {
+      title: 'Range bump available: npm install <pkg>@latest',
+      items: outdated.filter(([, v]) => v.wanted !== v.latest).map(([n, v]) => `${n} ${v.wanted} → ${v.latest}`),
+    },
+    { title: 'Collapsible duplicates (npm dedupe --dry-run)', items: dedupe },
+  ];
+}
+
 function main() {
+  const usage = 'usage: node scripts/deps-audit.js [--full]';
+  const args = process.argv.slice(2);
+  if (args.some((a) => a !== '--full')) {
+    console.error(usage);
+    process.exitCode = 2;
+    return;
+  }
   const pkg = require(path.join(ROOT, 'package.json'));
   const declared = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
   const sources = [
@@ -66,15 +142,19 @@ function main() {
     'Declared but unused': unusedDeps(declared, [...sources, ...docs, JSON.stringify(pkg.scripts)].join('\n')),
     'Imported but undeclared': phantomImports(imported, declared),
   };
+  const checks = [
+    ...Object.entries(report).map(([title, items]) => ({ title, items, fails: true })),
+    ...(args.includes('--full') ? npmChecks() : []),
+  ];
   let found = false;
-  for (const [title, items] of Object.entries(report)) {
+  for (const { title, items, fails } of checks) {
     console.log(`${title}: ${items.length ? '' : 'none'}`);
     for (const item of items) console.log(`  ${item}`);
-    found ||= items.length > 0;
+    found ||= Boolean(fails) && items.length > 0;
   }
   process.exitCode = found ? 1 : 0;
 }
 
 if (require.main === module) main();
 
-module.exports = { importedPackages, unusedDeps, phantomImports, walk };
+module.exports = { importedPackages, unusedDeps, phantomImports, walk, npmChecks };

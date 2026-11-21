@@ -77,7 +77,7 @@ The user-level rules apply; here:
 - Before a feature branch's merge: `/code-review` over `main..<branch>` and fix the confirmed findings, then hand the user the worktree, its mock-server port and the steps to test, and ask to merge (with a "merge without my test" option); approving the plan doesn't approve the merge.
 - Before closing a session, or when asked what's left: `node scripts/session-end.js` lists unpushed commits, uncommitted changes, merged worktrees and branches, running servers, workarounds whose upstream bug closed or isn't filed yet, and what production's metrics show since the last run (`prod-check.js`).
 - Chasing a CI-only failure: experiment on a branch and run CI there (`gh workflow run CI --ref <branch>`), never by pushing to `main`.
-- A parallel fix batch ([BATCH.md](.claude/skills/code-fix/BATCH.md)) works the same way, one branch per lane, each closed with `git merge --no-ff`.
+- A parallel fix batch ([BATCH.md](.claude/skills/fix/BATCH.md)) works the same way, one branch per lane, each closed with `git merge --no-ff`.
 
 ## Development workflow
 

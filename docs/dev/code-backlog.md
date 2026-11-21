@@ -1,6 +1,6 @@
 # Code backlog
 
-Code findings from `code-audit` runs, judged against CLAUDE.md's conventions and the docs each dimension names. Severity: **critical** (exploitable, or loses or corrupts data) · **major** · **minor** · **cleanup** (no behaviour change); effort S/M/L. Fix items with the `code-fix` skill; remove an item once it ships.
+Code findings from `code-audit` runs, judged against CLAUDE.md's conventions and the docs each dimension names. Severity: **critical** (exploitable, or loses or corrupts data) · **major** · **minor** · **cleanup** (no behaviour change); effort S/M/L. Fix items with the `fix` skill; remove an item once it ships.
 
 Last audited: simplify 2026-11-15 · correctness 2026-10-11 · security 2026-10-23 · perf 2026-10-28 · reliability 2026-10-10 · compliance 2026-10-10 · tests 2026-10-10 · docs 2026-11-13; backend only (`server.js`, `lib/`), every dimension: 2026-10-31.
 
