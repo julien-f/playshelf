@@ -78,10 +78,10 @@ Each rule comes from a flake it fixed; add one when a fix teaches something new.
 
 ## Skill evals
 
-- `node scripts/skill-evals.js [SKILL...]` runs each `.claude/skills/<name>/evals.json` routing case through headless `claude -p` and reports which skill it loaded (~30 s for all; each run stops at its first tool call). `--repeat=N` measures how stable a route is; a single run can pass by luck.
-- `--dry-run` also runs each skill's `dryRun` command to the end in `auto` permission mode (about $1 and 1–2 min each, capped by `--budget`) and reports its denied and failed calls. Only skills safe to run unattended have one.
+- `node scripts/skill-evals.js [SKILL...]` runs each `.claude/skills/<name>/evals.json` routing case, and the user-level skills' (`~/.claude/skills/<name>/evals.json`), through headless `claude -p` and reports which skill it loaded (~30 s for all; each run stops at its first tool call). `--repeat=N` measures how stable a route is; a single run can pass by luck.
+- `--dry-run` also runs each skill's `dryRun` command to the end in `auto` permission mode (about $1 and 1–2 min each, capped by `--budget`) and reports its denied and failed calls, counted by the user-level setup-review skill's `transcripts.js`. Only skills safe to run unattended have one.
 - Each run's routing score and dry-run results are kept locally (`scripts/dev-metrics.js`), and the routing line names the last comparable run's score.
-- Runs use a throwaway clone (no remote; `node_modules` reflinked for `--dry-run`) of the working tree, or of `--ref=<REF>` to compare a skill change before and after, and write no session transcripts. Not part of `check`: it costs real tokens.
+- Runs use a throwaway clone (no remote; `node_modules` reflinked for `--dry-run`) of the working tree, or of `--ref=<REF>` to compare a skill change before and after (a user-level skill is compared by checking out its own repo at the old ref), and write no session transcripts. Not part of `check`: it costs real tokens.
 
 ## Checks
 

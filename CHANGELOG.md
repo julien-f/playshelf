@@ -173,6 +173,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Commit-hook format check runs Prettier in one process, about four times less CPU; each check run records its load, checkout and the caches it starts without
 - One `fix` skill replaces `code-fix` and `ux-fix`; `backlog-run` ships features too; `deps-audit.js --full` runs npm's dependency checks
 - Update dependencies, fixing a moderate vulnerability in the lint tooling
+- setup-review is now the user-level skill from template-CLAUDE.md, declared in setup-backlog.md; its transcript digest left setup-facts.js
 
 ## [0.12.0] - 2026-10-30
 

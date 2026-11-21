@@ -15,6 +15,7 @@
       "Bash(npm run check:*)",
       "Bash(npm run build)",
       "Bash(node scripts/*)",
+      "Bash(node ~/.claude/skills/setup-review/transcripts.js *)",
       "Bash(git status *)",
       "Bash(git status)",
       "Bash(git diff *)",

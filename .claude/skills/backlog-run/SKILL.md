@@ -6,7 +6,7 @@ argument-hint: '[C<n>|U<n> …]'
 
 # Backlog run
 
-Chooses what to do and ships it; each item's fix is [fix](../fix/SKILL.md). Plan through Log are also how [feature](../feature/SKILL.md) ships. Each run is logged so [setup-review](../setup-review/SKILL.md) can shrink the phases that don't pay.
+Chooses what to do and ships it; each item's fix is [fix](../fix/SKILL.md). Plan through Log are also how [feature](../feature/SKILL.md) ships. Each run is logged so the user-level setup-review can shrink the phases that don't pay.
 
 ## Triage
 
