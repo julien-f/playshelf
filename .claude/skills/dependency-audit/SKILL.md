@@ -13,13 +13,13 @@ Read-only by default. Nothing below writes until the "Applying" section, which n
 
 - **Declared but unused / Imported but undeclared** — from source, configs, npm scripts and `docs/`. `@babel/core` is exempt: it's `@babel/eslint-parser`'s required peer, never imported (`docs/dev/architecture.md`'s `eslint.config.mjs` bullet).
 - **Vulnerabilities** (`npm audit`) — expected: none.
-- **Lockfile out of sync** (`npm ci --dry-run`, `EUSAGE`) and **Invalid tree** (`npm ls --all`).
+- **Lockfile out of sync** (`npm ci --dry-run`, `EUSAGE`; another failure, e.g. no network, says so) and **Invalid tree** (`npm ls --all`); **Peer warnings** lists `ERESOLVE` lines even when both pass.
 - **Behind its own range** — fixed by `npm update`, no `package.json` edit. **Range bump available** — needs `npm install <pkg>@latest`.
 - **Collapsible duplicates** (`npm dedupe --dry-run`). Major splits it can't collapse (e.g. `vite-plugin-solid`'s Babel 7 tree beside the linter's Babel 8) are upstream, dev-only and not findings.
 
 ## Stale `typescript` peer ranges
 
-An `ERESOLVE` warning, or an `invalid` `typescript` under Invalid tree, means a new package has a stale `typescript` peer range: add it to `package.json`'s `overrides` like the existing `@typescript-eslint/*` entries (safe — nothing there loads TypeScript), rather than bumping `eslint-plugin-solid` or declaring the noise benign.
+A line under **Peer warnings** (`ERESOLVE`), or an `invalid` `typescript` under Invalid tree, means a new package has a stale `typescript` peer range: add it to `package.json`'s `overrides` like the existing `@typescript-eslint/*` entries (safe — nothing there loads TypeScript), rather than bumping `eslint-plugin-solid` or declaring the noise benign.
 
 ## Applying
 

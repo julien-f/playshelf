@@ -60,11 +60,37 @@ const npm = (args) => {
 
 // `run(args)` returns { status, stdout, stderr }; injectable for tests. Each entry: { title, items, fails }.
 function npmChecks(run = npm) {
-  const audit = JSON.parse(run(['audit', '--json']).stdout || '{}').metadata?.vulnerabilities ?? {};
-  const vulns = Object.entries(audit).filter(([level, n]) => level !== 'total' && n > 0);
+  const lines = (r) => (r.stdout + r.stderr).split('\n');
+  // npm ≥ 10 prints `npm error`, older ones `npm ERR!`; a failure matching neither still shows its exit.
+  const failure = (r) => {
+    const found = lines(r).filter((l) => /npm error|npm ERR!|invalid|ERESOLVE/i.test(l));
+    return found.length ? found.slice(0, 5) : [`exit ${r.status}`];
+  };
+  const json = (r) => {
+    try {
+      return JSON.parse(r.stdout || '{}');
+    } catch {
+      return undefined;
+    }
+  };
+
+  const auditRun = run(['audit', '--json']);
+  const audit = json(auditRun);
+  const vulns = audit?.metadata
+    ? Object.entries(audit.metadata.vulnerabilities)
+        .filter(([level, n]) => level !== 'total' && n > 0)
+        .map(([level, n]) => `${n} ${level}`)
+    : [`npm audit failed: ${audit?.error?.summary ?? failure(auditRun)[0]}`];
   const ci = run(['ci', '--dry-run']);
+  const ciItems = !ci.status
+    ? []
+    : /EUSAGE/.test(ci.stdout + ci.stderr)
+      ? failure(ci)
+      : [`failed, not a sync problem: ${failure(ci)[0]}`];
   const ls = run(['ls', '--all']);
-  const outdated = Object.entries(JSON.parse(run(['outdated', '--json']).stdout || '{}'));
+  const peerWarnings = [...new Set([ci, ls].flatMap((r) => lines(r).filter((l) => /ERESOLVE/.test(l))))];
+  const outdatedRun = run(['outdated', '--json']);
+  const outdated = Object.entries(json(outdatedRun) ?? {});
   // One line per nested copy: the same change repeats.
   const dedupe = [
     ...new Set(
@@ -73,14 +99,16 @@ function npmChecks(run = npm) {
         .filter((l) => /^(add|change|remove) /.test(l)),
     ),
   ];
-  const errLines = (r) => (r.stdout + r.stderr).split('\n').filter((l) => /invalid|ERR|ERESOLVE/.test(l));
   return [
-    { title: 'Vulnerabilities (npm audit)', items: vulns.map(([level, n]) => `${n} ${level}`), fails: true },
-    { title: 'Lockfile out of sync (npm ci --dry-run)', items: ci.status ? errLines(ci) : [], fails: true },
-    { title: 'Invalid tree (npm ls --all)', items: ls.status ? errLines(ls) : [], fails: true },
+    { title: 'Vulnerabilities (npm audit)', items: vulns, fails: true },
+    { title: 'Lockfile out of sync (npm ci --dry-run)', items: ciItems, fails: true },
+    { title: 'Invalid tree (npm ls --all)', items: ls.status ? failure(ls) : [], fails: true },
+    { title: 'Peer warnings (ERESOLVE)', items: peerWarnings },
     {
       title: 'Behind its own range: npm update',
-      items: outdated.filter(([, v]) => v.current !== v.wanted).map(([n, v]) => `${n} ${v.current} → ${v.wanted}`),
+      items: outdated
+        .filter(([, v]) => v.current !== v.wanted)
+        .map(([n, v]) => (v.current ? `${n} ${v.current} → ${v.wanted}` : `${n} not installed (npm ci)`)),
     },
     {
       title: 'Range bump available: npm install <pkg>@latest',
