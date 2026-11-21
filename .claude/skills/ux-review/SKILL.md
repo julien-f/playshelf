@@ -1,6 +1,6 @@
 ---
 name: ux-review
-description: Run a UX/UI design review of the app by walking the user journeys in docs/dev/journeys.md in a real browser, record findings in docs/dev/improvements.md, and report them ranked. Also re-checks one backlog item after its fix. Use when asked for a design, usability, UX or UI review, or to re-check a flow or a U-item after a UI change.
+description: Run a UX/UI design review of the app by walking the user journeys in docs/dev/journeys.md in a real browser, record findings in docs/dev/improvements.md, and report them ranked. Use when asked for a design, usability, UX or UI review, or to re-check a flow after a UI change (a fixed U-item goes to fix).
 ---
 
 # UX review
@@ -10,7 +10,6 @@ Judges the app against [docs/dev/journeys.md](../../../docs/dev/journeys.md) and
 ## Scope
 
 - **Default: the core journeys** ([journeys.md](../../../docs/dev/journeys.md)'s intro) **and those with a ★ step** (`node scripts/journey-coverage.js`), each walked as its persona ([Who uses it](../../../docs/dev/journeys.md#who-uses-it)). A named scenario, group or route narrows it; "full" walks every scenario.
-- **Re-check `U<n>`**: walk only the scenarios that [improvements.md](../../../docs/dev/improvements.md) item names, confirm the fix, then drop or narrow the item.
 - A scenario that's wrong about the app (a step that doesn't exist, a stale expectation) is a finding against the doc.
 - Say which scenarios were walked and which were skipped, and why.
 
@@ -56,11 +55,11 @@ After any real-server visit, restore the demo state; don't finish while `steam.i
 
 ## Record and report
 
-- Record every finding in [improvements.md](../../../docs/dev/improvements.md): numbered on from `node scripts/backlog-next.js U` (never reuse a closed item's number), under its area, `**U<n> · <severity> · <scenarios>** — problem. Direction.` A finding whose cause commit is already known: `--escape` as [code-fix's step 0](../code-fix/SKILL.md#0-before-starting). Update or drop items the run shows fixed.
+- Record every finding in [improvements.md](../../../docs/dev/improvements.md): numbered on from `node scripts/backlog-next.js U`, under its area, `**U<n> · <severity> · <scenarios>** — problem. Direction.` A finding whose cause commit is already known: `--escape` as [fix's Before starting](../fix/SKILL.md#before-starting). Update or drop items the run shows fixed.
 - **Severity**: _blocker_ (the goal can't be reached) · _major_ (reached with real confusion or a workaround) · _minor_ (friction) · _polish_.
 - Report one table ranked by severity (a core journey first within a severity), then one line on what worked well enough to keep:
 
 | U   | Severity | Scenario | Where | Finding | Suggestion |
 | --- | -------- | -------- | ----- | ------- | ---------- |
 
-- Findings only — fix nothing. Then offer, in one `AskUserQuestion`, to fix the set you recommend (and why not the rest), planned as in [code-fix's BATCH.md](../code-fix/BATCH.md) step 1; each fix is its own commit, and a re-check closes it.
+- Findings only — fix nothing. Then offer, in one `AskUserQuestion`, to fix the set you recommend (and why not the rest), through [fix](../fix/SKILL.md) (above about five items, planned as its [BATCH.md](../fix/BATCH.md) step 1).

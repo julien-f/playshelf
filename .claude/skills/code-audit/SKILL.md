@@ -1,16 +1,17 @@
 ---
 name: code-audit
 description: Audit the codebase (not a diff) for simplification, correctness, security, performance, reliability, upstream-compliance, test-coverage and doc-accuracy issues, record verified findings in docs/dev/code-backlog.md, and report them ranked. Use when asked to review, audit or assess the code or app as a whole, or one dimension of it (e.g. "security review of the app", "where can the code be simpler", "are the docs still accurate?").
+argument-hint: '[simplify|correctness|security|perf|reliability|compliance|docs|tests|all] [path]'
 ---
 
 # Code audit
 
-Judges the code against this repo's own rules and docs, not general taste. A diff goes to `/code-review`, `/simplify` or `/security-review` instead; dependencies go to [dependency-audit](../dependency-audit/SKILL.md). Findings only, no fixes: [code-fix](../code-fix/SKILL.md) fixes them.
+Judges the code against this repo's own rules and docs, not general taste. A diff goes to `/code-review`, `/simplify` or `/security-review` instead; dependencies go to [dependency-audit](../dependency-audit/SKILL.md). Findings only, no fixes: [fix](../fix/SKILL.md) fixes them.
 
 ## Scope
 
 - **Argument**: one dimension (below), optionally a path (`lib/`, `public/panel.tsx`). No argument: audit the dimension with the oldest last audit in [code-backlog.md](../../../docs/dev/code-backlog.md)'s header (ties: the first in step 2's order) and say which, without asking.
-- **One dimension over the whole codebase**: one `Agent` per area (backend · `ListRoute` · panel and lightbox · table and routes · stores), launched in one message, each given the dimension's checklist, the finding bar and what's out of scope; verify every finding yourself before recording it.
+- **One dimension over the whole codebase**: one `Agent` per area (backend · `ListRoute` · panel and lightbox · table and routes · stores), `model: sonnet` (you verify each finding), launched in one message, each given the dimension's checklist, the finding bar and what's out of scope; verify every finding yourself before recording it.
 - **`all`** runs every dimension: one `Agent` subagent per dimension, launched in one message, each given its checklist below and the finding bar. It's expensive — only on an explicit request.
 - Say what was covered and what was skipped, and why.
 
@@ -20,7 +21,7 @@ Run before reading code, so the review doesn't spend effort on what tools alread
 
 - `npm run check` — a failure is a finding as-is; don't re-derive it.
 - `npm run build` — chunk sizes, for **perf**.
-- `node scripts/deps-audit.js` and `npm audit` — for **security** and **simplify**; anything beyond that is dependency-audit's job.
+- `node scripts/deps-audit.js --full` — for **security** and **simplify** (its vulnerabilities and unused packages); the rest of its output is dependency-audit's job.
 - `node scripts/dead-exports.js` — for **simplify**: frontend exports no other file uses.
 - Read [code-backlog.md](../../../docs/dev/code-backlog.md) and [pitfalls.md](../../../docs/dev/pitfalls.md): what's already recorded is not a new finding.
 
@@ -45,11 +46,11 @@ Not findings: style (ESLint and Prettier own it), "might need later" generality,
 
 ## Record and report
 
-- Record each finding in [code-backlog.md](../../../docs/dev/code-backlog.md) under its dimension: numbered on from `node scripts/backlog-next.js C` (never reuse a closed item's number), `**C<n> · <severity> · <effort>** — problem at \`file:line\`. Direction.`Backtick only names that exist in the code (doc-refs flags the rest); a helper the Direction proposes goes unquoted. A finding whose cause commit is already known:`--escape` as [code-fix's step 0](../code-fix/SKILL.md#0-before-starting). Drop or narrow items the run shows fixed, and set the header's last-audited date (today) for each dimension covered.
+- Record each finding in [code-backlog.md](../../../docs/dev/code-backlog.md) under its dimension: numbered on from `node scripts/backlog-next.js C`, `**C<n> · <severity> · <effort>** — problem at \`file:line\`. Direction.`Backtick only names that exist in the code (doc-refs flags the rest); a helper the Direction proposes goes unquoted. A finding whose cause commit is already known:`--escape` as [fix's Before starting](../fix/SKILL.md#before-starting). Drop or narrow items the run shows fixed, and set the header's last-audited date (today) for each dimension covered.
 - **Severity**: _critical_ (exploitable, or loses or corrupts data) · _major_ (a real bug, cost or risk users or the upstreams feel) · _minor_ · _cleanup_ (simpler code, no behaviour change).
 - Report one table ranked by severity, then effort:
 
 | C   | Severity | Effort | Dimension | Where | Finding | Direction |
 | --- | -------- | ------ | --------- | ----- | ------- | --------- |
 
-- Fix nothing. Then offer, in one `AskUserQuestion`, to fix the set you recommend (and why not the rest), planned as in [code-fix's BATCH.md](../code-fix/BATCH.md) step 1.
+- Fix nothing. Then offer, in one `AskUserQuestion`, to fix the set you recommend (and why not the rest), through [fix](../fix/SKILL.md) (above about five items, planned as its [BATCH.md](../fix/BATCH.md) step 1).

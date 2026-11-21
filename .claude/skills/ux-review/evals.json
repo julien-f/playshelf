@@ -9,6 +9,10 @@
       "expect": "ux-review"
     },
     {
+      "prompt": "Re-check the sharing flow on phone now that the header changed",
+      "expect": "ux-review"
+    },
+    {
       "prompt": "Take a new screenshot of the home page for the README",
       "expect": "screenshots"
     }
