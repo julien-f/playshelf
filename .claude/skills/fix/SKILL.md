@@ -39,7 +39,7 @@ The smallest change that closes the item, following CLAUDE.md's code conventions
 
 For U-items and UI-visible C-items. On dev:mock ([testing.md](../../../docs/dev/testing.md#looking-at-the-ui)), started clean (`ux-measure.js --fresh`), at **1440×900** and **390×844** with [ux-review](../ux-review/SKILL.md)'s Mechanics, files named `ux-U<n>` / `ux-U<n>-<what>.png`: measure what the item is about (bounding boxes before/after, accessible names). `down` when done. Stale modules or a console error mid-edit: [pitfalls.md](../../../docs/dev/pitfalls.md).
 
-**Re-check U<n>** (after its fix, asked on its own): find its commit with `git log --grep=U<n>`, walk the scenarios it names this way, and file what still fails as a new item.
+**Re-check U<n>** (after its fix, asked on its own): find its commit with `git log -P --grep='\bU<n>\b'`, read the item's removed line in `git show <sha> -- docs/dev/improvements.md`, walk the scenarios it names this way, and file what still fails as a new item.
 
 ## Close and commit
 

@@ -23,7 +23,7 @@ A request for something the app doesn't do yet. Fixing a filed item is [fix](../
 
 [backlog-run](../backlog-run/SKILL.md) from Plan through Log, with the same reviewers as Proposals, and:
 
-- Each step test-first through [fix](../fix/SKILL.md)'s Test first, Fix and Look; no item to re-verify or close. `docs/user/` updated with the step that changes what users see.
+- Each step test-first through [fix](../fix/SKILL.md)'s Test first, Fix, Look, and Close and commit minus the backlog edit: one commit per step, CLAUDE.md's Development workflow. `docs/user/` updated with the step that changes what users see.
 - Logged as `feature:<slug>`, the proposal agents' tokens under `triage`.
 
 ## Report

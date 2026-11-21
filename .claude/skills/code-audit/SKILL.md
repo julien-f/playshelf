@@ -53,4 +53,4 @@ Not findings: style (ESLint and Prettier own it), "might need later" generality,
 | C   | Severity | Effort | Dimension | Where | Finding | Direction |
 | --- | -------- | ------ | --------- | ----- | ------- | --------- |
 
-- Fix nothing. Then offer, in one `AskUserQuestion`, to fix the set you recommend (and why not the rest), through [fix](../fix/SKILL.md) (above about five items, planned as its [BATCH.md](../fix/BATCH.md) step 1).
+- Fix nothing. Then offer, in one `AskUserQuestion`, to fix the set you recommend (and why not the rest), through [fix](../fix/SKILL.md) (above about five items, planned as [BATCH.md's Plan](../fix/BATCH.md#1-plan-before-any-go-ahead)).
