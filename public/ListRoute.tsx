@@ -1272,6 +1272,7 @@ export default function ListRoute() {
   function handleSaveShared(): void {
     const list = compareList();
     if (!list) return;
+    // eslint-disable-next-line solid/reactivity -- false positive: read within this click. Remove once https://github.com/solidjs/eslint-plugin-solid/issues/268 is fixed
     const synthetic = sharedSynthetic();
     const resolved = new Map<string, string>(); // synthetic id → real saved id
     function saveRef(ref: ListRef): ListRef {

@@ -36,6 +36,12 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 - **Cause**: the hook sets aside unstaged edits to tracked files but leaves untracked ones, so a new test for code you haven't staged runs against the old code.
 - **Fix**: commit a script and its new test together, and move other changes' untracked files (tests, a new skill directory) out of the tree until their commit.
 
+### The C8 presentation e2e scenarios fail at `document.fullscreenElement` after a Playwright upgrade
+
+- **Symptom**: `C8.1-4,7-8` and `C8 edge` fail on `expect.poll(…fullscreenElement…).toBe(true)`; in the popup, `requestFullscreen()` on a key press rejects with `TypeError: not granted` (the app swallows it).
+- **Cause**: Playwright 1.65 (Chromium 159) refuses fullscreen in a popup window; 1.64 (Chromium 156) grants it, and the main page works in both.
+- **Fix**: `@playwright/test` is held at `~1.64.1`; lift it once a release grants popup fullscreen again (`npm run test:e2e -- -g 'C8'`).
+
 ## Git, hooks and parallel agents
 
 ### `node_modules is behind package-lock.json` on a commit in the main checkout
