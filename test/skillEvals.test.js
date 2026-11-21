@@ -20,20 +20,19 @@ test('routedTo: the skill the first tool call loads, past ToolSearch; else none,
   assert.equal(routedTo([{ type: 'result' }]), '-');
 });
 
-test('dryRunSummary: cost and turns from the result, failed calls apart from the ones needing approval', () => {
+// How calls are classified (denied, failed) is callSummary's, tested in template-CLAUDE.md's test/transcripts.test.js.
+test('dryRunSummary: cost and turns from the result, the calls counted from the other entries', () => {
+  const callSummary = (lines, names) => ({ calls: lines.length, denied: names.length, errors: [] });
   const s = dryRunSummary(
     [
-      assistant(use('a', 'Bash', { command: 'npm run check > /tmp/x' })),
-      result('a', 'This command requires approval', true),
-      assistant(use('b', 'Bash', { command: 'cat missing' })),
-      result('b', 'Exit code 1\nNo such file', true),
-      assistant(use('c', 'Read')),
-      result('c', 'ok'),
+      assistant(use('a', 'Read')),
+      result('a', 'ok'),
       { type: 'result', total_cost_usd: 0.5, num_turns: 4, duration_ms: 90000 },
     ],
-    [],
+    ['x'],
+    callSummary,
   );
-  assert.deepEqual(s, { cost: 0.5, turns: 4, minutes: 1.5, calls: 3, denied: 1, errors: ['cat: Exit code 1'] });
+  assert.deepEqual(s, { cost: 0.5, turns: 4, minutes: 1.5, calls: 2, denied: 1, errors: [] });
 });
 
 test('pool runs every job, at most `limit` at once, results in order', async () => {

@@ -21,7 +21,7 @@ One `Agent` per lane, all in one message, `isolation: "worktree"`, with the lane
 
 ## 4. After the lanes
 
-`npm run test:e2e` once over the merged lanes, then the serial items, then fix's Look for the UI-visible items, then the lane reviews' findings (verify each, fix the confirmed ones as follow-up commits, list the dropped ones with why), then `node scripts/batch.js record` (feeds the next estimate) and `node scripts/setup-facts.js --agents` (each agent's time, turns, failed calls, gate and tool time) for the report.
+`npm run test:e2e` once over the merged lanes, then the serial items, then fix's Look for the UI-visible items, then the lane reviews' findings (verify each, fix the confirmed ones as follow-up commits, list the dropped ones with why), then `node scripts/batch.js record` (feeds the next estimate) and `node ~/.claude/skills/setup-review/transcripts.js --agents` (each agent's time, turns, failed calls, gate and tool time) for the report.
 
 ## Lane template
 

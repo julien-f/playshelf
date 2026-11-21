@@ -3,7 +3,7 @@
 // Evaluates the skills by running them headless (`claude -p`), in a throwaway clone of the repo so
 // nothing lands in it or in the session transcripts (`--no-session-persistence`).
 //   node scripts/skill-evals.js [--ref=REF] [--repeat=N] [--dry-run] [--budget=USD] [SKILL...]
-// Each `.claude/skills/<name>/evals.json` holds `routing`: `{ prompt, expect }` cases, `expect` being the
+// Each `.claude/skills/<name>/evals.json` (or a user skill's, in ~/.claude/skills) holds `routing`: `{ prompt, expect }` cases, `expect` being the
 // skill (a built-in one too) the prompt should load, or `-` for none; and, for a skill safe to run
 // unattended, `dryRun`: the command to run it with. Routing stops each run at its first tool call;
 // --dry-run also runs each `dryRun` to the end (budget-capped, about $0.50–$2 each) and reports its
@@ -17,10 +17,12 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawn } = require('node:child_process');
-const { parseSession, sessionEvents } = require('./setup-facts');
 const { record, history } = require('./dev-metrics');
 
 const ROOT = path.join(__dirname, '..');
+const USER_SKILLS = path.join(os.homedir(), '.claude', 'skills');
+// The user-level setup-review skill's transcript parser (template-CLAUDE.md), only needed by --dry-run.
+const TRANSCRIPTS = path.join(USER_SKILLS, 'setup-review', 'transcripts.js');
 const PARALLEL = 4;
 const ROUTING_FLAGS = ['--disallowedTools', 'Bash Edit Write NotebookEdit Agent Workflow', '--max-budget-usd', '0.5'];
 
@@ -82,21 +84,16 @@ function routedTo(entries) {
   return tool ? `- (${tool.name})` : '-';
 }
 
-// A dry run's entries → `{ cost, turns, minutes, calls, denied, errors }`, errors as `key: first line`;
-// a call needing an approval nobody can give headless counts as denied.
-function dryRunSummary(entries, names) {
+// A dry run's entries → `{ cost, turns, minutes, calls, denied, errors }`; `callSummary` (transcripts.js)
+// counts the calls.
+function dryRunSummary(entries, names, callSummary) {
   const lines = entries.filter((e) => e.type !== 'result').map((e) => JSON.stringify(e));
   const result = entries.find((e) => e.type === 'result') ?? {};
-  const calls = parseSession(lines);
-  const failed = sessionEvents(lines, names).filter((e) => e.kind === 'error');
-  const unapproved = (e) => /requires approval|can't be checked/.test(e.text);
   return {
     cost: result.total_cost_usd ?? 0,
     turns: result.num_turns ?? 0,
     minutes: (result.duration_ms ?? 0) / 60000,
-    calls: calls.length,
-    denied: calls.filter((c) => c.denied).length + failed.filter(unapproved).length,
-    errors: failed.filter((e) => !unapproved(e)).map((e) => `${e.key}: ${e.text}`),
+    ...callSummary(lines, names),
   };
 }
 
@@ -127,13 +124,24 @@ async function main() {
     console.error('Usage: node scripts/skill-evals.js [--ref=REF] [--repeat=N] [--dry-run] [--budget=USD] [SKILL...]');
     process.exit(1);
   }
+  if (dryRun && !fs.existsSync(TRANSCRIPTS)) {
+    console.error(`--dry-run needs ${TRANSCRIPTS} (template-CLAUDE.md's user-level skills)`);
+    process.exit(1);
+  }
   const dir = cloneTree(ref, dryRun);
   try {
-    const skillsDir = path.join(dir, '.claude', 'skills');
-    const names = fs.readdirSync(skillsDir);
-    const evals = names
-      .filter((name) => !only.length || only.includes(name))
-      .map((name) => [name, path.join(skillsDir, name, 'evals.json')])
+    const skillsDirs = [path.join(dir, '.claude', 'skills'), USER_SKILLS];
+    const skills = skillsDirs.flatMap((d) =>
+      fs.existsSync(d) ? fs.readdirSync(d).map((name) => ({ name, file: path.join(d, name, 'evals.json') })) : [],
+    );
+    // A user skill shadows a project one of the same name; it is the live one, whatever --ref says.
+    const live = skills.filter((s, i) => !skills.slice(i + 1).some((t) => t.name === s.name));
+    const names = live.map((s) => s.name);
+    if (ref && live.some((s) => s.file.startsWith(USER_SKILLS) && fs.existsSync(s.file)))
+      console.log(`User skills are the installed ones, not ${ref}'s: compare them by checking out their own repo.`);
+    const evals = live
+      .filter(({ name }) => !only.length || only.includes(name))
+      .map(({ name, file }) => [name, file])
       .filter(([, file]) => fs.existsSync(file))
       .map(([name, file]) => ({ name, ...JSON.parse(fs.readFileSync(file, 'utf8')) }));
     console.log(`Evaluating ${ref ?? 'the working tree'} (${evals.map((e) => e.name).join(', ')})\n\nRouting:`);
@@ -160,12 +168,13 @@ async function main() {
     // Per skill, passed runs out of cases × repeat, so a later run shows a routing regression.
     const row = { ref: ref ?? 'working tree', repeat, routing, cases: cases.length, passed };
     if (!dryRun) return record('evals', row);
+    const { callSummary } = require(TRANSCRIPTS);
     row.dryRuns = {};
     console.log('\nDry runs:');
     for (const e of evals.filter((e) => e.dryRun)) {
       // `auto`, as in an interactive session: the classifier's denials are part of what's measured.
       const entries = await runClaude(dir, e.dryRun, ['--permission-mode', 'auto', '--max-budget-usd', budget]);
-      const s = dryRunSummary(entries, names);
+      const s = dryRunSummary(entries, names, callSummary);
       console.log(
         `  ${e.dryRun}: $${s.cost.toFixed(2)} · ${s.minutes.toFixed(1)} min · ${s.turns} turns · ${s.calls} calls · ${s.denied} denied · ${s.errors.length} failed`,
       );
