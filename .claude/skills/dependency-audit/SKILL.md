@@ -7,26 +7,19 @@ description: Audit npm dependencies for unused, missing, outdated, duplicated or
 
 Read-only by default. Nothing below writes until the "Applying" section, which needs an explicit go-ahead.
 
-## 1. Unused and missing
+## 1. Findings
 
-`node scripts/deps-audit.js` — declared packages nothing references (source, configs, npm scripts, `docs/`) and bare imports nothing declares; exits 1 on any finding. `@babel/core` is exempt: it's `@babel/eslint-parser`'s required peer, never imported (`docs/dev/architecture.md`'s `eslint.config.mjs` bullet).
+`node scripts/deps-audit.js --full` prints only problems; exits 1 on a failing one:
 
-## 2. Outdated
-
-`npm outdated` — read both columns, they're different findings:
-
-- **Wanted ≠ Current** — the lockfile is behind its own declared range. Fixed by `npm update`, no `package.json` edit.
-- **Latest ≠ Wanted** — needs a range bump: `npm install <pkg>@latest`.
-
-## 3. Lockfile health
-
-- `npm ci --dry-run` — read-only; errors (`EUSAGE`) if the lock is out of sync with `package.json`.
-- `npm audit` — expected: 0 vulnerabilities.
-- `npm dedupe --dry-run` — any change it lists is a collapsible duplicate. Major splits it can't collapse (e.g. `vite-plugin-solid`'s Babel 7 tree beside the linter's Babel 8) are upstream, dev-only and not findings.
+- **Declared but unused / Imported but undeclared** — from source, configs, npm scripts and `docs/`. `@babel/core` is exempt: it's `@babel/eslint-parser`'s required peer, never imported (`docs/dev/architecture.md`'s `eslint.config.mjs` bullet).
+- **Vulnerabilities** (`npm audit`) — expected: none.
+- **Lockfile out of sync** (`npm ci --dry-run`, `EUSAGE`) and **Invalid tree** (`npm ls --all`).
+- **Behind its own range** — fixed by `npm update`, no `package.json` edit. **Range bump available** — needs `npm install <pkg>@latest`.
+- **Collapsible duplicates** (`npm dedupe --dry-run`). Major splits it can't collapse (e.g. `vite-plugin-solid`'s Babel 7 tree beside the linter's Babel 8) are upstream, dev-only and not findings.
 
 ## Stale `typescript` peer ranges
 
-An `ERESOLVE` warning, or `npm ls --all` exiting non-zero on an `invalid` `typescript`, means a new package has a stale `typescript` peer range: add it to `package.json`'s `overrides` like the existing `@typescript-eslint/*` entries (safe — nothing there loads TypeScript), rather than bumping `eslint-plugin-solid` or declaring the noise benign.
+An `ERESOLVE` warning, or an `invalid` `typescript` under Invalid tree, means a new package has a stale `typescript` peer range: add it to `package.json`'s `overrides` like the existing `@typescript-eslint/*` entries (safe — nothing there loads TypeScript), rather than bumping `eslint-plugin-solid` or declaring the noise benign.
 
 ## Applying
 
