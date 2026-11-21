@@ -22,8 +22,9 @@ const isCount = (n) => Number.isInteger(n) && n >= 0;
 
 function runProblems(run) {
   const problems = [];
-  if (!Array.isArray(run.items) || !run.items.length || !run.items.every((i) => /^[CU]\d+$/.test(i)))
-    problems.push('items: a non-empty list of C<n>/U<n>');
+  const item = /^([CU]\d+|feature:[a-z0-9-]+)$/;
+  if (!Array.isArray(run.items) || !run.items.length || !run.items.every((i) => item.test(i)))
+    problems.push('items: a non-empty list of C<n>/U<n>/feature:<slug>');
   if (Number.isNaN(Date.parse(run.started))) problems.push('started: an ISO time');
   if (typeof run.merge !== 'string' || !run.merge) problems.push('merge: the merge commit');
   for (const [phase, fields] of Object.entries(PHASE_FIELDS)) {
