@@ -3,7 +3,7 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import Cast from 'lucide-solid/icons/cast';
-import TriangleAlert from 'lucide-solid/icons/triangle-alert';
+import TriangleAlert from 'lucide-solid/icons/triangle-exclamation-point';
 import VolumeX from 'lucide-solid/icons/volume-x';
 import { playHls, stopHls, trailerStill } from './hlsPlayer.ts';
 import type { HlsVideo } from './hlsPlayer.ts';

@@ -104,7 +104,7 @@ import ShoppingCart from 'lucide-solid/icons/shopping-cart';
 import Star from 'lucide-solid/icons/star';
 import Timer from 'lucide-solid/icons/timer';
 import Cast from 'lucide-solid/icons/cast';
-import TriangleAlert from 'lucide-solid/icons/triangle-alert';
+import TriangleAlert from 'lucide-solid/icons/triangle-exclamation-point';
 import Wrench from 'lucide-solid/icons/wrench';
 import X from 'lucide-solid/icons/x';
 import { focusVisible, keepFocus } from './focusHandoff.ts';

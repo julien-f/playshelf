@@ -34,7 +34,7 @@ import Minimize from 'lucide-solid/icons/minimize';
 import Pause from 'lucide-solid/icons/pause';
 import Play from 'lucide-solid/icons/play';
 import Rewind from 'lucide-solid/icons/rewind';
-import TriangleAlert from 'lucide-solid/icons/triangle-alert';
+import TriangleAlert from 'lucide-solid/icons/triangle-exclamation-point';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import Volume2 from 'lucide-solid/icons/volume-2';
 import VolumeX from 'lucide-solid/icons/volume-x';

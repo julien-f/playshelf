@@ -323,7 +323,7 @@ import Dices from 'lucide-solid/icons/dices';
 import Folder from 'lucide-solid/icons/folder';
 import Link from 'lucide-solid/icons/link';
 import Plus from 'lucide-solid/icons/plus';
-import TriangleAlert from 'lucide-solid/icons/triangle-alert';
+import TriangleAlert from 'lucide-solid/icons/triangle-exclamation-point';
 import Trophy from 'lucide-solid/icons/trophy';
 
 // ── Columns — ported verbatim from library.tsx's own (see its comments for the full reasoning

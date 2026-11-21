@@ -4,7 +4,7 @@ import { Show, type JSX } from 'solid-js';
 import Pause from 'lucide-solid/icons/pause';
 import Play from 'lucide-solid/icons/play';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
-import TriangleAlert from 'lucide-solid/icons/triangle-alert';
+import TriangleAlert from 'lucide-solid/icons/triangle-exclamation-point';
 import Volume2 from 'lucide-solid/icons/volume-2';
 import VolumeX from 'lucide-solid/icons/volume-x';
 import X from 'lucide-solid/icons/x';
