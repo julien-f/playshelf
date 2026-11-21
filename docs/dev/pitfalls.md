@@ -40,7 +40,7 @@ Surprising behaviors, misleading errors and their fixes. One entry each: symptom
 
 - **Symptom**: `C8.1-4,7-8` and `C8 edge` fail on `expect.poll(…fullscreenElement…).toBe(true)`; in the popup, `requestFullscreen()` on a key press rejects with `TypeError: not granted` (the app swallows it).
 - **Cause**: Playwright 1.65 (Chromium 159) refuses fullscreen in a popup window; 1.64 (Chromium 156) grants it, and the main page works in both.
-- **Fix**: `@playwright/test` is held at `~1.64.1`; lift it once a release grants popup fullscreen again (`npm run test:e2e -- -g 'C8'`).
+- **Fix**: `@playwright/test` is held at `~1.64.1`; lift it once https://github.com/microsoft/playwright/issues/44288 is fixed (`npm run test:e2e -- -g 'C8'`).
 
 ## Git, hooks and parallel agents
 
