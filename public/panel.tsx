@@ -26,7 +26,6 @@ import { getMyOwnershipStatus, getOwnersFor, myOwnershipVersion, peekMemberNames
 import type { OwnershipStatus } from './myOwnership.ts';
 import { STATUS_LABELS, getStatus, setStatus, type GameStatus } from './gameStatuses.ts';
 import { sortOwners, ownerMeterPct } from './ownerList.ts';
-import type { GameOwner } from './accountData.ts';
 import { accountDisplayLabel, getEffectiveCurrentAccount, showingMyAccount } from './accountsStore.ts';
 import {
   achievementsAccountKey,
@@ -65,6 +64,7 @@ import {
   ratingSummary,
   spacedHours,
   toBeatSummary,
+  type OwnerPlayer,
 } from './panelSummaries.ts';
 import { PanelTileRow, PanelWideCard, type PanelCardDef } from './panelCards.tsx';
 import { isPanelCardOpen } from './panelOpenCards.ts';
@@ -138,9 +138,8 @@ interface PanelOptions {
   onNavigateGame: (appid: number, name: string) => void;
   onClose: (opts?: { leavingRoute?: boolean }) => void;
   // The route's own owners for a game (a comparison's players), over the current account's.
-  getOwners: (appid: number) => GameOwner[] | null;
+  getOwners: (appid: number) => OwnerPlayer[] | null;
   hasOwners: () => boolean; // static per route, so the Owned by tile never appears late
-  getOwnerMembers: () => string[] | null; // the route's owners' names, over the account's members'
   hasList: () => boolean;
   isOwnedList: () => boolean;
   similarTo: () => number | null;
@@ -492,10 +491,10 @@ const panelData = createRoot(() => {
     const key = ownershipKey();
     return key == null ? null : `${key}:${ownersRev()}`;
   });
-  const [owners] = createResource<GameOwner[], string>(ownersKey, () => {
+  const [owners] = createResource<OwnerPlayer[], string>(ownersKey, () => {
     const appid = openAppid();
     if (appid == null) return [];
-    return panelOptions.getOwners(appid) ?? getOwnersFor(appid);
+    return panelOptions.getOwners(appid) ?? accountOwnerPlayers(appid);
   });
 
   const [ownership] = createResource<OwnershipStatus | null, string>(ownershipKey, () => {
@@ -1710,22 +1709,24 @@ function MoreFrom(props: { game: ReadonlyGame }): JSX.Element {
 // Synchronous, so the Owned by tile never appears late (a cold comparison's players resolve later).
 const hasOwnerSource = () => panelOptions.hasOwners() || currentMembers().length > 0;
 
-// Who Owned by counts: the comparison's players, else the account's members.
-function ownerMemberNames(): string[] {
-  const players = panelOptions.getOwnerMembers();
-  if (players?.length) return players;
+// The current account's members as Owned by's players, each owning the game or not.
+async function accountOwnerPlayers(appid: number): Promise<OwnerPlayer[]> {
+  const owners = await getOwnersFor(appid);
   const account = getEffectiveCurrentAccount();
   if (!account) return [];
-  if (account.members.length === 1) return [accountDisplayLabel(account)];
+  if (account.members.length === 1) return [{ label: accountDisplayLabel(account), owners }];
   const names = peekMemberNames();
-  return names.length ? names : account.members;
+  return (names.length ? names : account.members).map((label) => ({
+    label,
+    owners: owners.filter((o) => o.name === label),
+  }));
 }
 
 const decodeHtml = (html: string) => new DOMParser().parseFromString(html, 'text/html').body.textContent || '';
 
 // Most recently played first; "never played" only with no playtime either (Steam's last-played can be 0).
 function OwnersBody(): JSX.Element {
-  const sorted = createMemo(() => sortOwners(panelData.owners() ?? []));
+  const sorted = createMemo(() => sortOwners((panelData.owners() ?? []).flatMap((p) => p.owners)));
   const maxMinutes = createMemo(() => Math.max(...sorted().map((o) => o.minutes)));
   return (
     <ul class="panel-owners" role="list">
@@ -1996,7 +1997,7 @@ function PanelLowerCards(props: { game: ReadonlyGame }): JSX.Element {
     card: 'owned-by',
     title: 'Owned by',
     icon: Users,
-    summary: () => ownedBySummary(panelData.owners.loading ? undefined : panelData.owners(), ownerMemberNames()),
+    summary: () => ownedBySummary(panelData.owners.loading ? undefined : panelData.owners()),
     body: <OwnersBody />,
     wordFig: true,
     sectionId: 'panel-section-owners',

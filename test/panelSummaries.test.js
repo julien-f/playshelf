@@ -332,27 +332,36 @@ test('dlcSummary: loading, failed, empty', () => {
 
 const owner = (name, minutes) => ({ name, minutes, lastPlayedSec: 0, recentMinutes: 0 });
 
+// A player (an account's member, or a comparison's player) and those of its members who own the game.
+const player = (label, ...owners) => ({ label, owners });
+
 test('ownedBySummary: one owner is their name and hours', () => {
   const ready = { kind: 'figure', state: 'ready', fig: 'Alice', qualifier: '45m' };
-  assert.deepEqual(ownedBySummary([owner('Alice', 45)], ['Alice']), ready);
-  assert.deepEqual(ownedBySummary([owner('Alice', 45)], ['Alice', 'Bob', 'Carol']), ready);
-  assert.equal(ownedBySummary([owner('Alice', 0)], ['Alice']).qualifier, 'not played');
+  assert.deepEqual(ownedBySummary([player('Alice', owner('Alice', 45))]), ready);
+  assert.deepEqual(ownedBySummary([player('Alice', owner('Alice', 45)), player('Bob'), player('Carol')]), ready);
+  assert.equal(ownedBySummary([player('Alice', owner('Alice', 0))]).qualifier, 'not played');
 });
 
-test('ownedBySummary: several owners count against the members, naming who lacks it', () => {
-  const owners = [owner('Alice', 60), owner('Carol', 0), owner('Dan', 5)];
-  assert.deepEqual(ownedBySummary(owners, ['Alice', 'Bob', 'Carol', 'Dan']), {
+test('ownedBySummary: several owners count against the players, naming who lacks it', () => {
+  const players = [player('Alice', owner('Alice', 60)), player('Bob'), player('Carol', owner('Carol', 0))];
+  players.push(player('Dan', owner('Dan', 5)));
+  assert.deepEqual(ownedBySummary(players), { kind: 'figure', state: 'ready', fig: '3 / 4', qualifier: 'not Bob' });
+  assert.equal(ownedBySummary(players.filter((p) => p.label !== 'Bob')).qualifier, 'everyone');
+});
+
+test("ownedBySummary: a comparison's Family owns the game when any of its members does", () => {
+  const family = player('Alice + Bob', owner('Alice', 60), owner('Bob', 5));
+  assert.deepEqual(ownedBySummary([family, player('Carol')]), {
     kind: 'figure',
     state: 'ready',
-    fig: '3 / 4',
-    qualifier: 'not Bob',
+    fig: '1 / 2',
+    qualifier: 'not Carol',
   });
-  assert.equal(ownedBySummary(owners, ['Alice', 'Carol', 'Dan']).qualifier, 'everyone');
 });
 
 test('ownedBySummary: nobody owns it', () => {
-  assert.deepEqual(ownedBySummary([], ['Alice']), { kind: 'figure', state: 'empty', qualifier: 'not owned' });
-  assert.deepEqual(ownedBySummary([], ['Alice', 'Bob', 'Carol', 'Dan']), {
+  assert.deepEqual(ownedBySummary([player('Alice')]), { kind: 'figure', state: 'empty', qualifier: 'not owned' });
+  assert.deepEqual(ownedBySummary(['Alice', 'Bob', 'Carol', 'Dan'].map((n) => player(n))), {
     kind: 'figure',
     state: 'empty',
     fig: '0 / 4',
@@ -361,7 +370,7 @@ test('ownedBySummary: nobody owns it', () => {
 });
 
 test('ownedBySummary: loading', () => {
-  assert.deepEqual(ownedBySummary(undefined, ['Alice']), { kind: 'figure', state: 'loading' });
+  assert.deepEqual(ownedBySummary(undefined), { kind: 'figure', state: 'loading' });
 });
 
 // The browser decodes through DOMParser; this stand-in covers the one entity the tests use.

@@ -186,12 +186,19 @@ export function dlcSummary(game: SummaryGame, entries: readonly DlcEntry[] | nul
   return latest ? { ...ready, qualifier: `latest ${fmtReleaseDate(latest.releaseDate)}` } : ready;
 }
 
-// `members`: every member's display name, to name who doesn't own it.
-export function ownedBySummary(owners: readonly GameOwner[] | undefined, members: readonly string[]): CardSummary {
-  if (owners === undefined) return loading('figure');
+// One of who Owned by counts (an account's member, a comparison's player) and its members owning the game.
+export interface OwnerPlayer {
+  label: string;
+  owners: readonly GameOwner[];
+}
+
+// A player owns the game when any of its members does (a comparison's Family).
+export function ownedBySummary(players: readonly OwnerPlayer[] | undefined): CardSummary {
+  if (players === undefined) return loading('figure');
+  const owners = players.flatMap((p) => p.owners);
   if (!owners.length)
-    return members.length > 1
-      ? { kind: 'figure', state: 'empty', fig: `0 / ${members.length}`, qualifier: 'not owned' }
+    return players.length > 1
+      ? { kind: 'figure', state: 'empty', fig: `0 / ${players.length}`, qualifier: 'not owned' }
       : empty('figure', 'not owned');
   if (owners.length === 1)
     return {
@@ -200,11 +207,11 @@ export function ownedBySummary(owners: readonly GameOwner[] | undefined, members
       fig: owners[0].name,
       qualifier: fmtPlaytime(owners[0].minutes) || 'not played',
     };
-  const lacking = members.filter((m) => !owners.some((o) => o.name === m));
+  const lacking = players.filter((p) => !p.owners.length).map((p) => p.label);
   return {
     kind: 'figure',
     state: 'ready',
-    fig: `${owners.length} / ${members.length}`,
+    fig: `${players.length - lacking.length} / ${players.length}`,
     qualifier: lacking.length ? `not ${lacking.join(', ')}` : 'everyone',
   };
 }

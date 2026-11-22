@@ -6151,6 +6151,13 @@ test('C4 edge: a comparison link in a fresh browser shows the Owned by tile', as
   await expect(page.locator('.panel-tile-row')).toHaveCount(3);
 });
 
+test("C4 edge: a comparison's Owned by counts a Family as one player, owning the game when a member does", async ({
+  page,
+}) => {
+  await page.goto('/lists/compare?u=alice,bob&u=carol&game=105600');
+  await expect(cardButton(page, 'Owned by')).toHaveAccessibleName('Owned by, 1 / 2, not Carol');
+});
+
 test('F2 edge: a search shows the Owned by tile with an account, and DLC alone as a row without one', async ({
   page,
 }) => {

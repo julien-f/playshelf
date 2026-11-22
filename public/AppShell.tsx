@@ -21,7 +21,7 @@ import { initPanel, isPanelOpen, getPanelGame } from './panel.tsx';
 import { bindPanelKeyboardShortcuts } from './panelKeyboard.ts';
 import { initGameSearch } from './gameSearch.ts';
 import { addRecentGame, loadRecentGames } from './recentGames.ts';
-import type { GameOwner } from './accountData.ts';
+import type { OwnerPlayer } from './panelSummaries.ts';
 import { setPanelParam, setLightboxParam, withAccountParam, COMPARE_PATH } from './urlState.ts';
 import { overlayClosesPage } from './overlayHistory.ts';
 import { syncAccountOverrideFromUrl } from './accountOverride.ts';
@@ -74,9 +74,8 @@ interface RouteHandlers {
   onListChanged?: (listId: string) => void; // the panel added or removed the open game
   onTagClick?: (dim: string, value: string) => void;
   isTagActive?: (dim: string, value: string) => boolean;
-  getOwners?: (appid: number) => GameOwner[] | null; // null: the current account's own (panel.tsx)
+  getOwners?: (appid: number) => OwnerPlayer[] | null; // each player, owning or not; null: the current account's (panel.tsx)
   hasOwners?: boolean; // the route has owners of its own (a comparison), even before they resolve
-  ownerMembers?: () => string[]; // its owners' names, owning or not
   isOwnedList?: boolean; // the panel's similar owned games would only repeat it
   similarTo?: () => number | null; // the game the list is sorted by similarity to
   setSimilarTo?: (appid: number | null) => void;
@@ -270,7 +269,6 @@ export function AppShell(props: RouteSectionProps): JSX.Element {
       tagsFilterable,
       getOwners: (appid) => routeHandlers.getOwners?.(appid) ?? null,
       hasOwners,
-      getOwnerMembers: () => routeHandlers.ownerMembers?.() ?? null,
       hasList,
       isOwnedList,
       similarTo: () => (hasList() ? (routeHandlers.similarTo?.() ?? null) : null),
