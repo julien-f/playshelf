@@ -4262,6 +4262,8 @@ export default function ListRoute() {
       getOwners: (appid) =>
         comparePlayers.length ? comparePlayers.flatMap((player) => player.owners.get(appid) ?? []) : null,
       isOwnedList: kind === 'owned',
+      hasOwners: kind === 'compare',
+      ownerMembers: () => comparePlayers.map((player) => player.label),
       similarTo,
       setSimilarTo,
     });

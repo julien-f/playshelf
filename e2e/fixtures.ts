@@ -114,6 +114,7 @@ export interface CatalogGame {
   score: number; // review score, 0–100
   reviews: number;
   hltb: number; // hours, all playstyles; 0 for no HLTB entry
+  hltbAllOnly?: boolean; // HLTB has only the all-playstyles time (an endless multiplayer game)
   genres: string[];
   categories: string[];
   release: string;
@@ -231,6 +232,7 @@ export const CATALOG: CatalogGame[] = [
     score: 66,
     reviews: 900000,
     hltb: 120,
+    hltbAllOnly: true,
     genres: ['Action', 'Adventure', 'Free to Play'],
     categories: ['Online PvP'],
     release: 'Nov 4, 2020',

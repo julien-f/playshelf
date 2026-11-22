@@ -49,7 +49,11 @@ function PanelCardBox(props: {
   return (
     <div
       class={`panel-card panel-card--${props.kind}`}
-      classList={{ 'panel-card--open': props.open && !empty(), 'panel-card--empty': empty() }}
+      classList={{
+        'panel-card--open': props.open && !empty(),
+        'panel-card--empty': empty(),
+        'panel-card--text': s().kind === 'text',
+      }}
       id={props.def.sectionId}
     >
       <h3 class="panel-card-heading" id={titleId(props.def.card)}>
@@ -65,22 +69,34 @@ function PanelCardBox(props: {
         >
           <Dynamic component={props.def.icon} class="panel-card-icon" />
           <span class="panel-card-title">{props.def.title}</span>
+          {/* A text card (fixed per card) answers on the title's line, cut with "…". */}
+          <Show
+            when={s().kind === 'text'}
+            fallback={
+              <span class="panel-card-summary">
+                <span class="panel-card-fig" style={{ color: s().tone }}>
+                  <Show when={s().state !== 'loading'} fallback={<span class="sk panel-card-sk" />}>
+                    {s().fig ?? '—'}
+                  </Show>
+                </span>
+                <span class="panel-card-qualifier">{s().qualifier}</span>
+                <span class="panel-card-bar">
+                  <Show when={s().bar != null}>
+                    <span class="panel-card-bar-fill" style={{ width: `${s().bar! * 100}%`, background: s().tone }} />
+                  </Show>
+                </span>
+              </span>
+            }
+          >
+            <span class="panel-card-line" style={{ color: s().tone }}>
+              <Show when={s().state !== 'loading'} fallback={<span class="sk panel-card-sk" />}>
+                {s().text}
+              </Show>
+            </span>
+          </Show>
           <Show when={!empty()}>
             <ChevronRight class="panel-card-chevron" />
           </Show>
-          <span class="panel-card-summary">
-            <span class="panel-card-fig" style={{ color: s().tone }}>
-              <Show when={s().state !== 'loading'} fallback={<span class="sk panel-card-sk" />}>
-                {s().fig ?? '—'}
-              </Show>
-            </span>
-            <span class="panel-card-qualifier">{s().qualifier}</span>
-            <span class="panel-card-bar">
-              <Show when={s().bar != null}>
-                <span class="panel-card-bar-fill" style={{ width: `${s().bar! * 100}%`, background: s().tone }} />
-              </Show>
-            </span>
-          </span>
         </button>
       </h3>
       {props.children}

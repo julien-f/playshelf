@@ -719,7 +719,7 @@ test(
     await asPlayer(page, ALICE);
     await page.goto('/lists/compare?u=alice&u=bob&u=carol');
     await row(page, 'Portal 2').getByText('Portal 2').click();
-    const owners = page.locator('#panel-section-owners .panel-owner-name');
+    const owners = (await openCard(page, 'Owned by')).locator('.panel-owner-name');
     await expect(owners).toHaveCount(3);
     expect((await owners.allInnerTexts()).sort()).toEqual(['Alice', 'Bob', 'Carol']);
   },
@@ -729,7 +729,7 @@ test(
   'C1 edge: a tag filter ranks games by how strongly they carry the tag, until cleared',
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['tags'] });
     await page.goto('/lists/owned');
     await expect(rows(page)).toHaveCount(6);
     const names = () =>
@@ -749,7 +749,7 @@ test(
 );
 
 test("C1 edge: the panel's Steam tags show how strongly players tagged the game with each", async ({ page }) => {
-  await asPlayer(page, ALICE);
+  await asPlayer(page, ALICE, { openCards: ['tags'] });
   await page.goto('/lists/owned');
   await row(page, 'Portal 2').getByText('Portal 2').click();
   const coop = page.locator('.panel-tags').getByRole('button', { name: 'Co-op, tag', exact: true });
@@ -764,11 +764,11 @@ test(
   "B2 edge: the panel lists the account's owned games closest by Steam tags, each opening its own panel",
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['similar'] });
     await page.goto('/lists/wishlist');
     await row(page, 'It Takes Two').getByText('It Takes Two').click();
     const similar = page.locator('#panel-section-similar');
-    await expect(similar.locator('.panel-section-title')).toHaveText(/^Similar in Alice's library/);
+    await expect(cardButton(page, 'Similar games')).toHaveAccessibleName("Similar games, needs Alice's Owned list");
     await expect(similar.getByRole('link', { name: /More like this on Steam/ })).toHaveAttribute(
       'href',
       'https://store.steampowered.com/recommended/morelike/app/1426210/',
@@ -790,7 +790,7 @@ test(
 );
 
 test('C1 edge: the panel sorts the list by similarity to its game, until stopped', async ({ page }) => {
-  await asPlayer(page, ALICE);
+  await asPlayer(page, ALICE, { openCards: ['similar'] });
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(6);
   const names = () =>
@@ -1360,7 +1360,7 @@ test(
   "C1 edge: a game looked up outside the list can't sort the list by similarity to it",
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['similar'] });
     await page.goto('/lists/owned');
     await expect(rows(page)).toHaveCount(6);
     await page.getByPlaceholder('Look up any game…').fill('apex');
@@ -1375,7 +1375,7 @@ test(
   'C1 edge: a Tag Match range keeps the games strongly tagged, and goes with the tag filter',
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['tags'] });
     await page.goto('/lists/owned');
     await expect(rows(page)).toHaveCount(6);
     const coop = page.locator('.panel-tags').getByRole('button', { name: 'Co-op, tag', exact: true });
@@ -4123,19 +4123,21 @@ test(
   "R1 edge: the ranking's side panel offers similar owned games, with no list to sort",
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['similar'] });
     await page.goto('/lists/owned');
     await rankChosen(page, ['Portal 2', 'Hades']);
     await page.getByRole('button', { name: 'Details', exact: true }).first().click();
     const similar = page.locator('#panel-section-similar');
-    await expect(similar.locator('.panel-section-title')).toHaveText(/^Similar in Alice's library/);
     await expect(similar.locator('.panel-similar-item').first()).toBeVisible();
+    // Its line names the closest owned games.
+    const closest = await similar.locator('.panel-similar-name').first().textContent();
+    await expect(cardButton(page, 'Similar games')).toHaveAccessibleName(new RegExp(`^Similar games, ${closest}`));
     await expect(similar.getByRole('button', { name: /Sort list by similarity/ })).toHaveCount(0);
   },
 );
 
 test("R1 edge: the ranking's side panel shows tags as plain pills and its Refresh re-fetches", async ({ page }) => {
-  await asPlayer(page, ALICE);
+  await asPlayer(page, ALICE, { openCards: ['tags'] });
   await page.goto('/lists/owned');
   await rankChosen(page, ['Portal 2', 'Hades']);
   await page.getByRole('button', { name: 'Details', exact: true }).first().click();
@@ -5629,8 +5631,7 @@ test("D2 edge: a lookup answered past its share after stepping to another bundle
   await page.goto('/bundles');
   await page.getByRole('cell', { name: BUNDLE.title }).click();
   await row(page, 'Hades').getByText('Hades').click();
-  const card = page.locator('#panel-section-dlc');
-  await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+  const card = await openCard(page, 'DLC');
   await card.locator('.panel-dlc-item').first().click();
   await lookup.requested;
   await page.keyboard.press('Escape');
@@ -5771,7 +5772,7 @@ test('D2 edge: a game with no store page keeps its CDN thumbnail and the panel s
     'src',
     'https://cdn.akamai.steamstatic.com/steam/apps/1145360/capsule_231x87.jpg',
   );
-  await expect(page.locator('.panel-no-data', { hasText: 'No Steam store page' })).toBeVisible();
+  await expect(cardButton(page, 'About')).toHaveAccessibleName('About, Delisted: no description');
 });
 
 test(
@@ -5795,7 +5796,7 @@ test(
     });
     await page.goto('/game/1145360');
     await expect(page.locator('#panel-title')).toHaveText('Hades Schema Name');
-    await expect(page.locator('.panel-no-data', { hasText: 'No Steam store page' })).toBeVisible();
+    await expect(cardButton(page, 'About')).toHaveAccessibleName('About, Delisted: no description');
   },
 );
 
@@ -6100,8 +6101,75 @@ test('F1 edge: an opened card stays open on the next game, on its own page and a
   await expect(cardButton(page, 'To beat')).toHaveAttribute('aria-expanded', 'true');
 });
 
-test("F1 edge: Tags & details names each chip's kind, and draws each kind's dot its own shape", async ({ page }) => {
+test('C4 edge: a comparison link in a fresh browser shows the Owned by tile', async ({ page }) => {
+  await page.goto('/lists/compare?u=alice&u=bob&u=carol&game=620');
+  await expect(cardButton(page, 'Owned by')).toHaveAccessibleName(/^Owned by, 3 \/ 3/);
+  await expect(page.locator('.panel-tile-row')).toHaveCount(3);
+});
+
+test('F2 edge: a search shows the Owned by tile with an account, and DLC alone as a row without one', async ({
+  page,
+}) => {
+  await page.goto('/search?q=dead');
+  await expect(page.locator('#panel-title')).not.toBeEmpty();
+  const dlcRow = page.locator('.panel-card--wide#panel-section-dlc');
+  await expect(dlcRow).toHaveCount(1);
+  await expect(cardButton(page, 'Owned by')).toHaveCount(0);
+  const first = await page.locator('#panel-title').textContent();
+  await page.getByRole('button', { name: 'Next game' }).click();
+  await expect(page.locator('#panel-title')).not.toHaveText(first!);
+  // Stays a row: what the tiles hold doesn't depend on the game.
+  await expect(dlcRow).toHaveCount(1);
+  await expect(page.locator('.panel-tile-row')).toHaveCount(2);
+
   await asPlayer(page, ALICE);
+  await page.evaluate(() => sessionStorage.clear()); // let the seed apply on reload
+  await page.reload();
+  await expect(cardButton(page, 'Owned by')).toBeVisible();
+  await expect(page.locator('.panel-tile-row')).toHaveCount(3);
+});
+
+test('F1 edge: a folded DLC card asks for none of its DLC until opened', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const metaAsked: string[] = [];
+  page.on('request', (req) => {
+    if (/\/api\/game-meta\/9000\d\d$/.test(req.url())) metaAsked.push(req.url());
+  });
+  await page.clock.install();
+  await page.goto('/lists/owned?game=1145360');
+  await expect(cardButton(page, 'DLC')).toHaveAccessibleName(/^DLC, 25/);
+  await page.clock.runFor(1000); // past the settle pause
+  expect(metaAsked).toEqual([]);
+  const body = await openCard(page, 'DLC');
+  await page.clock.runFor(1000);
+  await expect(body.locator('.panel-dlc-item').first()).toBeVisible();
+  expect(metaAsked.length).toBeGreaterThan(0);
+  // The coming-soon one sorts first once listed: it's past the first 20.
+  await body.getByRole('button', { name: 'Show 5 more' }).click();
+  await page.clock.runFor(1000);
+  await expect(body.locator('.panel-dlc-name').first()).toHaveText('Expansion 25');
+});
+
+test('F1 edge: News answers with its latest post on its line, and a game without posts has no News card', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=620');
+  await expect(cardButton(page, 'News')).toHaveAccessibleName(/^News, \d{4}-\d\d-\d\d · Patch 1\.38 notes$/);
+  await expect(await openCard(page, 'News')).toContainText('Anniversary update');
+  await page.goto('/lists/owned?game=1145360');
+  await expect(cardButton(page, 'About')).toBeVisible();
+  await expect(cardButton(page, 'News')).toHaveCount(0);
+});
+
+test('F1 edge: To beat says when HLTB has only the all-playstyles time', { tag: '@any-width' }, async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/wishlist?game=1172470');
+  await expect(cardButton(page, 'To beat')).toHaveAccessibleName('To beat, 120 h, all playstyles');
+});
+
+test("F1 edge: Tags & details names each chip's kind, grouped under its kind's label", async ({ page }) => {
+  await asPlayer(page, ALICE, { openCards: ['tags'] });
   await page.goto('/lists/owned?game=620');
   const chips = page.locator('.panel-tags').getByRole('button');
   await expect(chips.first()).toBeVisible();
@@ -6109,19 +6177,7 @@ test("F1 edge: Tags & details names each chip's kind, and draws each kind's dot 
     await expect(page.locator('.panel-tags').getByRole('button', { name, exact: true })).toBeVisible();
   const names = await chips.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
   expect(new Set(names).size).toBe(names.length);
-  const shapes = await page.locator('.panel-tag-legend .panel-tag-dot').evaluateAll((dots) =>
-    dots.map((d) => {
-      const s = getComputedStyle(d);
-      return `${s.borderRadius} ${s.rotate} ${s.clipPath}`;
-    }),
-  );
-  expect(shapes.length).toBeGreaterThanOrEqual(3);
-  expect(new Set(shapes).size).toBe(shapes.length);
-  const colours = await page
-    .locator('.panel-tag-legend .panel-tag-dot')
-    .evaluateAll((dots) => dots.map((d) => getComputedStyle(d).backgroundColor));
-  expect(colours).not.toContain('rgba(0, 0, 0, 0)');
-  expect(new Set(colours).size).toBe(colours.length);
+  await expect(page.locator('.panel-tag-group dt')).toHaveText(['Genres', 'Tags', 'Features']);
 });
 
 // A failed health check stops the panel before its price lookup, so each failure gets its own run.
@@ -6154,8 +6210,7 @@ test("F1 edge: a DLC's capsule that fails to load hides, keeping its box", async
   );
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360');
-  const card = page.locator('#panel-section-dlc');
-  await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+  const card = await openCard(page, 'DLC');
   const capsule = (name: string) =>
     card.locator('.panel-dlc-item', { hasText: new RegExp(`^${name}$`) }).locator('img');
   await expect(capsule('Expansion 1')).toHaveCSS('visibility', 'visible');
@@ -6187,8 +6242,7 @@ test(
     const held = await gate(page, '**/api/game-meta/900020');
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned?game=1145360');
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await expect(card.getByText('Loading 1 more…')).toBeVisible();
     const order = () => card.locator('.panel-dlc-name').allTextContents();
     const before = await order();
@@ -6214,8 +6268,7 @@ test(
     });
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned?game=1145360');
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await expect(card.locator('.panel-dlc-item')).toHaveCount(20);
     expect(requested.every((p) => p.startsWith('/api/game-meta/'))).toBe(true);
     expect(requested).toHaveLength(20);
@@ -8012,8 +8065,7 @@ test(
     });
     await page.goto('/search?q=hades');
     await expect(page.locator('#panel-title')).toHaveText('Hades');
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await card.locator('.panel-dlc-item').first().click();
     const back = page.getByRole('button', { name: 'Back to Hades', exact: true });
     await expect(back).toBeVisible();
@@ -8035,8 +8087,7 @@ test(
     );
     await page.goto('/search?q=hades');
     await expect(page.locator('#panel-reroll')).toBeVisible();
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await card.locator('.panel-dlc-item').first().click();
     await expect(page.getByRole('button', { name: 'Back to Hades', exact: true })).toBeVisible();
     await expect(page.locator('#panel-nav button')).toHaveCount(0);
@@ -8814,16 +8865,17 @@ test(
 const toggleSectionNow = (toggle: Locator) =>
   toggle.evaluate((b: HTMLElement) => {
     b.click();
-    const body = b.closest('.panel-achievements-card')!.querySelector<HTMLElement>('.panel-collapsible-body');
-    return body && { animations: body.getAnimations().length, inert: body.inert };
+    const body = document.getElementById(b.getAttribute('aria-controls')!);
+    const slot = body?.closest<HTMLElement>('.panel-drawer-slot, .panel-card-slot');
+    return body && { animations: slot!.getAnimations().length, inert: body.inert };
   });
 
 test('I2 edge: under reduced motion, a section shuts at once', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360');
-  const toggle = page.locator('#panel-section-dlc').getByRole('button', { name: /DLC · 25 available/ });
+  const toggle = cardButton(page, 'DLC');
   await toggle.click();
-  await expect(page.locator('#panel-section-dlc .panel-collapsible-body')).toBeVisible();
+  await expect(page.locator('#panel-card-dlc-body')).toBeVisible();
   expect(await toggleSectionNow(toggle)).toBeNull();
 });
 
@@ -8968,9 +9020,8 @@ test.describe('with motion on', () => {
     async ({ page }) => {
       await asPlayer(page, ALICE);
       await page.goto('/lists/owned?game=1145360');
-      const card = page.locator('#panel-section-dlc');
-      const toggle = card.getByRole('button', { name: /DLC · 25 available/ });
-      const body = card.locator('.panel-collapsible-body');
+      const toggle = cardButton(page, 'DLC');
+      const body = page.locator('#panel-card-dlc-body');
       // Not the loading shimmer's endless loop, which can't be finished.
       const finishAll = () =>
         page.evaluate(() =>
@@ -9294,8 +9345,7 @@ test(
     await row(page, 'Hades').focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('#panel-title')).toHaveText('Hades');
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await card.locator('.panel-dlc-item').first().click();
     await expect(page.locator('#panel-title')).not.toHaveText('Hades');
     await page.keyboard.press('Escape');
@@ -9360,8 +9410,7 @@ test(
       route.fulfill({ json: { appid: 900001, meta: null, failed: ['meta'] } }),
     );
     await page.goto('/lists/owned?game=1145360');
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await card.locator('.panel-dlc-item').first().click();
     await page.getByRole('button', { name: 'Back to Hades', exact: true }).click();
     await expect(page.locator('#panel-title')).toHaveText('Hades');
@@ -9831,7 +9880,7 @@ test(
 const moreFrom = (page: Page) => page.locator('#panel-section-similar .panel-similar-more');
 
 test("F4.1-2,5: a game's publisher lists its games, the open game's panel kept, and Back returns", async ({ page }) => {
-  await asPlayer(page, ALICE);
+  await asPlayer(page, ALICE, { openCards: ['similar'] });
   await page.goto('/lists/owned');
   await row(page, 'Terraria').getByText('Terraria').click();
   await moreFrom(page).getByRole('link', { name: 'All games by indie.io (publisher)' }).click();
@@ -9857,7 +9906,7 @@ test(
   'F4 edge: a developer that also publishes is one link, and one developer leads to another',
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['similar'] });
     await page.goto('/game/1145360');
     await expect(moreFrom(page)).toContainText('Supergiant Games (developer & publisher)');
     await expect(moreFrom(page).getByRole('link')).toHaveCount(1);
@@ -9879,7 +9928,7 @@ test(
   "F4 edge: on that creator's own list, More from marks it current, whatever the path's case",
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['similar'] });
     await page.goto('/Lists/Developer/?name=Supergiant%20Games&game=1145360');
     await expect(page.locator('#panel-title')).toHaveText('Hades');
     await expect(moreFrom(page).locator('[aria-current="page"]')).toHaveText('Supergiant Games');
@@ -10007,7 +10056,7 @@ test(
 
 test('F4 edge: a game with no Steam tags still offers More from', { tag: '@any-width' }, async ({ page }) => {
   await mockApi(page, { states: ['tagless'] });
-  await asPlayer(page, ALICE);
+  await asPlayer(page, ALICE, { openCards: ['similar'] });
   await page.goto('/lists/owned?game=105600');
   await expect(moreFrom(page).getByRole('link', { name: 'All games by Re-Logic (developer)' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sort list by similarity' })).toHaveCount(0);

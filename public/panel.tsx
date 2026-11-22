@@ -13,7 +13,6 @@ import {
   safeHref,
   fmtReleaseDate,
   MEDIA_FAILED,
-  noStorePage,
   metaOrBasics,
 } from './utils.ts';
 import { openLightbox, openLightboxFrom, lightboxShot, lightboxOpen } from './lightbox.tsx';
@@ -24,7 +23,7 @@ import { decideSwipeAxis, type SwipeAxis } from './lightboxSwipe.ts';
 import { pushOverlayEntry, popOverlayEntry } from './overlayHistory.ts';
 import { gameMediaItems, mediaLabel, resolveShotIndex } from './mediaItems.ts';
 import type { MediaItem } from './mediaItems.ts';
-import { getMyOwnershipStatus, getOwnersFor, myOwnershipVersion } from './myOwnership.ts';
+import { getMyOwnershipStatus, getOwnersFor, myOwnershipVersion, peekMemberNames } from './myOwnership.ts';
 import type { OwnershipStatus } from './myOwnership.ts';
 import { STATUS_LABELS, getStatus, setStatus, type GameStatus } from './gameStatuses.ts';
 import { sortOwners, ownerMeterPct } from './ownerList.ts';
@@ -53,7 +52,13 @@ import type {
 } from './panelData.ts';
 import { bestPickRate, bundleUrgency, pickTiers } from './bundleRows.ts';
 import {
+  aboutSummary,
   achievementsSummary,
+  dlcSummary,
+  newsSummary,
+  ownedBySummary,
+  similarSummary,
+  tagsSummary,
   capitalize,
   linuxDeckSummary,
   priceSummary,
@@ -62,8 +67,8 @@ import {
   spacedHours,
   toBeatSummary,
 } from './panelSummaries.ts';
-import { PanelTileRow, PanelWideCard, slideHeight, type PanelCardDef } from './panelCards.tsx';
-import { isPanelCardOpen, togglePanelCard } from './panelOpenCards.ts';
+import { PanelTileRow, PanelWideCard, type PanelCardDef } from './panelCards.tsx';
+import { isPanelCardOpen } from './panelOpenCards.ts';
 import { fmtDateTime } from './dateTime.ts';
 import { formatWithEstimate } from './currency.ts';
 import { currentRegion, regionCurrency } from './region.ts';
@@ -96,7 +101,6 @@ import { present, presented, privateMode } from './presentation.ts';
 import ArrowUpDown from 'lucide-solid/icons/arrow-up-down';
 import Check from 'lucide-solid/icons/check';
 import ChevronLeft from 'lucide-solid/icons/chevron-left';
-import ChevronRight from 'lucide-solid/icons/chevron-right';
 import CircleDollarSign from 'lucide-solid/icons/circle-dollar-sign';
 import Ellipsis from 'lucide-solid/icons/ellipsis';
 import ListPlus from 'lucide-solid/icons/list-plus';
@@ -115,6 +119,10 @@ import Timer from 'lucide-solid/icons/timer';
 import Cast from 'lucide-solid/icons/cast';
 import ThumbsUp from 'lucide-solid/icons/thumbs-up';
 import Trophy from 'lucide-solid/icons/trophy';
+import Users from 'lucide-solid/icons/users';
+import Info from 'lucide-solid/icons/info';
+import Tag from 'lucide-solid/icons/tag';
+import Sparkles from 'lucide-solid/icons/sparkles';
 import Wallet from 'lucide-solid/icons/wallet';
 import Wrench from 'lucide-solid/icons/wrench';
 import X from 'lucide-solid/icons/x';
@@ -141,6 +149,8 @@ interface PanelOptions {
   onClose: (opts?: { leavingRoute?: boolean }) => void;
   // The route's own owners for a game (a comparison's players), over the current account's.
   getOwners: (appid: number) => GameOwner[] | null;
+  hasOwners: () => boolean; // static per route, so the Owned by tile never appears late
+  getOwnerMembers: () => string[] | null; // the route's owners' names, over the account's members'
   hasList: () => boolean;
   isOwnedList: () => boolean;
   similarTo: () => number | null;
@@ -665,7 +675,7 @@ function panelPriceFields(game: ReadonlyGame): PriceFields | null | undefined {
   return game.bestDealPrice !== undefined ? game : panelData.price();
 }
 
-// Clicking a DLC entry in the expanded card (see DlcSection), or the "Part of <Base Game>"
+// Clicking a DLC entry in the expanded card (DlcBody), or the "Part of <Base Game>"
 // link (see BaseGameLink) — same relationship walked in opposite directions, so both push the
 // game being left onto panelHistory, then hand off to the host's own "open this appid"
 // mechanism (the same one backing the "look up any game" search box), just told to keep the
@@ -853,163 +863,6 @@ function jumpToPanelSection(target: string) {
   body.scrollTo({ top: body.scrollTop + delta, behavior: smoothScroll() });
 }
 
-// Tags/genres/categories/developer-publisher used to each get their own "uppercase
-// title + pill row" section — four near-identical blocks in a row. Merged into one
-// cloud instead, kind distinguished by a small colored dot (+ a legend) rather than
-// by which section a pill happens to sit in. `kind` picks the dot color/legend label;
-// `dim` is the actual click-filter
-// dimension, kept separate from `kind` since developers/publishers share one visual
-// kind but are two different filter dimensions.
-type TagKind = keyof typeof TAG_KIND_META;
-const TAG_KIND_META = {
-  tags: { label: 'Tag' },
-  genres: { label: 'Genre' },
-  categories: { label: 'Category' },
-  devpub: { label: 'Developer/Publisher' },
-};
-
-// A Steam tag's `weights` entry (relative to the game's top tag) shows as a gauge along its pill's bottom edge.
-function TagCloud(props: {
-  groups: { kind: TagKind; dim: string; items?: string[] | null; weights?: Record<string, number | null> | null }[];
-}): JSX.Element {
-  const present = createMemo(() => props.groups.filter((gr) => gr.items?.length));
-  const pills = createMemo(() =>
-    present().flatMap(({ kind, dim, items, weights }) => {
-      const values = kind === 'tags' ? [...items!] : [...items!].sort((a, b) => a.localeCompare(b));
-      return values.map((v) => ({ kind, dim, v, w: weights?.[v] ?? null }));
-    }),
-  );
-  const seenKinds = createMemo(() => [...new Set(present().map((gr) => gr.kind))]);
-  return (
-    <Show when={present().length}>
-      <section class="panel-section">
-        <h3 class="panel-section-title">Tags &amp; details</h3>
-        <div class="panel-tags">
-          <For each={pills()}>
-            {({ kind, dim, v, w }) => {
-              const dot = <span class={`panel-tag-dot panel-tag-dot--${kind}`} />;
-              // "Action" can be both a tag and a genre: two chips a screen reader must tell apart.
-              const kindName = `${v}, ${TAG_KIND_META[kind].label.toLowerCase()}`;
-              const title = w == null ? undefined : `${Math.round(w * 100)}% of the top tag's votes`;
-              const gauge =
-                w == null ? null : <span class={`tag-weight tag-weight--${kind}`} style={{ width: `${w * 100}%` }} />;
-              return (
-                <Show
-                  when={panelOptions.tagsFilterable()}
-                  fallback={
-                    <span class="panel-tag" title={title}>
-                      {dot}
-                      <span aria-hidden="true">{v}</span>
-                      <span class="visually-hidden">{kindName}</span>
-                      {gauge}
-                    </span>
-                  }
-                >
-                  <button
-                    class="panel-tag panel-tag-btn"
-                    classList={{ active: panelOptions.isTagActive(dim, v) }}
-                    aria-pressed={panelOptions.isTagActive(dim, v)}
-                    aria-label={kindName}
-                    title={title}
-                    onClick={() => panelOptions.onTagClick(dim, v)}
-                  >
-                    {dot}
-                    {v}
-                    {gauge}
-                  </button>
-                </Show>
-              );
-            }}
-          </For>
-        </div>
-        <div class="panel-tag-legend">
-          <For each={seenKinds()}>
-            {(k) => (
-              <span class="panel-tag-legend-item">
-                <span class={`panel-tag-dot panel-tag-dot--${k}`} />
-                {TAG_KIND_META[k].label}
-              </span>
-            )}
-          </For>
-        </div>
-      </section>
-    </Show>
-  );
-}
-
-// News and DLC until they become cards (PLAN.md step 4): a full-width toggle, its ↗ the source,
-// the body below; open is panelOpenCards' `card`, as for the tiles.
-function CollapsibleCard(props: {
-  card: string;
-  icon: JSX.Element;
-  val: JSX.Element;
-  body: JSX.Element;
-  linkHref?: string | null;
-  linkTitle: string;
-}): JSX.Element {
-  const expanded = createMemo(() => isPanelCardOpen(props.card));
-  // A click (only: a section opened by itself or reopened on ↑/↓ just shows) slides the body open
-  // or shut; it stays mounted, inert, until a collapse ends, and a click mid-way turns it around.
-  const [closing, setClosing] = createSignal(false);
-  let body: HTMLDivElement | undefined;
-  let slides = 0;
-  const onToggle = () => {
-    const opening = !expanded();
-    const live = body?.isConnected ? body : undefined;
-    const from = live?.getBoundingClientRect().height ?? 0;
-    for (const a of live?.getAnimations() ?? []) a.cancel();
-    setClosing(!opening && !prefersReducedMotion());
-    togglePanelCard(props.card);
-    const el = body?.isConnected ? body : undefined;
-    if (!el) return;
-    el.inert = !opening;
-    const slide = ++slides;
-    const to = opening ? el.getBoundingClientRect().height : 0;
-    void slideHeight(el, from, to).then(() => {
-      if (slide !== slides) return;
-      if (!opening) setClosing(false);
-      updateSubnavScrollSpy();
-    });
-  };
-  return (
-    <div class="panel-achievements-card">
-      <div class="panel-achievements-card-header">
-        <h3 class="panel-collapsible-heading">
-          <button
-            type="button"
-            class="panel-achievements-chip panel-collapsible-chip"
-            aria-expanded={expanded() ? 'true' : 'false'}
-            onClick={onToggle}
-          >
-            <span class="panel-achievements-icon">{props.icon}</span>
-            <span class="panel-collapsible-val">{props.val}</span>
-            <ChevronRight class="panel-achievements-chevron" />
-          </button>
-        </h3>
-        <Show when={props.linkHref}>
-          {(href) => (
-            <a
-              class="panel-icon-link"
-              href={href()}
-              target="_blank"
-              rel="noopener"
-              title={props.linkTitle}
-              aria-label={props.linkTitle}
-            >
-              ↗
-            </a>
-          )}
-        </Show>
-      </div>
-      <Show when={expanded() || closing()}>
-        <div class="panel-collapsible-body" ref={body}>
-          <div class="panel-achievements-list">{props.body}</div>
-        </div>
-      </Show>
-    </div>
-  );
-}
-
 // A YYYY-MM-DD date as a <time>, readable by machines; anything else (a coarse "Q4 2026") as plain text.
 function DayText(props: { text: string }): JSX.Element {
   return (
@@ -1171,138 +1024,11 @@ function AchievementsBody(props: { game: ReadonlyGame }): JSX.Element {
   );
 }
 
-// The "Owned by" card — one row per member of the current account who owns this game: name,
-// when they last played it, and their own playtime with a meter relative to the most-played
-// member. Renders nothing at all when nobody in the account owns it, when no account is loaded,
-// or before the `owners` resource has resolved. Takes no `game` prop — that resource is already
-// keyed on whichever game is open, so there'd be nothing for one to do.
-//
-// Deliberately shown even for a single-account slot, where it's one row: "owned, never played"
-// is itself worth seeing, and it's the only place last-played shows up in the panel.
-function OwnersSection(): JSX.Element {
-  const owners = (): GameOwner[] => panelData.owners() ?? [];
-  const sorted = createMemo(() => sortOwners(owners()));
-  const maxMinutes = createMemo(() => Math.max(...sorted().map((o) => o.minutes)));
-  return (
-    <Show when={sorted().length > 0}>
-      <section class="panel-section" id="panel-section-owners">
-        <div class="panel-section-title">
-          <h3>Owned by</h3> <span class="panel-section-subtitle">most recently played first</span>
-        </div>
-        <ul class="panel-owners" role="list">
-          <For each={sorted()}>
-            {(o) => {
-              const lastPlayed = fmtLastPlayed(o.lastPlayedSec);
-              const playtime = fmtPlaytime(o.minutes);
-              // Steam's `rtime_last_played` is genuinely 0 for plenty of owned-and-played games
-              // (confirmed live on a game with 477h on it), so a bare "never played" — what the
-              // pre-redesign card said, and a bug carried over in the original port — would flatly
-              // contradict the playtime printed right underneath it. Only claim "never played"
-              // when there's no playtime either.
-              const lastPlayedText = lastPlayed || (o.minutes > 0 ? 'last played unknown' : 'never played');
-              return (
-                <li class="panel-owner">
-                  <div class="panel-owner-top">
-                    <span class="panel-owner-name">{o.name}</span>
-                    <span class="panel-owner-lastplayed">
-                      <DayText text={lastPlayedText} />
-                    </span>
-                  </div>
-                  <div class="panel-owner-meter-track">
-                    <div
-                      class="panel-owner-meter-fill"
-                      style={{ width: `${ownerMeterPct(o.minutes, maxMinutes())}%` }}
-                    />
-                  </div>
-                  <span class="panel-owner-playtime">{playtime ? `${playtime} played` : 'not played'}</span>
-                </li>
-              );
-            }}
-          </For>
-        </ul>
-      </section>
-    </Show>
-  );
-}
-
-// Recent news/announcements (patch notes, event posts) — a handful of headlines, each
-// linking straight to the full post, plus a link to the game's full news hub on the Steam
-// store for anything older than what's shown here. Dates use the same plain-ISO convention
-// as fmtLastPlayed/the table's date columns rather than a relative "3 days ago" string.
+// PanelSubnav's condition for its News tab: posts, or a failed load.
 const newsShown = () => {
   const news = panelData.news();
   return news === null || !!news?.length;
 };
-
-function NewsSection(props: { game: ReadonlyGame }): JSX.Element {
-  const items = () => panelData.news();
-  return (
-    <Show
-      when={panelData.news.loading}
-      fallback={
-        // A failed fetch with nothing to fall back on (`null` — see panelData.ts's fetchNews, which
-        // keeps a previous successful load rather than wiping it) is worth a visible message rather
-        // than silently looking identical to a game with no news at all.
-        <Show when={newsShown()}>
-          <section class="panel-section" id="panel-section-news">
-            <Show
-              when={items()}
-              fallback={
-                <>
-                  <h3 class="panel-section-title">News</h3>
-                  <div class="panel-no-data">Couldn't load news.</div>
-                </>
-              }
-            >
-              {(list) => (
-                <CollapsibleCard
-                  card="news"
-                  icon={<Newspaper />}
-                  // Spelling out "more on Steam" here (not just relying on the ↗ icon's title
-                  // tooltip) makes it explicit that this list is a preview, not the full history.
-                  val={
-                    <>
-                      <b>News</b> · more on Steam
-                    </>
-                  }
-                  body={
-                    <ul class="panel-news" role="list">
-                      <For each={list()}>
-                        {(n) => (
-                          <li>
-                            <a
-                              class="panel-news-item"
-                              href={safeHref(n.url) || undefined}
-                              target="_blank"
-                              rel="noopener"
-                            >
-                              <span class="panel-news-title">{n.title}</span>
-                              <span class="panel-news-meta">
-                                <DayText text={fmtLastPlayed(n.date)} />
-                                {n.feedLabel ? ` · ${n.feedLabel}` : ''}
-                              </span>
-                            </a>
-                          </li>
-                        )}
-                      </For>
-                    </ul>
-                  }
-                  linkHref={`https://store.steampowered.com/news/app/${props.game.appid}`}
-                  linkTitle="View all news on Steam"
-                />
-              )}
-            </Show>
-          </section>
-        </Show>
-      }
-    >
-      <section class="panel-section" id="panel-section-news">
-        <h3 class="panel-section-title">News</h3>
-        <span class="sk" style={{ display: 'block', width: '100%', height: '48px', 'border-radius': '6px' }} />
-      </section>
-    </Show>
-  );
-}
 
 // The Price card's body: the current best deal (same display/color/badge/tooltip as the Best Deal table cell in
 // bundles.tsx/library.ts), its discount off Steam Full Price when there is one, a direct link
@@ -1638,78 +1364,6 @@ function DlcItem(props: { d: DlcEntry }): JSX.Element {
         <span class="panel-dlc-name">{props.d.name}</span>
       </a>
     </li>
-  );
-}
-
-function DlcSection(props: { game: ReadonlyGame }): JSX.Element {
-  const dlcIds = () => props.game.details?.meta?.dlc ?? [];
-  // Whichever entries have already resolved, for the streamed-in-as-they-land state below —
-  // tagged with the appid they belong to, so a partial list is never shown under another game.
-  const loaded = () => {
-    const partial = panelData.dlcPartial();
-    return (partial?.appid === props.game.appid ? partial.entries : []).filter((d): d is DlcEntry => d != null);
-  };
-  const skeleton = (
-    <div class="panel-collapsible-body-pad">
-      <span class="sk" style={{ display: 'block', width: '100%', height: '48px', 'border-radius': '6px' }} />
-    </div>
-  );
-
-  // One list for streaming and done, sorted throughout: entries already shown keep their element
-  // (and capsule) when the rest arrive, instead of a second list replacing the first.
-  const entries = createMemo(() => sortDlcByRelease(panelData.dlc.loading ? loaded() : (panelData.dlc() ?? [])));
-  const empty = () => {
-    if (panelData.dlc.loading || panelData.dlc() === undefined) return skeleton;
-    return (
-      <div class="panel-collapsible-body-pad">
-        <div class="panel-no-data">
-          {panelData.dlc() === null ? "Couldn't load DLC details." : 'No DLC details available.'}
-        </div>
-      </div>
-    );
-  };
-  const notShown = () => dlcIds().length - panelData.dlcShown();
-  const body = (
-    <Show when={entries().length} fallback={empty()}>
-      <div class="panel-dlc-list">
-        <ul class="panel-dlc-items" role="list">
-          <For each={entries()}>{(d) => <DlcItem d={d} />}</For>
-        </ul>
-        <Show
-          when={panelData.dlc.loading}
-          fallback={
-            <Show when={notShown() > 0}>
-              <button type="button" class="panel-dlc-more" onClick={() => panelData.showMoreDlc(props.game.appid)}>
-                {notShown() > DLC_PAGE ? `Show ${DLC_PAGE} more of ${notShown()}` : `Show ${notShown()} more`}
-              </button>
-            </Show>
-          }
-        >
-          <Show when={panelData.dlcShown() - entries().length}>
-            {(n) => <div class="panel-dlc-loading-more">Loading {n()} more…</div>}
-          </Show>
-        </Show>
-      </div>
-    </Show>
-  );
-
-  return (
-    <Show when={dlcIds().length}>
-      <section class="panel-section" id="panel-section-dlc">
-        <CollapsibleCard
-          card="dlc"
-          icon={<Package />}
-          val={
-            <>
-              <b>DLC</b> · {dlcIds().length} available
-            </>
-          }
-          body={body}
-          linkHref={`https://store.steampowered.com/dlc/${props.game.appid}/`}
-          linkTitle="View all DLC on Steam"
-        />
-      </section>
-    </Show>
   );
 }
 
@@ -2096,37 +1750,6 @@ function PanelTiles(props: { game: ReadonlyGame }): JSX.Element {
   );
 }
 
-// Same list of names in the same order — a developer list that's identical to the publisher list
-// is folded into one "Developer/Publisher" group rather than shown twice. Takes both arrays as
-// parameters rather than closing over them, so the element comparison reads its own arguments
-// rather than a captured reactive read (which `solid/reactivity` rightly can't tell apart from a
-// stale snapshot).
-function sameNames(a: string[], b: string[]): boolean {
-  return a.length > 0 && a.length === b.length && a.every((v, i) => v === b[i]);
-}
-
-// Tags/genres/categories/developer-publisher, as one cloud (see TagCloud above).
-function TagCloudSection(props: { game: ReadonlyGame }): JSX.Element {
-  const meta = () => props.game.details?.meta;
-  const groups = createMemo(() => {
-    const devs = metaOrBasics(props.game.details)?.developers || [];
-    const pubs = metaOrBasics(props.game.details)?.publishers || [];
-    const sameDevPub = sameNames(devs, pubs);
-    return [
-      { kind: 'tags' as const, dim: 'tags', items: props.game.details?.tags, weights: props.game.details?.tagWeights },
-      { kind: 'genres' as const, dim: 'genres', items: meta()?.genres },
-      { kind: 'categories' as const, dim: 'categories', items: meta()?.categories },
-      { kind: 'devpub' as const, dim: 'developers', items: devs },
-      ...(sameDevPub ? [] : [{ kind: 'devpub' as const, dim: 'publishers', items: pubs }]),
-    ];
-  });
-  return (
-    <Show when={!props.game.loading}>
-      <TagCloud groups={groups()} />
-    </Show>
-  );
-}
-
 const SIMILAR_SHOWN = 5;
 
 const steamMoreLikeUrl = (appid: number): string => `https://store.steampowered.com/recommended/morelike/app/${appid}/`;
@@ -2188,84 +1811,369 @@ function MoreFrom(props: { game: ReadonlyGame }): JSX.Element {
   );
 }
 
-// The account's owned games closest by tags, from Owned's device cache; Steam's page covers the whole store.
-function SimilarSection(props: { game: ReadonlyGame }): JSX.Element {
-  const account = () => getEffectiveCurrentAccount();
-  // On Owned, a row's closest owned games are the list's own Sort list by similarity.
-  const shown = () => account() && !(panelOptions.isOwnedList() && !props.game.standalone);
-  const hasTags = () => !!props.game.details?.tags?.length;
-  // Per game opened, so a library Owned cached meanwhile shows up.
-  const library = createMemo(() => {
-    const taste = shown() ? loadTaste(account()!.id) : null;
-    return { taste, similar: taste && similarInLibrary(taste, props.game, SIMILAR_SHOWN) };
-  });
+// ── The lower cards: DLC | Owned by (DLC alone, wide, without owners), About, Tags, Similar, News ──
+
+// Synchronous, so the Owned by tile never appears late (a cold comparison's players resolve later).
+const hasOwnerSource = () => panelOptions.hasOwners() || currentMembers().length > 0;
+
+// Who Owned by counts: the comparison's players, else the account's members.
+function ownerMemberNames(): string[] {
+  const players = panelOptions.getOwnerMembers();
+  if (players?.length) return players;
+  const account = getEffectiveCurrentAccount();
+  if (!account) return [];
+  if (account.members.length === 1) return [accountDisplayLabel(account)];
+  const names = peekMemberNames();
+  return names.length ? names : account.members;
+}
+
+const decodeHtml = (html: string) => new DOMParser().parseFromString(html, 'text/html').body.textContent || '';
+
+// Most recently played first; "never played" only with no playtime either (Steam's last-played can be 0).
+function OwnersBody(): JSX.Element {
+  const sorted = createMemo(() => sortOwners(panelData.owners() ?? []));
+  const maxMinutes = createMemo(() => Math.max(...sorted().map((o) => o.minutes)));
   return (
-    // A tagless game still gets its More from line.
-    <Show when={!props.game.loading && (hasTags() || gameCreators(metaOrBasics(props.game.details)).length)}>
-      <section class="panel-section" id="panel-section-similar">
-        <div class="panel-section-title">
-          <h3>{shown() ? `Similar in ${accountDisplayLabel(account()!)}'s library` : 'Similar games'}</h3>{' '}
-          <a href={steamMoreLikeUrl(props.game.appid)} target="_blank" rel="noopener">
-            More like this on Steam ↗
-          </a>
-        </div>
-        <MoreFrom game={props.game} />
-        <Show when={shown() && hasTags()}>
-          <Show
-            when={library().similar?.length}
-            fallback={
-              <div class="panel-similar-empty">
-                {library().taste?.games.length ? (
-                  'No close match in this library.'
-                ) : (
-                  <>
-                    Open <A href={withAccountParam('/lists/owned')}>{accountDisplayLabel(account()!)}'s Owned list</A>{' '}
-                    once on this device to compare.
-                  </>
-                )}
+    <ul class="panel-owners" role="list">
+      <For each={sorted()}>
+        {(o) => {
+          const lastPlayed = fmtLastPlayed(o.lastPlayedSec);
+          const playtime = fmtPlaytime(o.minutes);
+          const lastPlayedText = lastPlayed || (o.minutes > 0 ? 'last played unknown' : 'never played');
+          return (
+            <li class="panel-owner">
+              <div class="panel-owner-top">
+                <span class="panel-owner-name">{o.name}</span>
+                <span class="panel-owner-lastplayed">
+                  <DayText text={lastPlayedText} />
+                </span>
               </div>
-            }
+              <div class="panel-owner-meter-track">
+                <div class="panel-owner-meter-fill" style={{ width: `${ownerMeterPct(o.minutes, maxMinutes())}%` }} />
+              </div>
+              <span class="panel-owner-playtime">{playtime ? `${playtime} played` : 'not played'}</span>
+            </li>
+          );
+        }}
+      </For>
+    </ul>
+  );
+}
+
+function DlcBody(props: { game: ReadonlyGame }): JSX.Element {
+  const dlcIds = () => props.game.details?.meta?.dlc ?? [];
+  // Whichever entries have already resolved, tagged with their appid so another game's never show.
+  const loaded = () => {
+    const partial = panelData.dlcPartial();
+    return (partial?.appid === props.game.appid ? partial.entries : []).filter((d): d is DlcEntry => d != null);
+  };
+  // One list for streaming and done, sorted throughout: entries already shown keep their element.
+  const entries = createMemo(() => sortDlcByRelease(panelData.dlc.loading ? loaded() : (panelData.dlc() ?? [])));
+  const notShown = () => dlcIds().length - panelData.dlcShown();
+  return (
+    <>
+      <Show
+        when={entries().length}
+        fallback={
+          <Show
+            when={!panelData.dlc.loading && panelData.dlc() !== undefined}
+            fallback={<span class="sk panel-card-body-sk" />}
           >
-            <ul class="panel-similar-list" role="list">
-              <For each={library().similar}>
-                {(s) => (
-                  <li>
-                    <button
-                      class="panel-similar-item"
-                      title={`${s.score}% similar by Steam tags`}
-                      onClick={() => navigateToGame(s.game.appid, s.game.name)}
-                    >
-                      <span class="panel-similar-name">{s.game.name}</span>
-                      <span class="panel-similar-score">{s.score}%</span>
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ul>
+            <div class="panel-no-data">
+              {panelData.dlc() === null ? "Couldn't load DLC details." : 'No DLC details available.'}
+            </div>
+          </Show>
+        }
+      >
+        <ul class="panel-dlc-items" role="list">
+          <For each={entries()}>{(d) => <DlcItem d={d} />}</For>
+        </ul>
+        <Show
+          when={panelData.dlc.loading}
+          fallback={
+            <Show when={notShown() > 0}>
+              <button type="button" class="panel-dlc-more" onClick={() => panelData.showMoreDlc(props.game.appid)}>
+                {notShown() > DLC_PAGE ? `Show ${DLC_PAGE} more of ${notShown()}` : `Show ${notShown()} more`}
+              </button>
+            </Show>
+          }
+        >
+          <Show when={panelData.dlcShown() - entries().length}>
+            {(n) => <div class="panel-dlc-loading-more">Loading {n()} more…</div>}
           </Show>
         </Show>
-        {/* A standalone lookup isn't a row, so the list has nothing to rank against it. */}
-        <Show when={panelOptions.hasList() && !props.game.standalone && hasTags()}>
-          <button
-            class="panel-similar-sort"
-            onClick={() =>
-              panelOptions.setSimilarTo(panelOptions.similarTo() === props.game.appid ? null : props.game.appid)
+      </Show>
+      <a
+        class="panel-card-link"
+        href={`https://store.steampowered.com/dlc/${props.game.appid}/`}
+        target="_blank"
+        rel="noopener"
+      >
+        All DLC on Steam ↗
+      </a>
+    </>
+  );
+}
+
+function NewsBody(props: { game: ReadonlyGame }): JSX.Element {
+  return (
+    <>
+      <ul class="panel-news" role="list">
+        <For each={panelData.news.latest ?? []}>
+          {(n) => (
+            <li>
+              <a class="panel-news-item" href={safeHref(n.url) || undefined} target="_blank" rel="noopener">
+                <span class="panel-news-title">{n.title}</span>
+                <span class="panel-news-meta">
+                  <DayText text={fmtLastPlayed(n.date)} />
+                  {n.feedLabel ? ` · ${n.feedLabel}` : ''}
+                </span>
+              </a>
+            </li>
+          )}
+        </For>
+      </ul>
+      <a
+        class="panel-card-link"
+        href={`https://store.steampowered.com/news/app/${props.game.appid}`}
+        target="_blank"
+        rel="noopener"
+      >
+        All news on Steam ↗
+      </a>
+    </>
+  );
+}
+
+// Grouped by kind, so a pill needs no colour key; a tag that is also a genre shows once, as the genre.
+const TAG_GROUPS = [
+  { key: 'genres', label: 'Genres', kind: 'genre' },
+  { key: 'tags', label: 'Tags', kind: 'tag' },
+  { key: 'categories', label: 'Features', kind: 'category' },
+] as const;
+
+function TagsBody(props: { game: ReadonlyGame }): JSX.Element {
+  const groups = createMemo(() => {
+    const meta = props.game.details?.meta;
+    const genres = [...(meta?.genres ?? [])].sort((a, b) => a.localeCompare(b));
+    const items = {
+      genres,
+      tags: (props.game.details?.tags ?? []).filter((t) => !genres.includes(t)),
+      categories: [...(meta?.categories ?? [])].sort((a, b) => a.localeCompare(b)),
+    };
+    return TAG_GROUPS.map((g) => ({ ...g, items: items[g.key] })).filter((g) => g.items.length);
+  });
+  const weight = (dim: string, v: string) => (dim === 'tags' ? (props.game.details?.tagWeights?.[v] ?? null) : null);
+  return (
+    <dl class="panel-tag-groups">
+      <For each={groups()}>
+        {(group) => (
+          <div class="panel-tag-group">
+            <dt>{group.label}</dt>
+            <dd class="panel-tags">
+              <For each={group.items}>
+                {(v) => {
+                  // "Co-op" can be both a tag and a feature: two pills a screen reader must tell apart.
+                  const name = `${v}, ${group.kind}`;
+                  const w = weight(group.key, v);
+                  const title = w == null ? undefined : `${Math.round(w * 100)}% of the top tag's votes`;
+                  const gauge = w == null ? null : <span class="tag-weight" style={{ width: `${w * 100}%` }} />;
+                  return (
+                    <Show
+                      when={panelOptions.tagsFilterable()}
+                      fallback={
+                        <span class="panel-tag" title={title}>
+                          <span aria-hidden="true">{v}</span>
+                          <span class="visually-hidden">{name}</span>
+                          {gauge}
+                        </span>
+                      }
+                    >
+                      <button
+                        class="panel-tag panel-tag-btn"
+                        classList={{ active: panelOptions.isTagActive(group.key, v) }}
+                        aria-pressed={panelOptions.isTagActive(group.key, v)}
+                        aria-label={name}
+                        title={title}
+                        onClick={() => panelOptions.onTagClick(group.key, v)}
+                      >
+                        {v}
+                        {gauge}
+                      </button>
+                    </Show>
+                  );
+                }}
+              </For>
+            </dd>
+          </div>
+        )}
+      </For>
+    </dl>
+  );
+}
+
+type SimilarLibrary = { taste: ReturnType<typeof loadTaste>; similar: ReturnType<typeof similarInLibrary> | null };
+
+// The account's owned games closest by tags, from Owned's device cache; Steam's page covers the whole store.
+function SimilarBody(props: {
+  game: ReadonlyGame;
+  shown: boolean;
+  library: SimilarLibrary;
+  account: string;
+}): JSX.Element {
+  const hasTags = () => !!props.game.details?.tags?.length;
+  return (
+    <>
+      <MoreFrom game={props.game} />
+      <Show when={props.shown && hasTags()}>
+        <Show
+          when={props.library.similar?.length}
+          fallback={
+            <div class="panel-similar-empty">
+              {props.library.taste?.games.length ? (
+                'No close match in this library.'
+              ) : (
+                <>
+                  Open <A href={withAccountParam('/lists/owned')}>{props.account}'s Owned list</A> once on this device
+                  to compare.
+                </>
+              )}
+            </div>
+          }
+        >
+          <ul class="panel-similar-list" role="list">
+            <For each={props.library.similar}>
+              {(s) => (
+                <li>
+                  <button
+                    class="panel-similar-item"
+                    title={`${s.score}% similar by Steam tags`}
+                    onClick={() => navigateToGame(s.game.appid, s.game.name)}
+                  >
+                    <span class="panel-similar-name">{s.game.name}</span>
+                    <span class="panel-similar-score">{s.score}%</span>
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
+      </Show>
+      {/* A standalone lookup isn't a row, so the list has nothing to rank against it. */}
+      <Show when={panelOptions.hasList() && !props.game.standalone && hasTags()}>
+        <button
+          class="panel-similar-sort"
+          onClick={() =>
+            panelOptions.setSimilarTo(panelOptions.similarTo() === props.game.appid ? null : props.game.appid)
+          }
+        >
+          <Show
+            when={panelOptions.similarTo() === props.game.appid}
+            fallback={
+              <>
+                <ArrowUpDown /> Sort list by similarity
+              </>
             }
           >
-            <Show
-              when={panelOptions.similarTo() === props.game.appid}
-              fallback={
-                <>
-                  <ArrowUpDown /> Sort list by similarity
-                </>
-              }
-            >
-              <X /> Stop sorting by similarity
-            </Show>
-          </button>
-        </Show>
-      </section>
-    </Show>
+            <X /> Stop sorting by similarity
+          </Show>
+        </button>
+      </Show>
+      <a class="panel-card-link" href={steamMoreLikeUrl(props.game.appid)} target="_blank" rel="noopener">
+        More like this on Steam ↗
+      </a>
+    </>
+  );
+}
+
+function PanelLowerCards(props: { game: ReadonlyGame }): JSX.Element {
+  const storeFailed = detailsFailed('Steam store');
+  const dlc: PanelCardDef = {
+    card: 'dlc',
+    title: 'DLC',
+    icon: Package,
+    summary: () =>
+      dlcSummary(props.game, panelData.dlcShown() && !panelData.dlc.loading ? panelData.dlc.latest : undefined),
+    body: <DlcBody game={props.game} />,
+    failed: storeFailed,
+    sectionId: 'panel-section-dlc',
+  };
+  const ownedBy: PanelCardDef = {
+    card: 'owned-by',
+    title: 'Owned by',
+    icon: Users,
+    summary: () => ownedBySummary(panelData.owners.loading ? undefined : panelData.owners(), ownerMemberNames()),
+    body: <OwnersBody />,
+    sectionId: 'panel-section-owners',
+  };
+  const about: PanelCardDef = {
+    card: 'about',
+    title: 'About',
+    icon: Info,
+    summary: () => aboutSummary(props.game, decodeHtml),
+    body: (
+      <p class="panel-desc" id="panel-desc">
+        {decodeHtml(metaOrBasics(props.game.details)?.description ?? '')}
+      </p>
+    ),
+    failed: storeFailed,
+  };
+  const tags: PanelCardDef = {
+    card: 'tags',
+    title: 'Tags & details',
+    icon: Tag,
+    summary: () => tagsSummary(props.game),
+    body: <TagsBody game={props.game} />,
+    failed: detailsFailed('Steam'),
+  };
+  const account = () => getEffectiveCurrentAccount();
+  // On Owned, a row's closest owned games are the list's own Sort list by similarity.
+  const similarShown = () => !!account() && !(panelOptions.isOwnedList() && !props.game.standalone);
+  // Per game opened, so a library Owned cached meanwhile shows up.
+  const library = createMemo((): SimilarLibrary => {
+    const taste = similarShown() ? loadTaste(account()!.id) : null;
+    return { taste, similar: taste && similarInLibrary(taste, props.game, SIMILAR_SHOWN) };
+  });
+  const accountLabel = () => (account() ? accountDisplayLabel(account()!) : '');
+  const similar: PanelCardDef = {
+    card: 'similar',
+    title: 'Similar games',
+    icon: Sparkles,
+    summary: () =>
+      similarSummary(props.game, {
+        closest:
+          similarShown() && props.game.details?.tags?.length
+            ? (library().similar?.map((s) => s.game.name) ?? null)
+            : undefined,
+        account: similarShown() ? accountLabel() : null,
+      }),
+    body: <SimilarBody game={props.game} shown={similarShown()} library={library()} account={accountLabel()} />,
+    sectionId: 'panel-section-similar',
+  };
+  // A ↻ keeps the summary shown; another game's load (the same resource, re-keyed) shimmers.
+  const latestNews = () => (panelData.news.loading && !panelRefreshing() ? undefined : panelData.news.latest);
+  const news: PanelCardDef = {
+    card: 'news',
+    title: 'News',
+    icon: Newspaper,
+    summary: () => newsSummary(latestNews()) ?? { kind: 'text', state: 'empty', text: 'no posts' },
+    body: <NewsBody game={props.game} />,
+    failed: () => ({ message: "Steam didn't answer.", retry: () => void panelData.refetchNews() }),
+    sectionId: 'panel-section-news',
+  };
+  const hasNews = createMemo(() => newsSummary(latestNews()) !== null);
+  return (
+    <>
+      <Show when={hasOwnerSource()} fallback={<PanelWideCard def={dlc} />}>
+        <PanelTileRow first={dlc} second={ownedBy} />
+      </Show>
+      <PanelWideCard def={about} />
+      <PanelWideCard def={tags} />
+      <PanelWideCard def={similar} />
+      <Show when={hasNews()}>
+        <PanelWideCard def={news} />
+      </Show>
+    </>
   );
 }
 
@@ -2651,19 +2559,6 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
   const g = props.game;
   const meta = () => g.details?.meta;
 
-  // `description` (Steam's `short_description`) can carry literal HTML entities as plain text
-  // (e.g. "Baldur's Gate..." legitimately has "&amp;" for "Dungeons & Dragons"), and JSX text
-  // interpolation doesn't decode entities on its own — decoding it inertly via a DOMParser
-  // document that's never attached to the page (runs no scripts, loads no resources) and then
-  // rendering the decoded *text* (never raw markup/innerHTML) is what the original file did too;
-  // preserved verbatim here since JSX interpolation is already exactly as safe as that
-  // plain-text insert was.
-  const description = () => metaOrBasics(g.details)?.description;
-  const decodedDescription = () => {
-    const d = description();
-    return d ? new DOMParser().parseFromString(d, 'text/html').body.textContent || '' : '';
-  };
-
   // "← Back" only appears once a DLC hop is actually in progress — a plain table-row click never
   // gets this button, only a game reached by following a DLC link (or by going back through more
   // than one of them) does.
@@ -2682,6 +2577,7 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
   // whether there's a base game to show.
   const releaseDate = () => metaOrBasics(g.details)?.releaseDate;
   const hasBaseGame = () => !g.loading && !!meta()?.fullgame;
+  const developer = () => metaOrBasics(g.details)?.developers?.[0];
   // On this line, which has room: the action row below has none on a phone.
   const statusShown = () => !!panelData.ownership()?.inLibrary && showingMyAccount();
 
@@ -2709,10 +2605,26 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
             <h2 class="panel-title" id="panel-title">
               {g.name || `App ${g.appid}`}
             </h2>
-            <Show when={releaseDate() || hasBaseGame() || statusShown()}>
+            <Show when={releaseDate() || developer() || hasBaseGame() || statusShown()}>
               <div class="panel-release">
                 <Show when={releaseDate()}>{(r) => <DayText text={fmtReleaseDate(r())} />}</Show>
-                <Show when={releaseDate() && hasBaseGame()}>
+                <Show when={developer()}>
+                  {(name) => (
+                    <>
+                      <Show when={releaseDate()}>
+                        <span class="panel-meta-sep"> · </span>
+                      </Show>
+                      <a
+                        class="panel-developer"
+                        href={withAccountParam(`${creatorListPath('developer', name())}&game=${g.appid}`)}
+                        aria-label={`All games by ${name()} (developer)`}
+                      >
+                        {name()}
+                      </a>
+                    </>
+                  )}
+                </Show>
+                <Show when={(releaseDate() || developer()) && hasBaseGame()}>
                   <span class="panel-meta-sep"> · </span>
                 </Show>
                 <Show when={hasBaseGame()}>
@@ -2780,21 +2692,7 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
       </Show>
       <PanelTiles game={g} />
       <PriceCard game={g} />
-      <Show when={noStorePage(g)}>
-        <p class="panel-no-data">No Steam store page: delisted or unavailable, so no description, genres or media.</p>
-      </Show>
-      <Show when={description()}>
-        <p class="panel-desc" id="panel-desc">
-          {decodedDescription()}
-        </p>
-      </Show>
-      <TagCloudSection game={g} />
-      <SimilarSection game={g} />
-      <OwnersSection />
-      <NewsSection game={g} />
-      <Show when={!g.loading}>
-        <DlcSection game={g} />
-      </Show>
+      <PanelLowerCards game={g} />
     </>
   );
 }

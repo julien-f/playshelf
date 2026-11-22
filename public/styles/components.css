@@ -2120,10 +2120,12 @@
     color: var(--muted);
     font-size: var(--fs-meta);
   }
-  .panel-basegame-link {
+  .panel-basegame-link,
+  .panel-developer {
     color: var(--text-body);
   }
-  .panel-basegame-link:hover {
+  .panel-basegame-link:hover,
+  .panel-developer:hover {
     color: var(--text);
   }
   /* "‹ <game>": back along a DLC trail (panelHistory.ts). */
@@ -2495,40 +2497,6 @@
     }
   }
 
-  /* ── The panel's body: sections on hairlines, each titled by a small muted <h3>. ── */
-  .panel-section,
-  .panel-desc {
-    padding-block: 16px;
-    border-top: 1px solid var(--line);
-  }
-  .panel-section-title {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0 8px;
-    margin-bottom: 8px;
-    color: var(--muted);
-    font-size: var(--fs-meta);
-    font-weight: 600;
-  }
-  .panel-section-title > h3 {
-    font: inherit;
-  }
-  .panel-section-title a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 24px;
-    color: var(--muted);
-    font-weight: 400;
-    text-decoration: none;
-  }
-  .panel-section-title a:hover {
-    color: var(--text);
-    text-decoration: underline;
-  }
-  .panel-section-subtitle {
-    font-weight: 400;
-  }
   .panel-no-data {
     color: var(--muted);
     font-size: var(--fs-ui);
@@ -2604,6 +2572,7 @@
     white-space: nowrap;
   }
   .panel-card-chevron {
+    grid-row: 1;
     grid-column: 3;
     color: var(--muted);
     transition: rotate var(--dur-2) var(--ease-out);
@@ -2684,6 +2653,24 @@
   .panel-card--wide .panel-card-bar,
   .panel-card--wide .panel-card-top[aria-expanded='true'] .panel-card-summary {
     display: none;
+  }
+  /* A text card answers on its title's line, cut rather than wrapped; hidden once open. */
+  .panel-card--text .panel-card-top {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+  }
+  .panel-card--text .panel-card-chevron {
+    grid-column: 4;
+  }
+  .panel-card-line {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: var(--fs-meta);
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .panel-card-top[aria-expanded='true'] .panel-card-line {
+    visibility: hidden;
   }
   .panel-card-slot {
     display: flow-root;
@@ -2868,8 +2855,23 @@
     line-height: 1.6;
   }
 
-  /* Tags, genres, categories and creators in one cloud, their kind a dot; a Steam tag's share of
-     the top tag's votes a bar along its foot. */
+  /* Tags & details: a caps label per kind, its pills beside it; a Steam tag's share of the top
+     tag's votes a bar along its foot. */
+  .panel-tag-groups {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: 8px 10px;
+  }
+  .panel-tag-group {
+    display: contents;
+  }
+  .panel-tag-group dt {
+    color: var(--muted);
+    font-size: var(--fs-label);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
   .panel-tags {
     display: flex;
     flex-wrap: wrap;
@@ -2903,62 +2905,14 @@
     border-color: var(--accent);
     color: var(--text);
   }
-  /* Each kind its own shape, so the kinds don't differ by hue alone. */
-  .panel-tag-dot {
-    flex: none;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-  }
-  .panel-tag-dot--tags,
-  .tag-weight--tags {
-    background: var(--kind-tag);
-  }
-  .panel-tag-dot--genres,
-  .tag-weight--genres {
-    background: var(--kind-genre);
-  }
-  .panel-tag-dot--categories,
-  .tag-weight--categories {
-    background: var(--kind-category);
-  }
-  .panel-tag-dot--devpub,
-  .tag-weight--devpub {
-    background: var(--kind-devpub);
-  }
-  .panel-tag-dot--genres {
-    border-radius: 1px;
-  }
-  .panel-tag-dot--categories {
-    border-radius: 1px;
-    rotate: 45deg;
-    scale: 0.85;
-  }
-  .panel-tag-dot--devpub {
-    border-radius: 0;
-    clip-path: polygon(50% 0, 100% 100%, 0 100%);
-  }
   /* A Steam tag's weight, along the bottom edge of its pill in the panel. */
   .tag-weight {
     position: absolute;
     bottom: 0;
     left: 0;
     height: 2px;
+    background: var(--kind-tag);
   }
-  .panel-tag-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 14px;
-    margin-top: 10px;
-    color: var(--muted);
-    font-size: var(--fs-label);
-  }
-  .panel-tag-legend-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-
   /* Similar in the account's library, and the creators' other games. */
   .panel-similar-more {
     margin-bottom: 8px;
@@ -3070,71 +3024,6 @@
     font-size: var(--fs-meta);
   }
 
-  /* A collapsible section (CollapsibleCard): its heading is the toggle, its ↗ the source. */
-  .panel-section:has(> .panel-achievements-card) {
-    padding-block: 6px;
-  }
-  .panel-achievements-card-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .panel-collapsible-heading {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    font: inherit;
-  }
-  .panel-achievements-chip {
-    display: flex;
-    flex: 1;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    min-height: 44px;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--text);
-    font-size: var(--fs-ui);
-    text-align: left;
-    cursor: pointer;
-  }
-  .panel-collapsible-val {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    color: var(--text-body);
-    font-size: var(--fs-ui);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .panel-achievements-chip b {
-    color: var(--text);
-  }
-  .panel-achievements-icon {
-    flex: none;
-    font-size: var(--fs-title);
-    line-height: 1;
-  }
-  .panel-achievements-chevron {
-    flex: none;
-    color: var(--muted);
-    transition: rotate var(--dur-2) var(--ease-out);
-  }
-  .panel-collapsible-chip[aria-expanded='true'] .panel-achievements-chevron {
-    rotate: 90deg;
-  }
-  .panel-achievements-chip:hover .panel-achievements-chevron {
-    color: var(--text);
-  }
-  .panel-achievements-list {
-    padding-bottom: 10px;
-  }
-  .panel-collapsible-body-pad {
-    padding-top: 4px;
-  }
-
   .panel-news > li + li,
   .panel-achievement-list > li + li,
   .panel-dlc-items > li + li {
@@ -3183,9 +3072,6 @@
     border-color: var(--text);
     background: var(--line);
     color: var(--text);
-  }
-  .panel-achievements-list > .panel-no-data {
-    padding-block: 4px;
   }
   .panel-achievement-row {
     display: flex;

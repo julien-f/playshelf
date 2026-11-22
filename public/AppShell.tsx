@@ -75,6 +75,8 @@ interface RouteHandlers {
   onTagClick?: (dim: string, value: string) => void;
   isTagActive?: (dim: string, value: string) => boolean;
   getOwners?: (appid: number) => GameOwner[] | null; // null: the current account's own (panel.tsx)
+  hasOwners?: boolean; // the route has owners of its own (a comparison), even before they resolve
+  ownerMembers?: () => string[]; // its owners' names, owning or not
   isOwnedList?: boolean; // the panel's similar owned games would only repeat it
   similarTo?: () => number | null; // the game the list is sorted by similarity to
   setSimilarTo?: (appid: number | null) => void;
@@ -85,11 +87,13 @@ const [tagsFilterable, setTagsFilterable] = createSignal(false);
 // Likewise: the panel's Sort list by similarity shows only on a route with a list.
 const [hasList, setHasList] = createSignal(false);
 const [isOwnedList, setIsOwnedList] = createSignal(false);
+const [hasOwners, setHasOwners] = createSignal(false);
 export function registerRouteHandlers(handlers: RouteHandlers): () => void {
   routeHandlers = handlers;
   setTagsFilterable(handlers.onTagClick != null);
   setHasList(handlers.setSimilarTo != null);
   setIsOwnedList(!!handlers.isOwnedList);
+  setHasOwners(!!handlers.hasOwners);
   return () => {
     // A route mounting before the previous one's cleanup has already registered its own.
     if (routeHandlers !== handlers) return;
@@ -97,6 +101,7 @@ export function registerRouteHandlers(handlers: RouteHandlers): () => void {
     setTagsFilterable(false);
     setHasList(false);
     setIsOwnedList(false);
+    setHasOwners(false);
   };
 }
 
@@ -264,6 +269,8 @@ export function AppShell(props: RouteSectionProps): JSX.Element {
       onTagClick: (dim, value) => routeHandlers.onTagClick?.(dim, value),
       tagsFilterable,
       getOwners: (appid) => routeHandlers.getOwners?.(appid) ?? null,
+      hasOwners,
+      getOwnerMembers: () => routeHandlers.ownerMembers?.() ?? null,
       hasList,
       isOwnedList,
       similarTo: () => (hasList() ? (routeHandlers.similarTo?.() ?? null) : null),

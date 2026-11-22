@@ -72,6 +72,7 @@ export function createMyOwnershipCache() {
   // comes out of (see fetchAccountOwnedData) — so the panel's "Owned by" card costs no request
   // of its own. Empty map rather than null once the fetch has failed, same as ownedGames.
   let ownersMap: Map<number, GameOwner[]> = new Map();
+  let memberNames: string[] = [];
   let wishlistSet: Set<number> | null = null;
   let ownedFailed = false;
   let wishlistFailed = false;
@@ -106,6 +107,7 @@ export function createMyOwnershipCache() {
       wishlistSet = null;
       ownedFailed = wishlistFailed = false;
       ownersMap = new Map();
+      memberNames = [];
     }
     cachedAccountId = account.id;
     cachedVersions = versions;
@@ -114,13 +116,19 @@ export function createMyOwnershipCache() {
     const owned: Promise<void> = fetchAccountOwnedData(account.id)
       .then(
         (data) => ({ ...data, failed: false }),
-        () => ({ games: new Map<number, AccountLibraryGame>(), owners: new Map<number, GameOwner[]>(), failed: true }),
+        () => ({
+          games: new Map<number, AccountLibraryGame>(),
+          owners: new Map<number, GameOwner[]>(),
+          players: [] as { name: string }[],
+          failed: true,
+        }),
       )
-      .then(({ games, owners, failed }) => {
+      .then(({ games, owners, players, failed }) => {
         if (ownedPromise !== owned) return;
         ownedGames = games;
         ownedFailed = failed;
         ownersMap = owners;
+        memberNames = players.map((p) => p.name);
         notifyReady();
       });
     const wishlist: Promise<Set<number>> = fetchAccountWishlistData(account.id)
@@ -190,6 +198,13 @@ export function createMyOwnershipCache() {
     return ownersMap.get(appid) ?? [];
   }
 
+  // Each member's display name, once the owned games landed (the panel's Owned by names who lacks a game).
+  function peekMemberNames(): string[] {
+    trackMyOwnership();
+    ensureLoading();
+    return memberNames;
+  }
+
   // Subscribes an imperative consumer's effect to what the peeks depend on, before it has anything to peek.
   function trackMyOwnership(): void {
     loaded();
@@ -207,6 +222,7 @@ export function createMyOwnershipCache() {
     peekMyOwnership,
     peekMyOwnershipStatus,
     getOwnersFor,
+    peekMemberNames,
     trackMyOwnership,
     myOwnershipVersion,
   };
@@ -217,5 +233,6 @@ export const getMyOwnershipStatus = defaultCache.getMyOwnershipStatus;
 export const peekMyOwnership = defaultCache.peekMyOwnership;
 export const peekMyOwnershipStatus = defaultCache.peekMyOwnershipStatus;
 export const getOwnersFor = defaultCache.getOwnersFor;
+export const peekMemberNames = defaultCache.peekMemberNames;
 export const trackMyOwnership = defaultCache.trackMyOwnership;
 export const myOwnershipVersion = defaultCache.myOwnershipVersion;
