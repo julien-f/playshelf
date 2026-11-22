@@ -15,7 +15,8 @@ export interface PanelCardDef {
   body: JSX.Element; // built once by the caller: the ready state's
   // A refusal offers no retry; absent, the body says what didn't answer itself (Price: price or bundles).
   failed?: () => { message: string; retry?: () => void };
-  sectionId?: string; // the #panel-section-* id the subnav jumps to
+  sectionId?: string; // the #panel-section-* id tests and links find it by
+  wordFig?: boolean; // its figure can be a name (Owned by's one owner): set in the text face
 }
 
 const titleId = (card: string) => `panel-card-${card}-title`;
@@ -74,7 +75,11 @@ function PanelCardBox(props: {
             when={s().kind === 'text'}
             fallback={
               <span class="panel-card-summary">
-                <span class="panel-card-fig" style={{ color: s().tone }}>
+                <span
+                  class="panel-card-fig"
+                  classList={{ 'panel-card-fig--word': props.def.wordFig && /^\p{L}/u.test(s().fig ?? '') }}
+                  style={{ color: s().tone }}
+                >
                   <Show when={s().state !== 'loading'} fallback={<span class="sk panel-card-sk" />}>
                     {s().fig ?? '—'}
                   </Show>

@@ -3,7 +3,6 @@ import {
   fmtPlaytime,
   formatMoney,
   scoreColor,
-  smoothScroll,
   dealRecordTier,
   DEAL_RECORD_TIERS,
   fmtLastPlayed,
@@ -83,21 +82,12 @@ import { withAccountParam, urlWithoutPanel } from './urlState.ts';
 import { copyWithFeedback } from './clipboard.ts';
 import type { DetailsAges, GameMeta, PriceFields, ReadonlyGame } from './types.ts';
 
-import {
-  createSignal,
-  createEffect,
-  createMemo,
-  createResource,
-  createRoot,
-  For,
-  Show,
-  untrack,
-  type JSX,
-} from 'solid-js';
+import { createSignal, createEffect, createMemo, createResource, createRoot, For, Show, type JSX } from 'solid-js';
 import { Dynamic, render } from 'solid-js/web';
 import { A, useLocation, useCurrentMatches } from '@solidjs/router';
 import { creatorListPath, type CreatorRole } from './creatorData.ts';
-import { present, presented, privateMode } from './presentation.ts';
+import { present, presented, privateMode, stopPresenting } from './presentation.ts';
+import Kbd from './Kbd.tsx';
 import ArrowUpDown from 'lucide-solid/icons/arrow-up-down';
 import Check from 'lucide-solid/icons/check';
 import ChevronLeft from 'lucide-solid/icons/chevron-left';
@@ -208,7 +198,7 @@ const [heroIdx, setHeroIdx] = createSignal(0);
 const clampedHeroIdx = (length: number) => Math.max(0, Math.min(heroIdx(), length - 1));
 let panelPrevFocus: HTMLElement | null = null;
 const [panelRefreshing, setPanelRefreshing] = createSignal(false); // true while the host's onRefresh() is in flight
-// The header menu open, if any: "⋯ More links" (Workshop/Website) or the lists holding the game.
+// The header menu open, if any: "⋯ More actions" or the lists holding the game.
 type HeaderMenu = 'more' | 'lists';
 const [openHeaderMenu, setOpenHeaderMenu] = createSignal<HeaderMenu | null>(null);
 
@@ -291,7 +281,7 @@ export function initPanel(options: PanelOptions) {
     { passive: false },
   );
 
-  // Dismiss the "⋯ More links" menu on outside click, same convention as gameSearch.ts's
+  // Dismiss the "⋯ More actions" menu on outside click, same convention as gameSearch.ts's
   // own dropdown — needs to catch clicks *outside* the panel too (backdrop, page behind it),
   // so this stays a document-level listener rather than something the menu button's own
   // onClick could handle alone. Uses `e.composedPath()` rather than `e.target.closest(...)` —
@@ -338,7 +328,6 @@ export function initPanel(options: PanelOptions) {
 
   initPanelSwipe();
   initHeroSwipe();
-  initSubnavScrollSpy();
 
   // The one place document.title's "a game is open" layer is driven from (see pageTitle.ts).
   // `game.name` is read inside the effect, so a standalone lookup's placeholder title
@@ -348,89 +337,6 @@ export function initPanel(options: PanelOptions) {
     const game = panelGame();
     setGameTitle(game ? game.name : null);
   });
-}
-
-// Highlights whichever subnav button corresponds to the section currently scrolled to the
-// top of the visible body, instead of the subnav being a static row of jump-links with no
-// sense of "where am I". Bound once to #panel-body (a stable element across every render)
-// rather than to the subnav, which is rebuilt whenever the panel moves to a different game.
-function initSubnavScrollSpy() {
-  const body = document.getElementById('panel-body')!;
-  body.addEventListener(
-    'scroll',
-    () => {
-      requestAnimationFrame(updateSubnavScrollSpy);
-    },
-    { passive: true },
-  );
-  // Scrolling by hand hands the highlight back to the scroll position.
-  for (const type of ['wheel', 'touchstart', 'keydown'] as const)
-    body.addEventListener(type, () => (pinnedSubnavTarget = null), { passive: true });
-  // The tabs wrap differently at another width, moving the underline's tab.
-  window.addEventListener('resize', () => requestAnimationFrame(updateSubnavScrollSpy), { passive: true });
-}
-
-// The section a subnav click jumped to, kept highlighted until the user scrolls themselves: one
-// near the end can't reach the top, where the rule below looks.
-let pinnedSubnavTarget: string | null = null;
-
-// Buttons are walked in DOM order, which the body below keeps identical to the physical
-// top-to-bottom order of the sections themselves (Owners right after the tag cloud,
-// then HLTB/News/Achievements — see subnavItems below) — so the *last* button whose
-// section has scrolled up to (or past) the sticky header counts as "current", same idea as
-// a scrollspy TOC. None qualifying means we're still above the first section, i.e. still
-// looking at the Overview (glance grid/description) itself.
-function updateSubnavScrollSpy() {
-  if (untrack(lightboxOpen)) return; // behind it, unseen: measured again on close
-  const nav = document.querySelector('.panel-subnav');
-  if (!nav) return;
-  const body = document.getElementById('panel-body')!;
-  const headerH = document.querySelector('.panel-header-sticky')?.getBoundingClientRect().height ?? 0;
-  const threshold = body.getBoundingClientRect().top + headerH + 8;
-  const buttons = [...nav.querySelectorAll<HTMLElement>('.panel-subnav-btn')];
-  // Scrolled to the end, the last section showing is current, though it never reached the top.
-  const atEnd = body.scrollTop > 0 && body.scrollTop + body.clientHeight >= body.scrollHeight - 2;
-  const limit = atEnd ? body.getBoundingClientRect().bottom - 24 : threshold;
-  let activeTarget = 'top';
-  for (const btn of buttons) {
-    const target = btn.dataset.target;
-    if (target === undefined || target === 'top') continue;
-    const el = document.getElementById(target);
-    if (!el || el.getBoundingClientRect().top > limit) continue;
-    activeTarget = target;
-  }
-  if (pinnedSubnavTarget && buttons.some((btn) => btn.dataset.target === pinnedSubnavTarget))
-    activeTarget = pinnedSubnavTarget;
-  let active: HTMLElement | undefined;
-  for (const btn of buttons) {
-    const on = btn.dataset.target === activeTarget;
-    btn.classList.toggle('active', on);
-    if (on) {
-      btn.setAttribute('aria-current', 'true');
-      active = btn;
-    } else btn.removeAttribute('aria-current');
-  }
-  const list = nav.querySelector('ul');
-  placeSubnavUnderline(list, active);
-  // The tabs scroll sideways in one row: bring the current one into view when it changes or moves (a tab
-  // arriving before it, a resize), leaving a manual swipe alone.
-  const li = active?.parentElement;
-  const placed = li ? `${activeTarget} ${li.offsetLeft} ${li.offsetWidth}` : undefined;
-  if (list && li && list.dataset.active !== placed) {
-    list.dataset.active = placed;
-    const left = Math.min(li.offsetLeft, Math.max(list.scrollLeft, li.offsetLeft + li.offsetWidth - list.clientWidth));
-    if (left !== list.scrollLeft) list.scrollTo({ left, behavior: smoothScroll() });
-  }
-}
-
-// The current tab's underline, one bar on the list moved under it; it glides only once placed.
-function placeSubnavUnderline(list: HTMLElement | null, btn: HTMLElement | undefined) {
-  if (!list || !btn || !btn.offsetWidth) return;
-  const li = btn.parentElement!;
-  list.style.setProperty('--underline-x', `${li.offsetLeft}px`);
-  list.style.setProperty('--underline-y', `${li.offsetTop + li.offsetHeight}px`);
-  list.style.setProperty('--underline-w', String(li.offsetWidth));
-  if (!list.dataset.glide) requestAnimationFrame(() => (list.dataset.glide = ''));
 }
 
 export function isPanelOpen() {
@@ -466,7 +372,7 @@ async function handlePanelRefresh() {
   }
 }
 
-// The 🔗 button beside Store/ITAD in the header — copies a link back to this exact game.
+// ⋯'s Copy link — copies a link back to this exact game.
 // Always `/game/<appid>` (the canonical, single, shareable link — see
 // docs/dev/frontend.md's routing section and ListRoute.tsx's `recent` kind), never
 // whatever route/list happened to have this game open (which may carry `u=`/filters/sort/a
@@ -742,7 +648,6 @@ export function presentHero(): void {
 }
 
 export function panelOpen(game: ReadonlyGame) {
-  pinnedSubnavTarget = null; // a jump in the previous game's panel says nothing about this one
   // Every opener (a table row, a search-box pick, prev/next/random, a deep link) starts a fresh
   // browsing trail — except the DLC/base-game hop this panel started itself, which arrives here
   // with `pendingHopAppid` armed (see its own comment above). Consumed either way: if some
@@ -842,27 +747,6 @@ function leavePanelGhost() {
   ghost.querySelector('.panel-body')!.scrollTop = panel.querySelector('.panel-body')!.scrollTop;
 }
 
-// Scrolls #panel-body so `target` (a section id, or the literal 'top') sits just below the
-// sticky title/subnav header, rather than under it. Computed via getBoundingClientRect()
-// deltas (viewport-relative, so it's correct regardless of #panel-body's own positioning
-// context) rather than offsetTop, which is relative to the nearest *positioned* ancestor —
-// here that's #game-panel (position: fixed), not #panel-body itself, so offsetTop would
-// include the hero/hero-filmstrip height above the header and land short.
-function jumpToPanelSection(target: string) {
-  pinnedSubnavTarget = target;
-  updateSubnavScrollSpy();
-  const body = document.getElementById('panel-body')!;
-  if (target === 'top') {
-    body.scrollTo({ top: 0, behavior: smoothScroll() });
-    return;
-  }
-  const el = document.getElementById(target);
-  if (!el) return;
-  const headerH = document.querySelector('.panel-header-sticky')?.getBoundingClientRect().height ?? 0;
-  const delta = el.getBoundingClientRect().top - body.getBoundingClientRect().top - headerH - 8;
-  body.scrollTo({ top: body.scrollTop + delta, behavior: smoothScroll() });
-}
-
 // A YYYY-MM-DD date as a <time>, readable by machines; anything else (a coarse "Q4 2026") as plain text.
 function DayText(props: { text: string }): JSX.Element {
   return (
@@ -896,8 +780,6 @@ function setAchievementsFilterFor(appid: number, filter: string) {
 // on the appid but progress depends on which account is loaded. The list itself is still fetched
 // and shown with zero accounts loaded (`playerCount: 0`, no `steamUrl`) — only the
 // achieved/unlocktime/progress-summary parts need an account, gated by `hasProgress` below.
-// PanelSubnav lists it once fetched, failure included.
-const achievementsShown = () => panelData.achievements() !== undefined;
 
 function AchievementsBody(props: { game: ReadonlyGame }): JSX.Element {
   const data = () => panelData.achievements.latest;
@@ -1023,12 +905,6 @@ function AchievementsBody(props: { game: ReadonlyGame }): JSX.Element {
     </>
   );
 }
-
-// PanelSubnav's condition for its News tab: posts, or a failed load.
-const newsShown = () => {
-  const news = panelData.news();
-  return news === null || !!news?.length;
-};
 
 // The Price card's body: the current best deal (same display/color/badge/tooltip as the Best Deal table cell in
 // bundles.tsx/library.ts), its discount off Steam Full Price when there is one, a direct link
@@ -1559,7 +1435,7 @@ function PanelHero(): JSX.Element {
 // text node that shows it. This used to be one coarse block that re-read every field of the game
 // and rebuilt the entire subtree on every `revision` bump: ~6 full teardowns per open (five
 // async loaders, most bumping on start and finish), each throwing away hover state, keyboard
-// focus and the scroll-spy's `active` class. See docs/dev/frontend.md's Reactivity section.
+// focus. See docs/dev/frontend.md's Reactivity section.
 
 // ── The tiles: Weighted Rating | Linux/Deck, To beat | Achievements ─────────────────────────────
 
@@ -1568,11 +1444,6 @@ const HLTB_PARTS = [
   ['extra', 'Main + Extra'],
   ['completionist', 'Completionist'],
 ] as const;
-// PanelSubnav's condition for its To beat tab.
-const hltbShown = (g: ReadonlyGame) => {
-  const h = g.details?.hltb;
-  return !g.loading && !!h && HLTB_PARTS.some(([key]) => h[key]);
-};
 
 // A details source (the stream's) that didn't answer: ↻'s refetch is its retry.
 const detailsFailed = (source: string) => () => ({
@@ -2104,6 +1975,7 @@ function PanelLowerCards(props: { game: ReadonlyGame }): JSX.Element {
     icon: Users,
     summary: () => ownedBySummary(panelData.owners.loading ? undefined : panelData.owners(), ownerMemberNames()),
     body: <OwnersBody />,
+    wordFig: true,
     sectionId: 'panel-section-owners',
   };
   const about: PanelCardDef = {
@@ -2180,12 +2052,16 @@ function PanelLowerCards(props: { game: ReadonlyGame }): JSX.Element {
 const toggleHeaderMenu = (menu: HeaderMenu) => setOpenHeaderMenu(openHeaderMenu() === menu ? null : menu);
 const closeHeaderMenu = (menu: HeaderMenu) => openHeaderMenu() === menu && setOpenHeaderMenu(null);
 
-// Store and ITAD are the two links everyone wants at a glance and stay directly in the header
-// row — Workshop/Website are each conditional, tucked into a single "⋯ More" menu instead (see
-// the original file's own comment, preserved in git history, for the full reasoning).
-function MoreLinks(props: { game: ReadonlyGame }): JSX.Element {
-  const items = () =>
+// ⋯ More actions: what leaves for elsewhere (ITAD, Workshop, the website), Present and Copy link,
+// so the action row keeps the one primary action and Add to list.
+function MoreActions(props: { game: ReadonlyGame; copied: Node }): JSX.Element {
+  const links = () =>
     [
+      {
+        icon: CircleDollarSign,
+        label: 'IsThereAnyDeal',
+        href: `https://isthereanydeal.com/steam/app/${props.game.appid}`,
+      },
       !props.game.loading &&
         (props.game.details?.meta?.categories || []).includes('Steam Workshop') && {
           icon: Wrench,
@@ -2198,43 +2074,69 @@ function MoreLinks(props: { game: ReadonlyGame }): JSX.Element {
         href: props.game.details.meta.website,
       },
     ].filter((it): it is { icon: typeof Globe; label: string; href: string } => !!it);
-
+  // While the hero's media is what's on the second screen, Present turns into its stop.
+  const heroOnTv = createMemo(() => {
+    const items = getPanelItems();
+    return onTv(items[clampedHeroIdx(items.length)]?.shotId);
+  });
   return (
-    <Show when={items().length}>
-      <div
-        class="panel-icon-more"
-        data-menu="more"
-        // Else a menu left open behind focus would outlive the Esc meant for it (that closes the game).
-        onFocusOut={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) closeHeaderMenu('more');
-        }}
+    <div
+      class="panel-icon-more"
+      data-menu="more"
+      // Else a menu left open behind focus would outlive the Esc meant for it (that closes the game).
+      onFocusOut={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) closeHeaderMenu('more');
+      }}
+    >
+      <button
+        type="button"
+        class="panel-icon-link panel-icon-more-btn"
+        aria-haspopup="true"
+        aria-expanded={openHeaderMenu() === 'more' ? 'true' : 'false'}
+        title="More actions"
+        aria-label="More actions"
+        onClick={() => toggleHeaderMenu('more')}
       >
-        <button
-          type="button"
-          class="panel-icon-link panel-icon-more-btn"
-          aria-haspopup="true"
-          aria-expanded={openHeaderMenu() === 'more' ? 'true' : 'false'}
-          title="More links"
-          aria-label="More links"
-          onClick={() => toggleHeaderMenu('more')}
-        >
-          <Ellipsis />
-        </button>
-        <Show when={openHeaderMenu() === 'more'}>
-          <ul class="panel-icon-more-menu">
-            <For each={items()}>
-              {(it) => (
-                <li>
-                  <a class="panel-icon-more-item" href={safeHref(it.href) || undefined} target="_blank" rel="noopener">
-                    <it.icon /> {it.label} ↗
-                  </a>
-                </li>
-              )}
-            </For>
-          </ul>
-        </Show>
-      </div>
-    </Show>
+        <Ellipsis />
+      </button>
+      <Show when={openHeaderMenu() === 'more'}>
+        <ul class="panel-icon-more-menu">
+          <For each={links()}>
+            {(it) => (
+              <li>
+                <a class="panel-icon-more-item" href={safeHref(it.href) || undefined} target="_blank" rel="noopener">
+                  <it.icon /> {it.label} ↗
+                </a>
+              </li>
+            )}
+          </For>
+          <li class="panel-present-item">
+            <button
+              type="button"
+              class="panel-icon-more-item panel-present-btn"
+              classList={{ 'panel-present-btn--on': heroOnTv() }}
+              aria-keyshortcuts={heroOnTv() ? undefined : 'P'}
+              onClick={() => (heroOnTv() ? stopPresenting() : presentHero())}
+            >
+              <Cast /> {heroOnTv() ? 'Stop presenting' : 'Present on second screen'}
+              <Show when={!heroOnTv()}>
+                <Kbd k="P" />
+              </Show>
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="panel-icon-more-item panel-copy-link-btn"
+              aria-label="Copy link to this game"
+              onClick={(e) => copyPanelLink(e, props.copied)}
+            >
+              <Link /> Copy link
+            </button>
+          </li>
+        </ul>
+      </Show>
+    </div>
   );
 }
 
@@ -2264,18 +2166,13 @@ function ListsMenu(props: { appid: number }): JSX.Element {
     >
       <button
         type="button"
-        class="panel-icon-link panel-icon-more-btn panel-lists-btn"
+        class="btn panel-lists-btn"
         aria-expanded={openHeaderMenu() === 'lists' ? 'true' : 'false'}
         title={label()}
         aria-label={label()}
         onClick={() => toggleHeaderMenu('lists')}
       >
-        <ListPlus />
-        <Show when={holding()}>
-          <span class="panel-lists-count" aria-hidden="true">
-            {holding()}
-          </span>
-        </Show>
+        <ListPlus /> {holding() ? `In ${holding()} list${holding() === 1 ? '' : 's'}` : 'Add to list'}
       </button>
       <Show when={openHeaderMenu() === 'lists'}>
         <ul class="panel-icon-more-menu panel-lists-menu">
@@ -2316,28 +2213,6 @@ function ListsMenu(props: { appid: number }): JSX.Element {
         </ul>
       </Show>
     </div>
-  );
-}
-
-// Presents the hero's media (presentation.ts), opening the presentation window first if needed.
-// Pressed, in the accent, while the hero's media is what's on the second screen.
-function PresentButton(): JSX.Element {
-  const heroOnTv = createMemo(() => {
-    const items = getPanelItems();
-    return onTv(items[clampedHeroIdx(items.length)]?.shotId);
-  });
-  return (
-    <button
-      type="button"
-      class="panel-icon-link panel-present-btn"
-      classList={{ 'panel-present-btn--on': heroOnTv() }}
-      title={heroOnTv() ? 'On TV' : 'Present on second screen (P)'}
-      aria-label={heroOnTv() ? 'On TV' : 'Present on second screen'}
-      aria-keyshortcuts="P"
-      onClick={presentHero}
-    >
-      <Cast />
-    </button>
   );
 }
 
@@ -2470,85 +2345,6 @@ function OwnershipRow(props: { game: ReadonlyGame }): JSX.Element {
   );
 }
 
-// A sticky jump-nav for the sections below the fold — see the original file's own comment
-// (preserved in git history) for the full reasoning. Listed in the same order the sections
-// actually appear below (Owners right after the tag cloud, ahead of the collapsibles) so
-// scroll-spy highlighting (see updateSubnavScrollSpy) always lights up left-to-right.
-// One object per tab: `<For>` keeps a tab's button while the same object stays in the list, so a section arriving adds its own.
-type SubnavItem = { label: string; target: string };
-const SUBNAV = {
-  owners: { label: 'Owned by', target: 'panel-section-owners' },
-  hltb: { label: 'HLTB', target: 'panel-section-hltb' },
-  news: { label: 'News', target: 'panel-section-news' },
-  achievements: { label: 'Achievements', target: 'panel-section-achievements' },
-  dlc: { label: 'DLC', target: 'panel-section-dlc' },
-} satisfies Record<string, SubnavItem>;
-
-function PanelSubnav(props: { game: ReadonlyGame }): JSX.Element {
-  // Each condition counts a section only once it has *confirmed* content (or a confirmed
-  // failure, which renders its own "couldn't load" card) — deliberately NOT while its fetch is
-  // still in flight, even though the loading skeleton is on screen by then. A still-pending
-  // section isn't a jump target yet, and counting one makes this list non-monotonic: News would
-  // be true while `news.loading`, then false again for a game whose news resolves empty. Through
-  // the `< 2` gate below, that took the whole bar — Overview button included — down with it, so
-  // the bar flashed in and out as the panel's own fetches settled (measured live: visible at
-  // 4104ms, gone at 4126ms, for a game with no news/HLTB/DLC). Every term here now only ever
-  // goes absent → present as a game loads, so the bar appears at most once per open and never
-  // disappears.
-  //
-  // Each shares its section component's show predicate, a plain boolean rather than a rendered
-  // `<Component/>` call's own truthiness (always truthy regardless of what it renders to).
-  const items = createMemo(() => {
-    const g = props.game;
-    return [
-      !!panelData.owners()?.length && SUBNAV.owners,
-      hltbShown(g) && SUBNAV.hltb,
-      newsShown() && SUBNAV.news,
-      achievementsShown() && SUBNAV.achievements,
-      !!g.details?.meta?.dlc?.length && SUBNAV.dlc,
-    ].filter((it): it is SubnavItem => !!it);
-  });
-
-  // Re-run the scroll-spy whenever the set of buttons changes, since a newly rendered button
-  // starts out without the `active` class the spy assigns imperatively (it has to measure where
-  // each section actually sits). Queued as a microtask so it runs after Solid has patched the
-  // DOM. Nothing else needs this anymore: the buttons themselves are no longer thrown away and
-  // rebuilt every time some unrelated field of the game changes.
-  createEffect(() => {
-    items();
-    lightboxOpen();
-    queueMicrotask(updateSubnavScrollSpy);
-  });
-
-  return (
-    <Show when={items().length >= 2}>
-      <nav class="panel-subnav" aria-label="Sections">
-        <ul class="panel-subnav-list">
-          <li>
-            <button type="button" class="panel-subnav-btn" data-target="top" onClick={() => jumpToPanelSection('top')}>
-              Overview
-            </button>
-          </li>
-          <For each={items()}>
-            {(it) => (
-              <li>
-                <button
-                  type="button"
-                  class="panel-subnav-btn"
-                  data-target={it.target}
-                  onClick={() => jumpToPanelSection(it.target)}
-                >
-                  {it.label}
-                </button>
-              </li>
-            )}
-          </For>
-        </ul>
-      </nav>
-    </Show>
-  );
-}
-
 function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
   // The one deliberate capture of a "reactive variable" in this file: `props.game` is the game
   // *object*, and PanelBody renders this component under a `keyed` <Show>, so a different game
@@ -2563,7 +2359,11 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
   // gets this button, only a game reached by following a DLC link (or by going back through more
   // than one of them) does.
   // Shown by the copy-link button's flash: created here, where an owner can dispose of it.
-  const copiedIcon = (<Check />) as Node;
+  const copiedIcon = (
+    <span class="panel-copied">
+      <Check /> Copied
+    </span>
+  ) as Node;
 
   const back = () => {
     const hist = panelHistory();
@@ -2605,76 +2405,55 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
             <h2 class="panel-title" id="panel-title">
               {g.name || `App ${g.appid}`}
             </h2>
-            <Show when={releaseDate() || developer() || hasBaseGame() || statusShown()}>
-              <div class="panel-release">
-                <Show when={releaseDate()}>{(r) => <DayText text={fmtReleaseDate(r())} />}</Show>
-                <Show when={developer()}>
-                  {(name) => (
-                    <>
-                      <Show when={releaseDate()}>
-                        <span class="panel-meta-sep"> · </span>
-                      </Show>
-                      <a
-                        class="panel-developer"
-                        href={withAccountParam(`${creatorListPath('developer', name())}&game=${g.appid}`)}
-                        aria-label={`All games by ${name()} (developer)`}
-                      >
-                        {name()}
-                      </a>
-                    </>
-                  )}
+            {/* date · developer · base game · ownership · Status · the details' age, which is ↻ */}
+            <div class="panel-meta">
+              <Show when={releaseDate()}>{(r) => <DayText text={fmtReleaseDate(r())} />}</Show>
+              <Show when={developer()}>
+                {(name) => (
+                  <>
+                    <Show when={releaseDate()}>
+                      <span class="panel-meta-sep" aria-hidden="true">
+                        ·
+                      </span>
+                    </Show>
+                    <a
+                      class="panel-developer"
+                      href={withAccountParam(`${creatorListPath('developer', name())}&game=${g.appid}`)}
+                      aria-label={`All games by ${name()} (developer)`}
+                    >
+                      {name()}
+                    </a>
+                  </>
+                )}
+              </Show>
+              <Show when={hasBaseGame()}>
+                <Show when={releaseDate() || developer()}>
+                  <span class="panel-meta-sep" aria-hidden="true">
+                    ·
+                  </span>
                 </Show>
-                <Show when={(releaseDate() || developer()) && hasBaseGame()}>
-                  <span class="panel-meta-sep"> · </span>
-                </Show>
-                <Show when={hasBaseGame()}>
-                  <BaseGameLink game={g} />
-                </Show>
-                <Show when={statusShown()}>
-                  <StatusSelect appid={g.appid} />
-                </Show>
-              </div>
-            </Show>
-          </div>
-          <div class="panel-icon-links">
-            <a
-              class="panel-icon-link"
-              href={`https://store.steampowered.com/app/${g.appid}`}
-              target="_blank"
-              rel="noopener"
-              title="Steam Store"
-              aria-label="Steam Store"
-            >
-              <ShoppingCart />
-            </a>
-            <a
-              class="panel-icon-link"
-              href={`https://isthereanydeal.com/steam/app/${g.appid}`}
-              target="_blank"
-              rel="noopener"
-              title="IsThereAnyDeal"
-              aria-label="IsThereAnyDeal"
-            >
-              <CircleDollarSign />
-            </a>
-            <MoreLinks game={g} />
-            <PresentButton />
-            <ListsMenu appid={g.appid} />
-            <span class="panel-icon-divider" role="separator" aria-hidden="true" />
-            <button
-              type="button"
-              class="panel-icon-link panel-copy-link-btn"
-              title="Copy link to this game"
-              aria-label="Copy link to this game"
-              onClick={(e) => copyPanelLink(e, copiedIcon)}
-            >
-              <Link />
-            </button>
-            <RefreshButton game={g} />
-            <OwnershipRow game={g} />
+                <BaseGameLink game={g} />
+              </Show>
+              <OwnershipRow game={g} />
+              <Show when={statusShown()}>
+                <StatusSelect appid={g.appid} />
+              </Show>
+              <RefreshButton game={g} />
+            </div>
           </div>
         </div>
-        <PanelSubnav game={g} />
+        <div class="panel-actions">
+          <a
+            class="btn btn-primary panel-store-btn"
+            href={`https://store.steampowered.com/app/${g.appid}`}
+            target="_blank"
+            rel="noopener"
+          >
+            <ShoppingCart /> Steam Store
+          </a>
+          <ListsMenu appid={g.appid} />
+          <MoreActions game={g} copied={copiedIcon} />
+        </div>
       </div>
       {/* A free demo is a "try before you buy" call to action, not supplementary info like the
           Website/Workshop links tucked into "⋯ More". */}

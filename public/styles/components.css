@@ -2087,7 +2087,7 @@
     opacity: 1;
   }
 
-  /* The title, its links and the section tabs stay on top while the rest scrolls under them. */
+  /* The title, its meta line and its actions stay on top while the rest scrolls under them. */
   .panel-header-sticky {
     position: sticky;
     top: 0;
@@ -2096,9 +2096,6 @@
     padding: 16px var(--panel-pad) 12px;
     border-bottom: 1px solid var(--line);
     background: var(--panel-ground);
-  }
-  .panel-header-sticky:has(.panel-subnav) {
-    padding-bottom: 0;
   }
   /* Clear of the close button. */
   .panel-title-row > :first-child {
@@ -2115,13 +2112,24 @@
     line-height: 1.25;
     overflow-wrap: anywhere;
   }
-  .panel-release {
-    margin-top: 2px;
+  /* Each control at least 24 px tall (WCAG 2.5.8); the details' age, which is ↻, ends the line. */
+  .panel-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin-top: 4px;
     color: var(--muted);
     font-size: var(--fs-meta);
   }
+  .panel-meta time {
+    font-family: var(--font-mono);
+  }
   .panel-basegame-link,
   .panel-developer {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
     color: var(--text-body);
   }
   .panel-basegame-link:hover,
@@ -2150,13 +2158,22 @@
     color: var(--text);
   }
 
-  /* Store, ITAD and ⋯ More leave the page; after the divider, copy link and ↻ act in place. */
-  .panel-icon-links {
+  /* Steam Store (the view's one primary action), Add to list, then ⋯ for the rest. */
+  .panel-actions {
+    position: relative;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     margin-top: 10px;
+  }
+  .panel-store-btn,
+  .panel-lists-btn {
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .panel-store-btn > .lucide,
+  .panel-lists-btn > .lucide {
+    font-size: var(--fs-title);
   }
   .panel-icon-link,
   .panel-refresh-btn {
@@ -2190,6 +2207,8 @@
     color: var(--text);
   }
   .panel-refresh-btn {
+    height: 24px;
+    margin-left: auto;
     padding: 0 8px;
   }
   .panel-refresh-age {
@@ -2203,7 +2222,7 @@
   /* The presentation window is a second window on a second screen: a desktop's, at any width (a
      window snapped to half the screen still presents). The chip, which stops it, never hides. */
   @media not (any-pointer: fine) {
-    .panel-present-btn {
+    .panel-present-item {
       display: none;
     }
   }
@@ -2216,12 +2235,6 @@
   .panel-copy-link-btn--copied:hover {
     border-color: var(--good);
     color: var(--good);
-  }
-  .panel-icon-divider {
-    width: 1px;
-    height: 20px;
-    margin-inline: 2px;
-    background: var(--line-strong);
   }
   .panel-icon-more {
     position: relative;
@@ -2252,37 +2265,36 @@
     text-decoration: none;
     white-space: nowrap;
   }
+  button.panel-icon-more-item {
+    width: 100%;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
   .panel-icon-more-item:hover {
     background: var(--line);
   }
-  /* How many lists hold the game: the trigger states it, a menu away from the checkboxes. */
-  .panel-lists-btn {
-    position: relative;
+  .panel-icon-more-item kbd {
+    margin-left: auto;
   }
-  .panel-lists-count {
-    position: absolute;
-    top: -6px;
-    right: -6px;
-    min-width: 16px;
-    padding-inline: 4px;
-    border-radius: 8px;
-    background: var(--accent);
-    color: var(--bg);
-    font-size: var(--fs-label);
-    line-height: 16px;
-    text-align: center;
+  .panel-present-btn--on {
+    color: var(--accent);
   }
-  /* Placed against the icon row, not its button: from mid-row it would run off the panel either way. */
-  .panel-icon-links {
-    position: relative;
+  .panel-copied {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
   }
   .panel-icon-more[data-menu='lists'] {
     position: static;
   }
   .panel-lists-menu {
+    max-width: 100%;
+  }
+  /* ⋯ sits at the row's end: its menu opens leftwards, inside the panel. */
+  .panel-icon-more[data-menu='more'] .panel-icon-more-menu {
     right: 0;
     left: auto;
-    max-width: 100%;
   }
   .panel-lists-menu label.panel-icon-more-item {
     cursor: pointer;
@@ -2295,57 +2307,6 @@
   .panel-lists-new input {
     flex: 1;
     min-width: 0;
-  }
-
-  /* Text tabs in one sideways-scrolling row (two rows filled a phone's sticky header); the
-     scroll-spy (panel.tsx) slides one accent bar under the current tab and scrolls it into view. */
-  .panel-subnav-list {
-    position: relative;
-    display: flex;
-    column-gap: 18px;
-    margin-top: 6px;
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    scrollbar-width: none;
-  }
-  .panel-subnav-list > li {
-    flex: none;
-    scroll-snap-align: start;
-  }
-  .panel-subnav-btn {
-    min-height: 32px;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--muted);
-    font-size: var(--fs-ui);
-    cursor: pointer;
-    transition: color var(--dur-1) var(--ease-out);
-  }
-  .panel-subnav-btn:hover,
-  .panel-subnav-btn.active {
-    color: var(--text);
-  }
-  .panel-subnav-list::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 1px;
-    height: 2px;
-    background: var(--accent);
-    transform-origin: 0 0;
-    transform: translate(var(--underline-x, 0), calc(var(--underline-y, 2px) - 2px)) scaleX(var(--underline-w, 0));
-  }
-  .panel-subnav-list[data-glide]::after {
-    transition: transform var(--dur-3) var(--ease-out);
-  }
-  /* Forced colors repaint the bar's fill away. */
-  @media (forced-colors: active) {
-    .panel-subnav-btn.active {
-      text-decoration: underline 2px;
-      text-underline-offset: 6px;
-    }
   }
 
   /* Prev / position / next / random, pinned to the panel's foot (panelNav.ts); empty for a lookup. */
@@ -2452,12 +2413,10 @@
   .panel-ownership-badge.wishlisted {
     color: var(--wishlisted);
   }
-  /* At the action row's end. */
   .panel-ownership-row {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-left: auto;
   }
   .panel-ownership-badge {
     display: inline-flex;
@@ -2474,10 +2433,7 @@
   .panel-ownership-badge:hover {
     text-decoration: underline;
   }
-  /* Floated, not flex: the release line's " · " separator keeps its spaces. */
   .panel-status {
-    float: right;
-    margin-left: 8px;
     height: 24px;
     padding: 0 2px 0 6px;
     border: 0;
@@ -2490,7 +2446,7 @@
     color: var(--text);
     font-weight: 600;
   }
-  /* The narrowest phones: the mark alone, so the action row stays one line (the link keeps its name). */
+  /* The narrowest phones: the mark alone, so the meta line wraps less (the link keeps its name). */
   @media (max-width: 359px) {
     .panel-ownership-label {
       display: none;
@@ -2605,6 +2561,11 @@
     font-variant-numeric: tabular-nums;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .panel-card-fig--word {
+    font-family: var(--font-sans);
+    font-size: var(--fs-title);
+    line-height: calc(var(--fs-figure) * 1.25);
   }
   .panel-card--empty :is(.panel-card-title, .panel-card-fig) {
     color: var(--muted);

@@ -1688,6 +1688,7 @@ test.describe(() => {
     await expect(page.locator('#panel-title')).toHaveText('Portal 2');
     await expect(shown.locator('.pres-caption-name')).toHaveText('Hades');
 
+    await page.getByRole('button', { name: 'More actions' }).click();
     await page.getByRole('button', { name: 'Present on second screen' }).click();
     await expect(shown.locator('.pres-caption-name')).toHaveText('Portal 2');
     await expect(chip).toContainText('Portal 2');
@@ -1705,7 +1706,9 @@ test.describe(() => {
     await page.setViewportSize({ width: 700, height: 800 });
     await page.goto('/game/1145360');
     await expect(page.locator('#panel-title')).toHaveText('Hades');
+    await page.getByRole('button', { name: 'More actions' }).click();
     await expect(page.getByRole('button', { name: 'Present on second screen' })).toBeVisible();
+    await page.keyboard.press('Escape'); // the menu first
     const shown = await startPresenting(page);
     await page.keyboard.press('Escape'); // this narrow, the panel covers the nav, as everywhere in the app
     const chip = page.getByRole('banner').locator('.present-chip');
@@ -1896,10 +1899,14 @@ test.describe(() => {
     await page.goto('/game/1145360');
     await expect(page.locator('#panel-title')).toHaveText('Hades');
     await startPresenting(page);
-    const onTv = page.getByRole('button', { name: 'On TV', exact: true });
+    const more = page.getByRole('button', { name: 'More actions' });
+    await more.click();
+    // Present turns into its stop while the hero's media is on the TV.
+    const onTv = page.locator('#game-panel').getByRole('button', { name: 'Stop presenting', exact: true });
     await expect(onTv).toHaveClass(/panel-present-btn--on/);
     await expect(page.locator('.panel-hero-present')).toHaveText('On TV');
     await page.getByRole('button', { name: 'Screenshot 1 of 3' }).click(); // another item, not presented
+    await more.click();
     await expect(page.getByRole('button', { name: 'Present on second screen' })).not.toHaveClass(
       /panel-present-btn--on/,
     );
@@ -6014,6 +6021,28 @@ test("F1 edge: the panel doesn't link an upstream URL that isn't http(s)", { tag
   await expect(metacritic.getByRole('link')).toHaveCount(0);
 });
 
+test("I1 edge: on a phone, no panel card's title or figure is cut, and the meta line's controls are 24 px tall", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'phone layout');
+  await asPlayer(page, ALICE);
+  for (const path of ['/lists/owned?game=1145360', '/lists/owned?game=620', '/lists/wishlist?game=3999990']) {
+    await page.goto(path);
+    await expect(cardButton(page, 'Price')).not.toHaveAccessibleName(/loading/);
+    await expect(cardButton(page, 'Achievements')).not.toHaveAccessibleName(/loading/);
+    // Text rows are cut with "…" by design; a figure card's lines never are.
+    const cut = await page
+      .locator('.panel-card-title, .panel-card-fig, .panel-card--tile .panel-card-qualifier')
+      .evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth).map((el) => el.textContent));
+    expect(cut, path).toEqual([]);
+    const small = await page
+      .locator('.panel-meta')
+      .locator('a, button, select')
+      .evaluateAll((els) => els.filter((el) => el.getBoundingClientRect().height < 24).map((el) => el.outerHTML));
+    expect(small, path).toEqual([]);
+  }
+});
+
 const TILES = ['Rating', 'Linux/Deck', 'To beat', 'Achievements'];
 
 test("F1 edge: opening a tile, then its neighbour, or a tile's data arriving moves no tile", async ({ page }) => {
@@ -6279,68 +6308,6 @@ test(
     expect(requested).toHaveLength(25);
   },
 );
-
-test('F1 edge: the panel section nav highlights the section it jumped to', { tag: '@any-width' }, async ({ page }) => {
-  await asPlayer(page, ALICE);
-  await page.goto('/lists/owned');
-  await row(page, 'Hades').getByText('Hades').click();
-  await expect(page.locator('#panel-title')).toHaveText('Hades');
-  const nav = page.locator('.panel-subnav');
-  await nav.getByRole('button', { name: 'Achievements' }).click();
-  await expect(nav.getByRole('button', { name: 'Achievements' })).toHaveClass(/active/);
-  await expect(nav.getByRole('button', { name: 'Overview' })).not.toHaveClass(/active/);
-});
-
-test(
-  "F1 edge: a section arriving adds its tab to the panel's tabs without rebuilding the others",
-  { tag: '@any-width' },
-  async ({ page }) => {
-    await asPlayer(page, ALICE);
-    const achievements = await gate(page, '**/api/achievements/**');
-    await page.goto('/lists/owned?game=1145360');
-    const list = page.locator('.panel-subnav-list');
-    await expect(list.getByRole('button', { name: 'DLC' })).toBeAttached();
-    const owners = await list.getByRole('button', { name: 'Owned by' }).elementHandle();
-    achievements.release();
-    await expect(list.getByRole('button', { name: 'Achievements' })).toBeAttached();
-    // Rebuilt, a tab a test or a finger is on would leave the page under it.
-    expect(await owners!.evaluate((el) => el.isConnected)).toBe(true);
-  },
-);
-
-test("F1 edge: on a narrow phone, the panel's tabs stay one row and scroll to the current one", async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== 'phone', 'phone layout');
-  await page.setViewportSize({ width: 320, height: 844 });
-  await asPlayer(page, ALICE);
-  const achievements = await gate(page, '**/api/achievements/**');
-  await page.goto('/lists/owned?game=1145360');
-  const list = page.locator('.panel-subnav-list');
-  const last = list.getByRole('button', { name: 'DLC' });
-  await expect(last).toBeAttached();
-  const oneRow = async () =>
-    new Set(await list.locator('li').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top))).size;
-  expect(await oneRow()).toBe(1);
-
-  await page.locator('#panel-body').evaluate((el) => el.scrollTo(0, el.scrollHeight));
-  await expect(last).toHaveClass(/active/);
-  // A tab arriving before the current one pushes it along: it's brought back into view.
-  await expect(list.getByRole('button', { name: 'Achievements' })).toHaveCount(0);
-  achievements.release();
-  await expect(list.getByRole('button', { name: 'Achievements' })).toBeAttached();
-  await page.locator('#panel-body').evaluate((el) => el.scrollTo(0, el.scrollHeight));
-  await expect(last).toHaveClass(/active/);
-  expect(await oneRow()).toBe(1);
-  await expect
-    .poll(() =>
-      last.evaluate((el) => {
-        const [b, l] = [el.getBoundingClientRect(), el.closest('ul')!.getBoundingClientRect()];
-        return b.left >= l.left && b.right <= l.right + 1;
-      }),
-    )
-    .toBe(true);
-});
 
 test('F1 edge: the panel closes from its Close button after scrolling it', async ({ page }) => {
   await asPlayer(page, ALICE);
@@ -8410,15 +8377,16 @@ test('F1 edge: Esc closes a nav popover or the search dropdown, not the open gam
 });
 
 test(
-  "F1 edge: the panel's More links menu holds only links found nowhere else, and Esc closes it before the game",
+  "F1 edge: the panel's More actions menu holds what the action row leaves out, and Esc closes it before the game",
   { tag: '@any-width' },
   async ({ page }) => {
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned?game=1145360');
-    const more = page.getByRole('button', { name: 'More links' });
+    const more = page.getByRole('button', { name: 'More actions' });
     await more.click();
     const menu = page.locator('.panel-icon-more-menu');
-    await expect(menu.getByRole('link')).toHaveText(['Official website ↗']);
+    await expect(menu.getByRole('link')).toHaveText(['IsThereAnyDeal ↗', 'Official website ↗']);
+    await expect(more).toHaveAttribute('aria-expanded', 'true');
     await page.keyboard.press('Escape');
     await expect(menu).toBeHidden();
     await expect(page.locator('#panel-title')).toBeVisible();
@@ -8428,31 +8396,32 @@ test(
   },
 );
 
-test("F1 edge: the panel's More links menu closes once focus leaves it", { tag: '@any-width' }, async ({ page }) => {
+test("F1 edge: the panel's More actions menu closes once focus leaves it", { tag: '@any-width' }, async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360');
-  await page.getByRole('button', { name: 'More links' }).click();
+  await page.getByRole('button', { name: 'More actions' }).click();
   const menu = page.locator('.panel-icon-more-menu');
   await page.keyboard.press('Tab');
-  await expect(menu.getByRole('link')).toBeFocused();
+  await expect(menu.getByRole('link').first()).toBeFocused();
+  await menu.getByRole('button', { name: 'Copy link to this game' }).focus(); // its last item
   await page.keyboard.press('Tab');
   await expect(menu).toBeHidden();
 });
 
-test("F1 edge: Esc goes to what's above the panel's More links menu, and to nothing once the panel is gone", async ({
+test("F1 edge: Esc goes to what's above the panel's More actions menu, and to nothing once the panel is gone", async ({
   page,
 }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
   await row(page, 'Hades').getByText('Hades').click();
-  await page.getByRole('button', { name: 'More links' }).click();
+  await page.getByRole('button', { name: 'More actions' }).click();
   await page.keyboard.press('?');
   const shortcuts = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
   await expect(shortcuts).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(shortcuts).toBeHidden();
 
-  await page.getByRole('button', { name: 'More links' }).click();
+  await page.getByRole('button', { name: 'More actions' }).click();
   await page.goBack();
   await expect(page.locator('#game-panel')).toBeHidden();
   await page.keyboard.press('?');
@@ -9795,6 +9764,7 @@ test("S2 edge: copying a game's link is announced, not only shown as ✓", async
   await page.evaluate(() => {
     navigator.clipboard.writeText = async () => {};
   });
+  await page.getByRole('button', { name: 'More actions' }).click();
   await page.getByRole('button', { name: 'Copy link to this game' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Copied to clipboard' })).toHaveCount(1);
 });
