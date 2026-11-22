@@ -1,6 +1,6 @@
 # Plan: side panel redesign (branch `panel-redesign`)
 
-Deleted before the merge. Design: the "tiles, refined" mockup (round 4), local copy at `/tmp/claude-1000/-home-julien-dev-julien-f-steam-common-games/3bd32ea3-0b54-4fe4-9c30-a023ead1f7ed/scratchpad/mock/panel-directions.html`. Revision 3, after review rounds 1–2 (item ids in brackets: F frontend, U UI, T testing, P users).
+Deleted before the merge. Design: the "tiles, refined" mockup (round 4), local copy at `/tmp/claude-1000/-home-julien-dev-julien-f-steam-common-games/3bd32ea3-0b54-4fe4-9c30-a023ead1f7ed/scratchpad/mock/panel-directions.html`. Revision 4, after review rounds 1–3 (all four reviewers agree) (item ids in brackets: F frontend, U UI, T testing, P users).
 
 ## Goal
 
@@ -8,7 +8,7 @@ The panel is crowded, its sections hard to tell apart, and it scrolls ~2 screens
 
 - **Tiles** (half width, in pairs, fixed slots): Weighted Rating | Linux/Deck, To beat | Achievements, DLC | Owned by (see C1). Summary = one figure + one qualifier. An opened tile shows its body in a **drawer under its row** (notch pointing at it); tiles never move or resize; both tiles of a pair open → the drawer holds both, in tile order.
 - **Wide cards**: Price (figure summary), then text rows About, Tags & details, Similar games, News (summary on the title's line, cut with "…"). They open in place.
-- **One component**: same top line (icon, title, chevron), `figure` or `text` summary. States: loading (static shimmer under reduced motion; name "<Title>, loading"), failed (figure "⚠", qualifier "didn't answer"; body "<Source> didn't answer" + Retry; stays an openable button) [U3], empty (dimmed `--muted`, not opacity; reason as text; no chevron; doesn't open) [U2], ready. **C3**: whether empty is a non-button or the same button with `aria-disabled`.
+- **One component**: same top line (icon, title, chevron), `figure` or `text` summary. States: loading (static shimmer under reduced motion; name "<Title>, loading"), failed (figure "⚠", qualifier "didn't answer"; body "<Source> didn't answer" + Retry; stays an openable button) [U3], empty (the card's one button kept mounted with `aria-disabled="true"`, not `disabled`, so focus never drops on a ready → empty change; no `aria-expanded`/`aria-controls` while empty; still inside its `<h3>`, the reason in its name, "Linux/Deck, no reports"; `--muted` and the `not-allowed` cursor, not opacity; no chevron; clicks ignored) [U2, F3], ready.
 - **Semantics** [U1]: each card's top button wrapped in an `<h3>` (as `CollapsibleCard` today); a drawer part is `<section aria-labelledby=<tile h3 id>>`, its caps label `aria-hidden`. `aria-expanded`/`aria-controls` on the button.
 - **Open state**: one device-only pref `panelOpenCards` (not in `syncedPrefKeys.ts`) [Q4], global across games, independent of route and ownership; **default `['price']`** (today Price is always open; buying is its point) [P1, T1], applied only while the pref is unset: a stored `[]` stays `[]` (both in step 2's unit test). Read through one `createMemo` → `Set`, per-card booleans as primitives (`getPref` returns a fresh array) [F8].
 - **Header**: name; meta line (date · developer link · ownership chip · Status · refresh age = the ↻ button, which stays the refresh [F9]), each control ≥ 24 px tall [U4]; action row: Steam Store (labelled, primary), Add to list (labelled), ⋯ "More actions" (IsThereAnyDeal, Present — reads "Stop presenting" while presenting, with its P key [Q3], Website/Workshop, Copy link — keeps the live-region "copied" announcement [P6]); menu: `aria-expanded`, Esc closes it before the panel, focus back on ⋯ [U8]. `.panel-header-sticky` stays sticky. DLC back trail and demo banner kept.
@@ -25,7 +25,7 @@ The panel is crowded, its sections hard to tell apart, and it scrolls ~2 screens
 - **Achievements**: "1 / 2" + bar, qualifier naming whose progress where the data allows [U6]; no player (`playerCount === 0`): "2", "achievements", no bar.
 - **Price**: price, discount, ★/🔥 record glyph as in the table [U6], "· 2 bundles"; a subscription leads ("in Game Pass until …").
 - **DLC** [F1, U]: count from `meta.dlc.length` ("25"), no qualifier until "latest <date>" is known (every id cached). The per-id fetch stays tied to the body being open, and `fetchDlc` gets the `PANEL_SETTLE_MS` pause news/achievements/price have, so holding ↓ with DLC open doesn't fetch every game's DLC [F2]; tests move the fake clock past it before asserting, and wait for `.panel-dlc-item`, not the request [T].
-- **Owned by** [P2, C1]: shown when `hasOwnerSource()` — the route supplies owners (a comparison) or the current account has members; synchronous, so it never appears late or changes under ↑/↓. Otherwise no tile and DLC becomes a wide text row (same states). Loading like any card [F]. One owner "Alice", "45m"; several "3 / 4", "not Bob"; nobody: one member "not owned", several "0 / 4", "not owned" [U, P]. Body lists each owner with hours.
+- **Owned by** [P2, C1]: shown when `hasOwnerSource()` — a static `hasOwners: kind === 'compare'` in the route's handlers (`ListRoute.tsx`, through `AppShell.tsx` into `PanelOptions`), or `currentMembers().length > 0`; synchronous, so it never appears late (a cold comparison's players resolve later) or changes under ↑/↓ [P, F]. Otherwise no tile and DLC becomes a wide text row (same states). Loading like any card [F]. One owner "Alice", "45m"; several "3 / 4", "not Bob"; nobody: one member "not owned", several "0 / 4", "not owned" [U, P]. Body lists each owner with hours.
 - **About**: description's first line; no store page: "Delisted: no description".
 - **Tags & details**: top tag then genres; body grouped Genres / Tags / Features, pills still filter the table [P3], no legend, no duplicate.
 - **Similar** [F7, U11, P4]: closest owned names when the taste profile is cached; "needs <account>'s Owned list" (full sentence inside) when not; on Owned and with no account (C2, settled: keep the card) "More from <publisher>" when the publisher differs from the meta line's developer, else "More like this on Steam" [F, U, P]. Body keeps More from, Sort list by similarity and More like this on Steam [P3].
@@ -43,11 +43,9 @@ Each step lists the e2e tests it updates; an `openCard(page, title)` helper in `
 6. **Broken hero image** (U288) — hide the `<img>` on error, show the row's capsule (`standIn`) or a plain tile with the name.
 7. **User docs and screenshots** — `docs/user/features.md`, `game-panel.png`, `list-table-and-panel.png` (`screenshots` skill); close U278–U286 and U288 (U278 noting titles stay 13 px/600, the cards separating sections [U12]); reword U287 and leave it open (no DLC price or ownership data) [U10]. CHANGELOG at the `--no-ff` merge.
 
-## Contested (round 3)
+## Review
 
-- **C1** settled: (b), all four (UI and testing changed their vote: an always-empty slot is noise, and the layout is fixed per route).
-- **C2** settled: (b), all four (users changed theirs: hiding it would hide More from and More like this from the Link recipient).
-- **C3** Empty tile: non-button `<h3>` + text [U2] or the card's one button kept mounted with `aria-disabled` [F3: a ready → empty change after ↻ would otherwise drop focus to `<body>`]. Proposal: `aria-disabled` button, its reason as visible text, which the Feedback guideline allows ("say why in text beside them").
+Three rounds, the same four reviewers (frontend, UI/accessibility, testing, the app's users); nothing left contested. C1 (Owned by slot) and C2 (Similar with no account) went (b) unanimously after two reviewers changed their vote with reasons; C3 (empty tile) settled on the `aria-disabled` button.
 
 ## Out of scope
 
