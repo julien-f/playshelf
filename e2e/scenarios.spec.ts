@@ -3359,6 +3359,23 @@ test("L1.5: from a game's panel, tick a list to add it, or make a new list with 
   await expect(rows(page)).toHaveCount(2);
 });
 
+test("L1 edge: Esc in a game panel's Add to list menu closes it and hands focus back to Add to list", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620])] });
+  await page.goto('/game/1145360');
+  const panel = page.locator('#game-panel');
+  const button = panel.getByRole('button', { name: 'Add to list' });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await expect(panel.getByRole('checkbox', { name: 'Picks' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(panel.locator('.panel-lists-menu')).toBeHidden();
+  await expect(button).toBeFocused();
+  await expect(page.locator('#panel-title')).toBeVisible();
+});
+
 test("L1 edge: a list made in a game's panel is offered at once by the selection bar", async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=620');

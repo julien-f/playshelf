@@ -319,7 +319,7 @@ export function initPanel(options: PanelOptions) {
       e.preventDefault();
       setOpenHeaderMenu(null);
       document
-        .querySelector<HTMLElement>(`#game-panel .panel-icon-more[data-menu='${menu}'] .panel-icon-more-btn`)
+        .querySelector<HTMLElement>(`#game-panel .panel-icon-more[data-menu='${menu}'] > button[aria-expanded]`)
         ?.focus();
     },
     true,
