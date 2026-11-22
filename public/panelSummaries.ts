@@ -64,7 +64,7 @@ export const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export const spacedHours = (h: number) => fmtH(h).replace(/h$/, ' h');
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const plural = (n: number, word: string) => `${fmtCompactCount(n)} ${word}${n === 1 ? '' : 's'}`;
 
 export function ratingSummary(game: SummaryGame): CardSummary {
   const r = game.details?.rating;
@@ -74,7 +74,7 @@ export function ratingSummary(game: SummaryGame): CardSummary {
     kind: 'figure',
     state: 'ready',
     fig: String(rating),
-    qualifier: `Weighted · ${fmtCompactCount(r.total)} reviews`, // the tile is titled "Rating": "Weighted Rating" is cut at 390 px
+    qualifier: `Weighted · ${plural(r.total, 'review')}`, // the tile is titled "Rating": "Weighted Rating" is cut at 390 px
     tone: scoreColor(rating),
   };
 }
@@ -84,7 +84,7 @@ export function linuxDeckSummary(game: SummaryGame): CardSummary {
   const pd = game.details?.protondb;
   if (!pd?.tier) return missing(game, ['protondb'], 'figure') ?? empty('figure', 'no reports');
   // A pending tier is ProtonDB's provisional one, too few reports to be confident (extractProtonDb, lib/steam.js).
-  const qualifier = [pd.total ? `${fmtCompactCount(pd.total)} reports` : '', pd.pending ? 'provisional' : '']
+  const qualifier = [pd.total ? plural(pd.total, 'report') : '', pd.pending ? 'provisional' : '']
     .filter(Boolean)
     .join(' · ');
   return {

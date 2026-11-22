@@ -88,6 +88,15 @@ test('linuxDeckSummary: a provisional tier says so; an unknown count is left out
   });
 });
 
+test('one report or review reads singular', () => {
+  const protondb = { tier: 'platinum', confidence: null, total: 1, pending: true };
+  assert.equal(linuxDeckSummary(game({ details: { protondb } })).qualifier, '1 report · provisional');
+  assert.equal(
+    ratingSummary(game({ details: { rating: { positive: 1, total: 1 } } })).qualifier,
+    'Weighted · 1 review',
+  );
+});
+
 test('linuxDeckSummary: loading, failed, empty', () => {
   assert.deepEqual(linuxDeckSummary(game({ pendingSources: ['protondb'] })), { kind: 'figure', state: 'loading' });
   assert.deepEqual(linuxDeckSummary(game({ failedSources: ['protondb'] })), FAILED);
