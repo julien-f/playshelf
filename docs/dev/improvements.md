@@ -8,6 +8,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - [Taste profile](#taste-profile)
 - [Comparing](#comparing)
 - [Bundles and prices](#bundles-and-prices)
+- [Side panel](#side-panel)
 - [Phone](#phone)
 - [Accounts and first visit](#accounts-and-first-visit)
 - [Consistency and polish](#consistency-and-polish)
@@ -67,6 +68,20 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U255 · minor · B1** — the same €12.00 tier gets two "saves" figures: the hero's New to you reads "≈ €17.00 at best deals · saves €5.00 at €12.00" (the whole tier price against the new games), its group header "saves €10.00 · +€7.00 for 2 new worth €17.00" (the step's €7 against them). Name the baseline in both ("€5 less than buying the 2 new games", "this step: €10 less…"), or show one.
 - **U244 · minor · B1, C2** — grouped price columns show no total, so "what would this tier (or the missing friend's games) cost at best deals / 1-year lows" is summed by hand. Give Steam Full Price, Best Deal and the three lows an `aggregate` (region currency, once per gid, an incomplete marker for an unpriced row; off for Pick & mix), shown through the release's aggregate formatter, not the cell render (Best Deal's record badge would read the first row's lows); hiding owned rows then sums only what's new. Waits for the @vates/data-table release after 0.21.0: before it, a group split across pages sums each page's rows only.
 - **U238 · minor · B1** — `/bundles`' clock doesn't tick: its countdowns ("⏳ in 6h"), the Age and Ends in buckets and the hero's New and Ending soon counts are computed when the table processes its rows. Re-run the whole sort/filter/render pass on a timer: ticking only the hero counts would make them disagree with the rows.
+
+## Side panel
+
+- **U278 · minor · F1** — sections are hard to tell apart: an `<h3>` is 13 px/600 over 13 px body text, the same hairline separates every block, the store description has no heading, and sections come in two looks (an inline label for Price, Tags & details, Similar, Owned by; a row with icon, chevron and ↗ for How Long To Beat, Achievements, DLC). One section anatomy (heading on a larger `--fs-*` step, spacing between sections wider than within them).
+- **U279 · minor · F1** — the sticky header takes 170 px (19 % of 900, 20 % of a phone's 844): name and date, seven equal-weight unlabelled icon buttons (Store, ITAD, ⋯, Present, Add to list, Copy link, Refresh "just now"), the ownership badge alone on a third row, the Status select ("Mark…") floating right of the date, out of line with both, then the subnav. No action stands out as primary, and an icon's meaning is only in its tooltip, which touch never shows. Rank the actions (a labelled primary, the rest under ⋯), and put badge and status on the date's line.
+- **U280 · minor · F1** — the subnav doesn't map to the sections: Overview covers the glance grid, Price, the description, Tags and Similar; Price has no tab; the HLTB and Achievements tabs scroll to their cards but leave them collapsed. One tab per section a user looks for, and a tab opens its card.
+- **U281 · polish · F1** — Tags & details needs a four-shape legend to decode its pills, shows one value twice (tag "Singleplayer", category "Single-player"), and its developer pill repeats Similar's "More from: Supergiant Games". Group the pills under small labels (Genres, Tags, Features, Developer) instead of a legend, without duplicates.
+- **U282 · polish · F1** — the Price card mixes six treatments in three lines: the mono price, ★, "1-year low", "−45 %", a bold "Buy at Test Shop ↗", and a green "all-time low €10.00 🔥" on its own line. Price, discount and shop on one line; the record lows as one secondary line.
+- **U283 · polish · F1** — the glance grid gives a full cell to a missing value ("Metacritic — no score", "Linux/Deck — no reports"), and Linux/Deck's caption "strong · 100" (confidence and report count, kept short on purpose) doesn't say what it counts. Shrink or drop an empty chip; a caption a first-time reader understands.
+- **U284 · polish · F1, C1** — Owned by with a single owner still draws a full-width playtime bar (relative to the top owner) and the sort note "most recently played first". Bar and note only from two owners on.
+- **U285 · polish · F1** — How Long To Beat's card title repeats its body ("How Long To Beat · Main Story, Main + Extra, C…", cut at 432 px) and the glance chip already shows the total. Title alone, or fold the three times into the glance chip's section.
+- **U286 · polish · F1** — ⋯ More links opens a menu holding a single item (Official website ↗) on Hades. Show the link itself when it's the only one.
+- **U287 · polish · F1** — DLC rows are a capsule and a name, 47 px each, 20 to a page (~940 px): the panel's longest block says the least (no price, no owned mark, no release date). Denser rows carrying what decides a purchase.
+- **U288 · minor · F1** — a hero whose image fails shows the browser's broken-image glyph and the raw alt text in its top-left corner (`.panel-hero-img--broken` only sets a background); seen on the mock's sparse game and on a DLC. Hide the image and show the table capsule, or a plain tile with the name.
 
 ## Phone
 
