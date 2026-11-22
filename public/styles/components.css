@@ -2564,7 +2564,7 @@
     border-radius: var(--radius-3);
     background: var(--panel-ground);
   }
-  .panel-card--open {
+  .panel-card--tile.panel-card--open {
     border-color: var(--panel-card-open);
   }
   .panel-card-heading {
@@ -2612,7 +2612,7 @@
     rotate: 90deg;
   }
   /* The notch: from the opened tile down to its drawer. */
-  .panel-card--open .panel-card-top::after {
+  .panel-card--tile.panel-card--open .panel-card-top::after {
     content: '';
     position: absolute;
     bottom: -9px;
@@ -2667,6 +2667,32 @@
     display: block;
     height: 100%;
   }
+  /* A wide card: its figure and qualifier on one line, which the opened body replaces. */
+  .panel-card--wide {
+    margin-bottom: 8px;
+  }
+  .panel-card--wide .panel-card-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 8px;
+  }
+  .panel-card--wide .panel-card-qualifier {
+    height: auto;
+    white-space: normal;
+  }
+  .panel-card--wide .panel-card-bar,
+  .panel-card--wide .panel-card-top[aria-expanded='true'] .panel-card-summary {
+    display: none;
+  }
+  .panel-card-slot {
+    display: flow-root;
+  }
+  .panel-card-body {
+    display: grid;
+    gap: 10px;
+    padding: 0 12px 12px;
+  }
   .panel-drawer-slot {
     display: flow-root;
     grid-column: 1 / -1;
@@ -2695,11 +2721,11 @@
     letter-spacing: 0.07em;
     text-transform: uppercase;
   }
-  .panel-drawer-sk {
+  .panel-card-body-sk {
     width: 100%;
     height: 48px;
   }
-  .panel-drawer-retry {
+  .panel-card-retry {
     justify-self: start;
   }
   .panel-card-text {

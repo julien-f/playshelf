@@ -56,12 +56,13 @@ import {
   achievementsSummary,
   capitalize,
   linuxDeckSummary,
+  priceSummary,
   protonTierColor,
   ratingSummary,
   spacedHours,
   toBeatSummary,
 } from './panelSummaries.ts';
-import { PanelTileRow, slideHeight, type PanelCardDef } from './panelCards.tsx';
+import { PanelTileRow, PanelWideCard, slideHeight, type PanelCardDef } from './panelCards.tsx';
 import { isPanelCardOpen, togglePanelCard } from './panelOpenCards.ts';
 import { fmtDateTime } from './dateTime.ts';
 import { formatWithEstimate } from './currency.ts';
@@ -72,7 +73,6 @@ import { loadTaste } from './tasteCache.ts';
 import { clearPanelNav } from './panelNav.ts';
 import type { PanelHistoryEntry } from './panelHistory.ts';
 import { setGameTitle } from './pageTitle.ts';
-import { PRICES_UNAVAILABLE } from './priceLoading.ts';
 import { TIER_RANGE_TITLE } from './bundleData.ts';
 import { withAccountParam, urlWithoutPanel } from './urlState.ts';
 import { copyWithFeedback } from './clipboard.ts';
@@ -115,6 +115,7 @@ import Timer from 'lucide-solid/icons/timer';
 import Cast from 'lucide-solid/icons/cast';
 import ThumbsUp from 'lucide-solid/icons/thumbs-up';
 import Trophy from 'lucide-solid/icons/trophy';
+import Wallet from 'lucide-solid/icons/wallet';
 import Wrench from 'lucide-solid/icons/wrench';
 import X from 'lucide-solid/icons/x';
 import { focusVisible, keepFocus } from './focusHandoff.ts';
@@ -1303,14 +1304,13 @@ function NewsSection(props: { game: ReadonlyGame }): JSX.Element {
   );
 }
 
-// Price info — a single always-open card (no chip grid, no collapsible secondary numbers):
-// the current best deal (same display/color/badge/tooltip as the Best Deal table cell in
+// The Price card's body: the current best deal (same display/color/badge/tooltip as the Best Deal table cell in
 // bundles.tsx/library.ts), its discount off Steam Full Price when there is one, a direct link
 // to the shop itself, and a link to the game's ITAD page for the fuller picture (historical
 // lows, every other shop) this card deliberately leaves out. See the original panel.ts's own
 // (much longer) header comment — preserved in git history — for the full "where do these
 // numbers come from" reasoning; unchanged by this conversion.
-function PriceSection(props: { game: ReadonlyGame }): JSX.Element {
+function PriceBody(props: { game: ReadonlyGame }): JSX.Element {
   // Either the host route's own batched prices (already on the row) or this panel's own lookup —
   // see panelPriceFields. `undefined` means nothing priced this game and nothing is going to.
   const p = () => panelPriceFields(props.game);
@@ -1382,84 +1382,93 @@ function PriceSection(props: { game: ReadonlyGame }): JSX.Element {
   };
 
   return (
-    <Show
-      when={panelData.price.loading}
-      fallback={
-        <Show when={p() !== undefined}>
-          <section class="panel-section" id="panel-section-price">
-            <div class="panel-section-title">
-              <h3>Price</h3>{' '}
-              <a href={`https://isthereanydeal.com/steam/app/${props.game.appid}`} target="_blank" rel="noopener">
-                IsThereAnyDeal ↗
-              </a>
+    <>
+      <Show
+        when={deal()}
+        fallback={
+          <div class="panel-no-data">
+            {p() === null || p()?.pricesFailed
+              ? (priceRefusal(props.game.appid, currentRegion()) ?? "IsThereAnyDeal didn't answer.")
+              : 'No pricing data available.'}
+          </div>
+        }
+      >
+        <Show
+          when={shopUrl()}
+          fallback={
+            <div class="panel-price-line" title={deal()?.bestDealShop || undefined}>
+              {line()}
             </div>
-            <Show
-              when={deal()}
-              fallback={
-                <div class="panel-no-data">
-                  {isItadOff()
-                    ? PRICES_UNAVAILABLE
-                    : p() === null || p()?.pricesFailed
-                      ? (priceRefusal(props.game.appid, currentRegion()) ?? "IsThereAnyDeal didn't answer.")
-                      : 'No pricing data available.'}
-                </div>
-              }
+          }
+        >
+          {(url) => (
+            <a
+              class="panel-price-line panel-price-line--link"
+              href={url()}
+              target="_blank"
+              rel="noopener"
+              title={deal()?.bestDealShop || undefined}
             >
-              <Show
-                when={shopUrl()}
-                fallback={
-                  <div class="panel-price-line" title={deal()?.bestDealShop || undefined}>
-                    {line()}
-                  </div>
-                }
-              >
-                {(url) => (
-                  <a
-                    class="panel-price-line panel-price-line--link"
-                    href={url()}
-                    target="_blank"
-                    rel="noopener"
-                    title={deal()?.bestDealShop || undefined}
-                  >
-                    {line()}
-                  </a>
-                )}
-              </Show>
-              <Show when={lowGroups().length}>
-                <div class="panel-price-lows">
-                  <For each={lowGroups()}>
-                    {({ amount, tiers }, i) => {
-                      const icons = tiers.map((t) => t.icon).join('');
-                      // "all-time / 1-year low" when two windows share the amount.
-                      const visibleLabel = `${tiers.map((t) => t.tooltipLabel.replace(/ low$/, '')).join(' / ')} low`;
-                      const lowColor = tiers[0].color; // rarest tier in the group leads the color too
-                      const money = () => formatMoney(amount, deal()?.priceCurrency ?? null);
-                      return (
-                        <>
-                          <Show when={i() > 0}>
-                            <span class="panel-price-sep">·</span>
-                          </Show>
-                          <span class="panel-price-low" style={{ color: lowColor }}>
-                            {visibleLabel} {money()} {icons}
-                          </span>
-                        </>
-                      );
-                    }}
-                  </For>
-                </div>
-              </Show>
-            </Show>
-            <PanelOfferLines game={props.game} />
-          </section>
+              {line()}
+            </a>
+          )}
         </Show>
-      }
-    >
-      <section class="panel-section" id="panel-section-price">
-        <h3 class="panel-section-title">Price</h3>
-        <span class="sk" style={{ display: 'block', width: '100%', height: '32px', 'border-radius': '6px' }} />
-      </section>
-    </Show>
+        <Show when={lowGroups().length}>
+          <div class="panel-price-lows">
+            <For each={lowGroups()}>
+              {({ amount, tiers }, i) => {
+                const icons = tiers.map((t) => t.icon).join('');
+                // "all-time / 1-year low" when two windows share the amount.
+                const visibleLabel = `${tiers.map((t) => t.tooltipLabel.replace(/ low$/, '')).join(' / ')} low`;
+                const lowColor = tiers[0].color; // rarest tier in the group leads the color too
+                const money = () => formatMoney(amount, deal()?.priceCurrency ?? null);
+                return (
+                  <>
+                    <Show when={i() > 0}>
+                      <span class="panel-price-sep">·</span>
+                    </Show>
+                    <span class="panel-price-low" style={{ color: lowColor }}>
+                      {visibleLabel} {money()} {icons}
+                    </span>
+                  </>
+                );
+              }}
+            </For>
+          </div>
+        </Show>
+      </Show>
+      <PanelOfferLines game={props.game} />
+      <a
+        class="panel-card-link"
+        href={`https://isthereanydeal.com/steam/app/${props.game.appid}`}
+        target="_blank"
+        rel="noopener"
+      >
+        IsThereAnyDeal ↗
+      </a>
+    </>
   );
+}
+
+function PriceCard(props: { game: ReadonlyGame }): JSX.Element {
+  // A ↻ keeps the summary shown; another game's load (the same resource, re-keyed) shimmers.
+  const latest = <T,>(r: { loading: boolean; latest: T }) => (r.loading && !panelRefreshing() ? undefined : r.latest);
+  const price: PanelCardDef = {
+    card: 'price',
+    title: 'Price',
+    icon: Wallet,
+    summary: () =>
+      props.game.loading
+        ? priceSummary(undefined, undefined, false)
+        : priceSummary(
+            props.game.bestDealPrice !== undefined ? props.game : latest(panelData.price),
+            latest(panelData.offers),
+            isItadOff(),
+          ),
+    body: <PriceBody game={props.game} />,
+    sectionId: 'panel-section-price',
+  };
+  return <PanelWideCard def={price} />;
 }
 
 // An end date and how soon it is, colored like a bundle's: `verb` is "ends" or "leaves".
@@ -2770,9 +2779,7 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
         )}
       </Show>
       <PanelTiles game={g} />
-      <Show when={!g.loading}>
-        <PriceSection game={g} />
-      </Show>
+      <PriceCard game={g} />
       <Show when={noStorePage(g)}>
         <p class="panel-no-data">No Steam store page: delisted or unavailable, so no description, genres or media.</p>
       </Show>

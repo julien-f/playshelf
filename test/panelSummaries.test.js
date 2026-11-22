@@ -25,6 +25,7 @@ const {
   DEAL_RECORD_TIERS,
 } = require('../public/utils.ts');
 const { fmtDatePart } = require('../public/dateTime.ts');
+const { PRICES_UNAVAILABLE } = require('../public/priceLoading.ts');
 
 const FAILED = { kind: 'figure', state: 'failed', fig: '⚠', qualifier: "didn't answer", tone: 'var(--warn)' };
 const FAILED_TEXT = { kind: 'text', state: 'failed', text: "didn't answer", tone: 'var(--warn)' };
@@ -261,7 +262,8 @@ test('priceSummary: loading, failed, empty, IsThereAnyDeal not connected', () =>
     state: 'empty',
     qualifier: 'no price',
   });
-  assert.deepEqual(priceSummary(null, null, true), { kind: 'figure', state: 'empty', qualifier: 'unavailable' });
+  // Its whole reason: the card can't open to say more.
+  assert.deepEqual(priceSummary(null, null, true), { kind: 'figure', state: 'empty', qualifier: PRICES_UNAVAILABLE });
 });
 
 const dlcEntry = (appid, releaseDate, comingSoon = false) => ({

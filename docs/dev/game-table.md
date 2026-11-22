@@ -44,7 +44,7 @@ A grouped list is always grouped and sorted by membership first (`withMembership
 **Record-low badges** — `dealRecordTier(price, row)` (`utils.ts`) is the one source for them, over `DEAL_RECORD_TIERS`: green + bold + 🔥 all-time low, plain + ★ 1-year, amber + ☆ 3-month, rarest first. `<=`, since the current deal can be the low itself. A deal with no discount gets no tier, since ITAD's lows include full prices ([bundles-and-prices.md](bundles-and-prices.md#prices)).
 
 - `renderBestDeal` badges the price instead of putting the shop name in the cell; the shop is in the `title` tooltip (plus the tier's `tooltipLabel`, e.g. " — all-time low") and in the hidden `bestDealShop` column.
-- The panel's Price card (`PriceSection`) keeps its own render code on `dealRecordTier`: importing `renderBestDeal` would pull `@vates/data-table-solid` into the panel. Unlike the cell, it spells each badge out ("★ 1-year low", "all-time low €2.49 🔥"), having the room.
+- The panel's Price card (`PriceBody`; its folded line is `panelSummaries.ts`'s `priceSummary`) keeps its own render code on `dealRecordTier`: importing `renderBestDeal` would pull `@vates/data-table-solid` into the panel. Unlike the cell, it spells each badge out ("★ 1-year low", "all-time low €2.49 🔥"), having the room.
 
 **Prices load apart from details** (`loadPrices`, `ListRoute.tsx`; the upstream side: [bundles-and-prices.md](bundles-and-prices.md#prices)):
 

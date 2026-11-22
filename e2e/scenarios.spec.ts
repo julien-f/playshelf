@@ -547,6 +547,15 @@ test(
   },
 );
 
+test('S3 edge: a fresh browser shows the deal link, the Price card open', { tag: '@any-width' }, async ({ page }) => {
+  await page.goto('/game/1145360');
+  const price = cardButton(page, 'Price');
+  await expect(price).toHaveAccessibleName(/^Price, €\d+\.\d\d/);
+  await expect(price).toHaveAttribute('aria-expanded', 'true');
+  const deal = page.locator(`[id="${await price.getAttribute('aria-controls')}"] .panel-price-line--link`);
+  await expect(deal).toHaveAttribute('href', /^https:/);
+});
+
 test('S3 edge: a shared layout with a wrongly typed field still applies the rest of it', async ({ page }) => {
   await asPlayer(page, ALICE);
   // An older or hand-edited link: `filters.name` should be a list of values.

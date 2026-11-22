@@ -13,7 +13,8 @@ export interface PanelCardDef {
   icon: Component<{ class?: string }>;
   summary: () => CardSummary;
   body: JSX.Element; // built once by the caller: the ready state's
-  failed: () => { message: string; retry?: () => void }; // a refusal offers no retry
+  // A refusal offers no retry; absent, the body says what didn't answer itself (Price: price or bundles).
+  failed?: () => { message: string; retry?: () => void };
   sectionId?: string; // the #panel-section-* id the subnav jumps to
 }
 
@@ -35,12 +36,19 @@ export function slideHeight(el: HTMLElement, from: number, to: number): Promise<
   return animate(el, frames, { duration: durationToken('--dur-3'), easing: easeOut() });
 }
 
-function PanelTile(props: { def: PanelCardDef; open: boolean; onToggle: () => void }): JSX.Element {
+// A card's box and top line; a wide card's body comes in as `children`.
+function PanelCardBox(props: {
+  def: PanelCardDef;
+  kind: 'tile' | 'wide';
+  open: boolean;
+  onToggle: () => void;
+  children?: JSX.Element;
+}): JSX.Element {
   const s = createMemo(() => props.def.summary());
   const empty = () => s().state === 'empty';
   return (
     <div
-      class="panel-card panel-card--tile"
+      class={`panel-card panel-card--${props.kind}`}
       classList={{ 'panel-card--open': props.open && !empty(), 'panel-card--empty': empty() }}
       id={props.def.sectionId}
     >
@@ -75,7 +83,81 @@ function PanelTile(props: { def: PanelCardDef; open: boolean; onToggle: () => vo
           </span>
         </button>
       </h3>
+      {props.children}
     </div>
+  );
+}
+
+// A card body by its state: the caller's when ready, the source that didn't answer, or a shimmer.
+function CardBody(props: { def: PanelCardDef; state: CardSummary['state'] }): JSX.Element {
+  return (
+    <Switch>
+      <Match when={props.state === 'ready' || (props.state === 'failed' && !props.def.failed)}>{props.def.body}</Match>
+      <Match when={props.state === 'failed' && props.def.failed}>
+        {(failed) => (
+          <>
+            <p class="panel-no-data">{failed()().message}</p>
+            <Show when={failed()().retry}>
+              {(retry) => (
+                <button type="button" class="btn panel-card-retry" onClick={() => retry()()}>
+                  Retry
+                </button>
+              )}
+            </Show>
+          </>
+        )}
+      </Match>
+      <Match when={props.state === 'loading'}>
+        <span class="sk panel-card-body-sk" />
+      </Match>
+    </Switch>
+  );
+}
+
+// Toggles `card` and, on a click only, slides `slot` to its new height (`measure`, with the part
+// leaving still mounted); `setLeaving` keeps that part, inert, until the slide ends.
+function createSlideToggle(
+  slot: () => HTMLElement,
+  setLeaving: (card: string | null) => void,
+  measure: (card: string, closing: boolean) => number,
+) {
+  let slides = 0;
+  return (card: string) => {
+    const el = slot();
+    const from = el.getBoundingClientRect().height;
+    for (const a of el.getAnimations()) a.cancel();
+    const closing = isPanelCardOpen(card);
+    const slide = !prefersReducedMotion();
+    setLeaving(closing && slide ? card : null);
+    togglePanelCard(card);
+    if (!slide) return;
+    const to = measure(card, closing);
+    const n = ++slides;
+    void slideHeight(el, from, to).then(() => n === slides && setLeaving(null));
+  };
+}
+
+// A full-width card, opening in place.
+export function PanelWideCard(props: { def: PanelCardDef }): JSX.Element {
+  const state = createMemo(() => props.def.summary().state);
+  const open = createMemo(() => isPanelCardOpen(props.def.card));
+  const [leaving, setLeaving] = createSignal<string | null>(null);
+  let slot!: HTMLDivElement;
+  const toggle = createSlideToggle(
+    () => slot,
+    setLeaving,
+    (_card, closing) => (closing ? 0 : slot.getBoundingClientRect().height),
+  );
+  return (
+    <PanelCardBox def={props.def} kind="wide" open={open()} onToggle={() => toggle(props.def.card)}>
+      <div class="panel-card-slot" ref={slot}>
+        <Show when={(open() && state() !== 'empty') || leaving()}>
+          <div class="panel-card-body" id={bodyId(props.def.card)} inert={!!leaving()}>
+            <CardBody def={props.def} state={state()} />
+          </div>
+        </Show>
+      </div>
+    </PanelCardBox>
   );
 }
 
@@ -91,22 +173,7 @@ function DrawerPart(props: { def: PanelCardDef; state: CardSummary['state']; lea
         <Dynamic component={props.def.icon} />
         {props.def.title}
       </div>
-      <Switch>
-        <Match when={props.state === 'ready'}>{props.def.body}</Match>
-        <Match when={props.state === 'failed'}>
-          <p class="panel-no-data">{props.def.failed().message}</p>
-          <Show when={props.def.failed().retry}>
-            {(retry) => (
-              <button type="button" class="btn panel-drawer-retry" onClick={() => retry()()}>
-                Retry
-              </button>
-            )}
-          </Show>
-        </Match>
-        <Match when={props.state === 'loading'}>
-          <span class="sk panel-drawer-sk" />
-        </Match>
-      </Switch>
+      <CardBody def={props.def} state={props.state} />
     </section>
   );
 }
@@ -124,31 +191,22 @@ export function PanelTileRow(props: { first: PanelCardDef; second: PanelCardDef 
     tiles.filter((def, i) => (open[i]() && states[i]() !== 'empty') || leaving() === def.card),
   );
   let slot!: HTMLDivElement;
-  let slides = 0;
-
-  // A click (only: data arriving or a game step just resizes it) slides the drawer to its new height.
-  const toggle = (card: string) => {
-    const from = slot.getBoundingClientRect().height;
-    for (const a of slot.getAnimations()) a.cancel();
-    const closing = isPanelCardOpen(card);
-    const slide = !prefersReducedMotion();
-    setLeaving(closing && slide ? card : null);
-    togglePanelCard(card);
-    if (!slide) return;
-    let to = 0;
-    if (parts().some((def) => def.card !== card)) {
-      const part = closing ? document.getElementById(bodyId(card)) : null;
-      if (part) part.style.display = 'none';
-      to = slot.getBoundingClientRect().height;
-      if (part) part.style.display = '';
-    }
-    const n = ++slides;
-    void slideHeight(slot, from, to).then(() => n === slides && setLeaving(null));
-  };
+  // The drawer's height without the part leaving: 0 once it was the last.
+  function measure(card: string, closing: boolean): number {
+    if (!parts().some((def) => def.card !== card)) return 0;
+    const part = closing ? document.getElementById(bodyId(card)) : null;
+    if (part) part.style.display = 'none';
+    const to = slot.getBoundingClientRect().height;
+    if (part) part.style.display = '';
+    return to;
+  }
+  const toggle = createSlideToggle(() => slot, setLeaving, measure);
 
   return (
     <div class="panel-tile-row">
-      <For each={tiles}>{(def, i) => <PanelTile def={def} open={open[i()]()} onToggle={() => toggle(def.card)} />}</For>
+      <For each={tiles}>
+        {(def, i) => <PanelCardBox def={def} kind="tile" open={open[i()]()} onToggle={() => toggle(def.card)} />}
+      </For>
       <div class="panel-drawer-slot" ref={slot}>
         <Show when={parts().length}>
           <div class="panel-drawer">

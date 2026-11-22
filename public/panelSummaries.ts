@@ -15,6 +15,7 @@ import {
   scoreColor,
 } from './utils.ts';
 import { fmtDatePart } from './dateTime.ts';
+import { PRICES_UNAVAILABLE } from './priceLoading.ts';
 import type { DlcEntry, PanelAchievements, PanelNews, PanelOffers, PanelPrice } from './panelData.ts';
 import type { GameOwner } from './accountData.ts';
 import type { ReadonlyGame } from './types.ts';
@@ -133,7 +134,7 @@ export function priceSummary(
   offers: PanelOffers | undefined,
   itadOff: boolean,
 ): CardSummary {
-  if (itadOff) return empty('figure', 'unavailable');
+  if (itadOff) return empty('figure', PRICES_UNAVAILABLE);
   if (price === undefined) return loading('figure');
   const sub = offers?.subscriptions?.[0];
   const bundles = offers?.bundles.length ?? 0;
