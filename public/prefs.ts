@@ -11,6 +11,7 @@
 // setPref below).
 import { batch, createSignal } from 'solid-js';
 import { TABLE_VIEW_PREF_KEYS } from './tableViewKeys.ts';
+import { isSyncedPrefKey } from './syncedPrefKeys.ts';
 import { setItemMakingRoom } from './tasteCache.ts';
 
 export const PREFS_STORAGE_KEY = 'steam.isonoe.net:prefs';
@@ -147,7 +148,8 @@ export function setPref(key: string, value: unknown): void {
   // Per-key push to the server once signed in (authStore.ts calls setSignedInSteamid on
   // sign-in/out) — deliberately never a whole-blob PUT, so two preferences changing around the
   // same time (different tabs/devices) can't race each other's writes.
-  if (!signedInSteamid) return;
+  // A device-only key (panelOpenCards) stays here: the server refuses it.
+  if (!signedInSteamid || !isSyncedPrefKey(key)) return;
   if (DEBOUNCED_PUSH_PREFIXES.some((p) => key.startsWith(p))) schedulePush(key);
   else pushPrefToServer(key, value, updatedAt);
 }

@@ -3,7 +3,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import { DEMO_OF, LIMITED, mockApi, respond } from './mockApi.ts';
 import { HEARTBEAT_MS, PRESENTATION_CHANNEL } from '../public/presentationProtocol.ts';
 import { hookPresentation, type PresTest } from './presentationHooks.ts';
-import { asPlayer, gate, shot, visibleBox } from './state.ts';
+import { asPlayer, cardButton, gate, openCard, shot, visibleBox } from './state.ts';
 import { row, rows } from './rows.ts';
 import {
   ALICE,
@@ -547,6 +547,15 @@ test(
   },
 );
 
+test('S3 edge: a fresh browser shows the deal link, the Price card open', { tag: '@any-width' }, async ({ page }) => {
+  await page.goto('/game/1145360');
+  const price = cardButton(page, 'Price');
+  await expect(price).toHaveAccessibleName(/^Price, €\d+\.\d\d/);
+  await expect(price).toHaveAttribute('aria-expanded', 'true');
+  const deal = page.locator(`[id="${await price.getAttribute('aria-controls')}"] .panel-price-line--link`);
+  await expect(deal).toHaveAttribute('href', /^https:/);
+});
+
 test('S3 edge: a shared layout with a wrongly typed field still applies the rest of it', async ({ page }) => {
   await asPlayer(page, ALICE);
   // An older or hand-edited link: `filters.name` should be a list of values.
@@ -710,7 +719,7 @@ test(
     await asPlayer(page, ALICE);
     await page.goto('/lists/compare?u=alice&u=bob&u=carol');
     await row(page, 'Portal 2').getByText('Portal 2').click();
-    const owners = page.locator('#panel-section-owners .panel-owner-name');
+    const owners = (await openCard(page, 'Owned by')).locator('.panel-owner-name');
     await expect(owners).toHaveCount(3);
     expect((await owners.allInnerTexts()).sort()).toEqual(['Alice', 'Bob', 'Carol']);
   },
@@ -720,7 +729,7 @@ test(
   'C1 edge: a tag filter ranks games by how strongly they carry the tag, until cleared',
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['tags'] });
     await page.goto('/lists/owned');
     await expect(rows(page)).toHaveCount(6);
     const names = () =>
@@ -740,7 +749,7 @@ test(
 );
 
 test("C1 edge: the panel's Steam tags show how strongly players tagged the game with each", async ({ page }) => {
-  await asPlayer(page, ALICE);
+  await asPlayer(page, ALICE, { openCards: ['tags'] });
   await page.goto('/lists/owned');
   await row(page, 'Portal 2').getByText('Portal 2').click();
   const coop = page.locator('.panel-tags').getByRole('button', { name: 'Co-op, tag', exact: true });
@@ -755,11 +764,11 @@ test(
   "B2 edge: the panel lists the account's owned games closest by Steam tags, each opening its own panel",
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['similar'] });
     await page.goto('/lists/wishlist');
     await row(page, 'It Takes Two').getByText('It Takes Two').click();
     const similar = page.locator('#panel-section-similar');
-    await expect(similar.locator('.panel-section-title')).toHaveText(/^Similar in Alice's library/);
+    await expect(cardButton(page, 'Similar games')).toHaveAccessibleName("Similar games, needs Alice's Owned list");
     await expect(similar.getByRole('link', { name: /More like this on Steam/ })).toHaveAttribute(
       'href',
       'https://store.steampowered.com/recommended/morelike/app/1426210/',
@@ -781,7 +790,7 @@ test(
 );
 
 test('C1 edge: the panel sorts the list by similarity to its game, until stopped', async ({ page }) => {
-  await asPlayer(page, ALICE);
+  await asPlayer(page, ALICE, { openCards: ['similar'] });
   await page.goto('/lists/owned');
   await expect(rows(page)).toHaveCount(6);
   const names = () =>
@@ -1351,7 +1360,7 @@ test(
   "C1 edge: a game looked up outside the list can't sort the list by similarity to it",
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['similar'] });
     await page.goto('/lists/owned');
     await expect(rows(page)).toHaveCount(6);
     await page.getByPlaceholder('Look up any game…').fill('apex');
@@ -1366,7 +1375,7 @@ test(
   'C1 edge: a Tag Match range keeps the games strongly tagged, and goes with the tag filter',
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['tags'] });
     await page.goto('/lists/owned');
     await expect(rows(page)).toHaveCount(6);
     const coop = page.locator('.panel-tags').getByRole('button', { name: 'Co-op, tag', exact: true });
@@ -1679,6 +1688,7 @@ test.describe(() => {
     await expect(page.locator('#panel-title')).toHaveText('Portal 2');
     await expect(shown.locator('.pres-caption-name')).toHaveText('Hades');
 
+    await page.getByRole('button', { name: 'More actions' }).click();
     await page.getByRole('button', { name: 'Present on second screen' }).click();
     await expect(shown.locator('.pres-caption-name')).toHaveText('Portal 2');
     await expect(chip).toContainText('Portal 2');
@@ -1696,7 +1706,9 @@ test.describe(() => {
     await page.setViewportSize({ width: 700, height: 800 });
     await page.goto('/game/1145360');
     await expect(page.locator('#panel-title')).toHaveText('Hades');
+    await page.getByRole('button', { name: 'More actions' }).click();
     await expect(page.getByRole('button', { name: 'Present on second screen' })).toBeVisible();
+    await page.keyboard.press('Escape'); // the menu first
     const shown = await startPresenting(page);
     await page.keyboard.press('Escape'); // this narrow, the panel covers the nav, as everywhere in the app
     const chip = page.getByRole('banner').locator('.present-chip');
@@ -1887,10 +1899,14 @@ test.describe(() => {
     await page.goto('/game/1145360');
     await expect(page.locator('#panel-title')).toHaveText('Hades');
     await startPresenting(page);
-    const onTv = page.getByRole('button', { name: 'On TV', exact: true });
+    const more = page.getByRole('button', { name: 'More actions' });
+    await more.click();
+    // Present turns into its stop while the hero's media is on the TV.
+    const onTv = page.locator('#game-panel').getByRole('button', { name: 'Stop presenting', exact: true });
     await expect(onTv).toHaveClass(/panel-present-btn--on/);
     await expect(page.locator('.panel-hero-present')).toHaveText('On TV');
     await page.getByRole('button', { name: 'Screenshot 1 of 3' }).click(); // another item, not presented
+    await more.click();
     await expect(page.getByRole('button', { name: 'Present on second screen' })).not.toHaveClass(
       /panel-present-btn--on/,
     );
@@ -3343,6 +3359,23 @@ test("L1.5: from a game's panel, tick a list to add it, or make a new list with 
   await expect(rows(page)).toHaveCount(2);
 });
 
+test("L1 edge: Esc in a game panel's Add to list menu closes it and hands focus back to Add to list", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE, { lists: [picksList([620])] });
+  await page.goto('/game/1145360');
+  const panel = page.locator('#game-panel');
+  const button = panel.getByRole('button', { name: 'Add to list' });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await expect(panel.getByRole('checkbox', { name: 'Picks' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(panel.locator('.panel-lists-menu')).toBeHidden();
+  await expect(button).toBeFocused();
+  await expect(page.locator('#panel-title')).toBeVisible();
+});
+
 test("L1 edge: a list made in a game's panel is offered at once by the selection bar", async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=620');
@@ -4114,19 +4147,21 @@ test(
   "R1 edge: the ranking's side panel offers similar owned games, with no list to sort",
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['similar'] });
     await page.goto('/lists/owned');
     await rankChosen(page, ['Portal 2', 'Hades']);
     await page.getByRole('button', { name: 'Details', exact: true }).first().click();
     const similar = page.locator('#panel-section-similar');
-    await expect(similar.locator('.panel-section-title')).toHaveText(/^Similar in Alice's library/);
     await expect(similar.locator('.panel-similar-item').first()).toBeVisible();
+    // Its line names the closest owned games.
+    const closest = await similar.locator('.panel-similar-name').first().textContent();
+    await expect(cardButton(page, 'Similar games')).toHaveAccessibleName(new RegExp(`^Similar games, ${closest}`));
     await expect(similar.getByRole('button', { name: /Sort list by similarity/ })).toHaveCount(0);
   },
 );
 
 test("R1 edge: the ranking's side panel shows tags as plain pills and its Refresh re-fetches", async ({ page }) => {
-  await asPlayer(page, ALICE);
+  await asPlayer(page, ALICE, { openCards: ['tags'] });
   await page.goto('/lists/owned');
   await rankChosen(page, ['Portal 2', 'Hades']);
   await page.getByRole('button', { name: 'Details', exact: true }).first().click();
@@ -5431,7 +5466,7 @@ test('D2.1-2: with upstreams down, every game is still listed', async ({ page })
     "Steam reviews, HowLongToBeat and ProtonDB didn't answer for 6 games",
   );
   await row(page, 'Hades').getByText('Hades').click();
-  await expect(page.locator('.panel-glance-chip').filter({ hasText: 'HLTB' })).toContainText("didn't answer");
+  await expect(cardButton(page, 'To beat')).toContainText("didn't answer");
 });
 
 test(
@@ -5476,7 +5511,7 @@ test(
     await expect(page.locator('.price-status')).toHaveClass(/list-failed/);
     await page.goto('/lists/owned?game=1145360');
     await expect(page.locator('#panel-section-price')).toContainText(LIMITED);
-    await expect(page.locator('#panel-section-achievements')).toContainText(LIMITED);
+    await expect(await openCard(page, 'Achievements')).toContainText(LIMITED);
   },
 );
 
@@ -5620,8 +5655,7 @@ test("D2 edge: a lookup answered past its share after stepping to another bundle
   await page.goto('/bundles');
   await page.getByRole('cell', { name: BUNDLE.title }).click();
   await row(page, 'Hades').getByText('Hades').click();
-  const card = page.locator('#panel-section-dlc');
-  await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+  const card = await openCard(page, 'DLC');
   await card.locator('.panel-dlc-item').first().click();
   await lookup.requested;
   await page.keyboard.press('Escape');
@@ -5640,7 +5674,7 @@ test("D2.3: once the upstream is back, the panel's Refresh details fills in what
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
   await row(page, 'Hades').getByText('Hades').click();
-  const hltb = page.locator('.panel-glance-chip').filter({ hasText: 'HLTB' });
+  const hltb = cardButton(page, 'To beat');
   await expect(hltb).toContainText("didn't answer");
 
   await mockApi(page); // the upstream is back: routes registered last take precedence
@@ -5762,7 +5796,7 @@ test('D2 edge: a game with no store page keeps its CDN thumbnail and the panel s
     'src',
     'https://cdn.akamai.steamstatic.com/steam/apps/1145360/capsule_231x87.jpg',
   );
-  await expect(page.locator('.panel-no-data', { hasText: 'No Steam store page' })).toBeVisible();
+  await expect(cardButton(page, 'About')).toHaveAccessibleName('About, Delisted: no description');
 });
 
 test(
@@ -5786,7 +5820,7 @@ test(
     });
     await page.goto('/game/1145360');
     await expect(page.locator('#panel-title')).toHaveText('Hades Schema Name');
-    await expect(page.locator('.panel-no-data', { hasText: 'No Steam store page' })).toBeVisible();
+    await expect(cardButton(page, 'About')).toHaveAccessibleName('About, Delisted: no description');
   },
 );
 
@@ -5801,7 +5835,7 @@ test(
     const metaAsked = gameMetaRequests(page);
     await page.goto('/lists/owned?game=1145360&shot=s1');
     await expect(page.locator('.list-status')).toContainText('Too many requests');
-    await expect(page.locator('.panel-glance')).toContainText("didn't answer");
+    await expect(cardButton(page, 'Rating')).toContainText("didn't answer");
     // Nothing was fetched, so nothing is "just now".
     await expect(page.locator('.panel-refresh-age')).toHaveCount(0);
     const lightbox = page.locator('#screenshot-lightbox');
@@ -5872,7 +5906,9 @@ test(
     await expect(row(page, 'Hades').getByTitle(/HowLongToBeat didn't answer/)).toHaveCount(0);
     await expect(row(page, 'Portal 2').getByTitle(/didn't answer/)).toHaveCount(0);
     await row(page, 'Portal 2').getByText('Portal 2').click();
-    await expect(page.locator('.panel-glance')).not.toContainText('still loading');
+    const rating = await openCard(page, 'Rating');
+    await expect(rating).toContainText('Metacritic');
+    await expect(rating).not.toContainText('still loading');
   },
 );
 
@@ -5982,16 +6018,14 @@ test(
   "F1 edge: the Achievements card says when Steam didn't answer for rarity",
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['achievements'] });
     await page.goto('/lists/owned?game=1145360');
-    const card = page.locator('#panel-section-achievements');
-    await card.getByRole('button', { name: /Achievements/ }).click();
+    const card = await openCard(page, 'Achievements');
     await expect(card).toContainText('71.5%');
     await expect(card).not.toContainText("Rarity: Steam didn't answer.");
 
     await mockApi(page, { states: ['upstream-down'] }); // registered last, so it answers first
     await page.reload();
-    await card.getByRole('button', { name: /Achievements/ }).click();
     await expect(card).toContainText("Rarity: Steam didn't answer.");
   },
 );
@@ -5999,13 +6033,255 @@ test(
 test("F1 edge: the panel doesn't link an upstream URL that isn't http(s)", { tag: '@any-width' }, async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=892970');
-  const chip = page.locator('.panel-glance-chip', { hasText: 'Metacritic' });
-  await expect(chip).toBeVisible();
-  await expect(chip).not.toHaveAttribute('href', /.*/);
+  const metacritic = (await openCard(page, 'Rating')).locator('.panel-fig', { hasText: 'Metacritic' });
+  await expect(metacritic).toContainText('85');
+  await expect(metacritic.getByRole('link')).toHaveCount(0);
 });
 
-test("F1 edge: Tags & details names each chip's kind, and draws each kind's dot its own shape", async ({ page }) => {
+test(
+  "F1 edge: with Steam's reviews down, the Rating tile answers with the Metacritic score and its body says both",
+  { tag: '@any-width' },
+  async ({ page }) => {
+    await mockApi(page, { states: ['upstream-down'] });
+    await asPlayer(page, ALICE);
+    await page.goto('/lists/owned?game=892970');
+    await expect(cardButton(page, 'Rating')).toHaveAccessibleName('Rating, 85, Metacritic');
+    const body = await openCard(page, 'Rating');
+    await expect(body).toContainText("Steam reviews didn't answer");
+    await expect(body.locator('.panel-fig', { hasText: 'Metacritic' })).toContainText('85');
+    await expect(body.locator('.panel-fig', { hasText: 'Weighted' })).toHaveCount(0);
+  },
+);
+
+test("I1 edge: on a phone, no panel card's title or figure is cut, and the meta line's controls are 24 px tall", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'phone layout');
   await asPlayer(page, ALICE);
+  for (const path of ['/lists/owned?game=1145360', '/lists/owned?game=620', '/lists/wishlist?game=3999990']) {
+    await page.goto(path);
+    await expect(cardButton(page, 'Price')).not.toHaveAccessibleName(/loading/);
+    await expect(cardButton(page, 'Achievements')).not.toHaveAccessibleName(/loading/);
+    // Text rows are cut with "…" by design; a figure card's lines never are.
+    const cut = await page
+      .locator('.panel-card-title, .panel-card-fig, .panel-card--tile .panel-card-qualifier')
+      .evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth).map((el) => el.textContent));
+    expect(cut, path).toEqual([]);
+    const small = await page
+      .locator('.panel-meta')
+      .locator('a, button, select')
+      .evaluateAll((els) => els.filter((el) => el.getBoundingClientRect().height < 24).map((el) => el.outerHTML));
+    expect(small, path).toEqual([]);
+  }
+});
+
+const TILES = ['Rating', 'Linux/Deck', 'To beat', 'Achievements'];
+
+test("F1 edge: opening a tile, then its neighbour, or a tile's data arriving moves no tile", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const achievements = await gate(page, '**/api/achievements/**');
+  await page.goto('/lists/owned?game=1145360');
+  const boxes = () => Promise.all(TILES.map((title) => visibleBox(cardButton(page, title))));
+  await expect(cardButton(page, 'Achievements')).toHaveAccessibleName('Achievements, loading');
+  const loading = await boxes();
+  achievements.release();
+  await expect(cardButton(page, 'Achievements')).toHaveAccessibleName(/^Achievements, 1 \/ 2/);
+  expect(await boxes()).toEqual(loading);
+
+  const rating = await openCard(page, 'Rating');
+  const opened = await boxes();
+  expect(opened.slice(0, 2)).toEqual(loading.slice(0, 2));
+  const linux = await openCard(page, 'Linux/Deck');
+  expect((await boxes()).slice(0, 2)).toEqual(loading.slice(0, 2));
+  // Both in one drawer under the row, in tile order.
+  const drawer = page.locator('.panel-drawer').first();
+  await expect(drawer.locator('section')).toHaveCount(2);
+  expect(await rating.evaluate((el) => el.nextElementSibling?.id)).toBe(await linux.getAttribute('id'));
+  await expect(drawer.locator('section').first()).toHaveAccessibleName(/^Rating, \d+, Weighted/);
+});
+
+test('I2 edge: a panel tile opens and folds from the keyboard, focus staying on it', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  const rating = cardButton(page, 'Rating');
+  await expect(rating).toHaveAttribute('aria-expanded', 'false');
+  await rating.focus();
+  await page.keyboard.press('Enter');
+  await expect(rating).toHaveAttribute('aria-expanded', 'true');
+  await expect(rating).toBeFocused();
+  // Reading order: both tiles, then their drawer.
+  await page.keyboard.press('Tab');
+  await expect(cardButton(page, 'Linux/Deck')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator(`[id="${await rating.getAttribute('aria-controls')}"] a`).first()).toBeFocused();
+  await rating.focus();
+  await page.keyboard.press(' ');
+  await expect(rating).toHaveAttribute('aria-expanded', 'false');
+  await expect(rating).toBeFocused();
+  await expect(page.locator('.panel-drawer')).toHaveCount(0);
+});
+
+test("F1 edge: a tile with nothing to show says why, and doesn't open", { tag: '@any-width' }, async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/wishlist?game=3999990');
+  const linux = cardButton(page, 'Linux/Deck');
+  await expect(linux).toHaveAccessibleName('Linux/Deck, no reports');
+  await expect(linux).toHaveAttribute('aria-disabled', 'true');
+  await expect(linux).not.toHaveAttribute('aria-expanded', /.*/);
+  await expect(linux).not.toHaveAttribute('aria-controls', /.*/);
+  await linux.click({ force: true }); // aria-disabled reads as not enabled to Playwright, not to a user
+  await expect(linux).toBeFocused();
+  await expect(page.locator('.panel-drawer')).toHaveCount(0);
+});
+
+test("D2.3: a tile whose source didn't answer opens on a Retry, which fills it in once it's back", async ({ page }) => {
+  await mockApi(page, { states: ['upstream-down'] });
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  const toBeat = cardButton(page, 'To beat');
+  await expect(toBeat).toHaveAccessibleName("To beat, didn't answer");
+  const body = await openCard(page, 'To beat');
+  await expect(body).toContainText("HowLongToBeat didn't answer");
+  await mockApi(page); // the upstream is back: routes registered last take precedence
+  await body.getByRole('button', { name: 'Retry' }).click();
+  await expect(toBeat).toHaveAccessibleName(/^To beat, 26\.7 h, main/);
+  await expect(body).toContainText('Main Story');
+});
+
+test('F1 edge: an opened card stays open on the next game, on its own page and after a reload', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  await openCard(page, 'To beat');
+  await page.getByRole('button', { name: 'Next game' }).click();
+  await expect(page.locator('#panel-title')).not.toHaveText('Hades');
+  await expect(cardButton(page, 'To beat')).toHaveAttribute('aria-expanded', 'true');
+  await expect(cardButton(page, 'Rating')).toHaveAttribute('aria-expanded', 'false');
+  await page.goto('/game/1145360');
+  await expect(cardButton(page, 'To beat')).toHaveAttribute('aria-expanded', 'true');
+  await page.reload();
+  await expect(cardButton(page, 'To beat')).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('C4 edge: a comparison link in a fresh browser shows the Owned by tile', async ({ page }) => {
+  await page.goto('/lists/compare?u=alice&u=bob&u=carol&game=620');
+  await expect(cardButton(page, 'Owned by')).toHaveAccessibleName(/^Owned by, 3 \/ 3/);
+  await expect(page.locator('.panel-tile-row')).toHaveCount(3);
+});
+
+test("C4 edge: a comparison's Owned by counts a Family as one player, owning the game when a member does", async ({
+  page,
+}) => {
+  await page.goto('/lists/compare?u=alice,bob&u=carol&game=105600');
+  await expect(cardButton(page, 'Owned by')).toHaveAccessibleName('Owned by, 1 / 2, not Carol');
+});
+
+test("C4 edge: a game looked up while a comparison loads shows Owned by loading, never the account's owners", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  // Carol's held: the comparison's players can't resolve meanwhile.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/api/common-games', async (route) => {
+    if (route.request().postData()?.includes(CAROL.vanity)) await released;
+    await route.fallback();
+  });
+  const alicesLibrary = page.waitForResponse(
+    (res) => res.url().endsWith('/api/common-games') && !!res.request().postData()?.includes(ALICE.steamid),
+  );
+  await page.goto('/lists/compare?u=bob&u=carol');
+  await page.keyboard.press('/');
+  await page.keyboard.type('hollow');
+  await page.getByRole('option', { name: /Hollow Knight/ }).click();
+  await expect(page.locator('#panel-title')).toHaveText('Hollow Knight');
+  await alicesLibrary; // what the account's owners would come from
+  await expect(cardButton(page, 'Owned by')).toHaveAccessibleName('Owned by, loading');
+  release();
+  await expect(cardButton(page, 'Owned by')).toHaveAccessibleName('Owned by, 0 / 2, not owned');
+});
+
+test("F1 edge: when the account's library doesn't answer, Owned by says so rather than not owned", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.route('**/api/common-games', (route) => route.fulfill({ status: 502, json: { error: 'mock: down' } }));
+  await page.goto('/game/620');
+  await expect(cardButton(page, 'Owned by')).toHaveAccessibleName("Owned by, didn't answer");
+  await expect(await openCard(page, 'Owned by')).toContainText("Steam didn't answer.");
+});
+
+test('F2 edge: a search shows the Owned by tile with an account, and DLC alone as a row without one', async ({
+  page,
+}) => {
+  await page.goto('/search?q=dead');
+  await expect(page.locator('#panel-title')).not.toBeEmpty();
+  const dlcRow = page.locator('.panel-card--wide#panel-section-dlc');
+  await expect(dlcRow).toHaveCount(1);
+  await expect(cardButton(page, 'Owned by')).toHaveCount(0);
+  const first = await page.locator('#panel-title').textContent();
+  await page.getByRole('button', { name: 'Next game' }).click();
+  await expect(page.locator('#panel-title')).not.toHaveText(first!);
+  // Stays a row: what the tiles hold doesn't depend on the game.
+  await expect(dlcRow).toHaveCount(1);
+  await expect(page.locator('.panel-tile-row')).toHaveCount(2);
+
+  await asPlayer(page, ALICE);
+  await page.evaluate(() => sessionStorage.clear()); // let the seed apply on reload
+  await page.reload();
+  await expect(cardButton(page, 'Owned by')).toBeVisible();
+  await expect(page.locator('.panel-tile-row')).toHaveCount(3);
+});
+
+test('F1 edge: a folded DLC card asks for none of its DLC until opened', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const metaAsked: string[] = [];
+  page.on('request', (req) => {
+    if (/\/api\/game-meta\/9000\d\d$/.test(req.url())) metaAsked.push(req.url());
+  });
+  await page.clock.install();
+  await page.goto('/lists/owned?game=1145360');
+  await expect(cardButton(page, 'DLC')).toHaveAccessibleName(/^DLC, 25/);
+  await page.clock.runFor(1000); // past the settle pause
+  expect(metaAsked).toEqual([]);
+  const body = await openCard(page, 'DLC');
+  await page.clock.runFor(1000);
+  await expect(body.locator('.panel-dlc-item').first()).toBeVisible();
+  expect(metaAsked.length).toBeGreaterThan(0);
+  // The coming-soon one sorts first once listed: it's past the first 20.
+  await body.getByRole('button', { name: 'Show 5 more' }).click();
+  await page.clock.runFor(1000);
+  await expect(body.locator('.panel-dlc-name').first()).toHaveText('Expansion 25');
+});
+
+test('F1 edge: News answers with its latest post on its line, and a game without posts has no News card', async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=620');
+  await expect(cardButton(page, 'News')).toHaveAccessibleName(/^News, \d{4}-\d\d-\d\d · Patch 1\.38 notes$/);
+  await expect(await openCard(page, 'News')).toContainText('Anniversary update');
+  await page.goto('/lists/owned?game=1145360');
+  await expect(cardButton(page, 'About')).toBeVisible();
+  await expect(cardButton(page, 'News')).toHaveCount(0);
+});
+
+test('F1 edge: News has no loading row: it shows once the news answers with posts', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const held = await gate(page, '**/api/game-news/620');
+  await page.goto('/lists/owned?game=620');
+  await held.requested;
+  await expect(cardButton(page, 'About')).toBeVisible();
+  await expect(cardButton(page, 'News')).toHaveCount(0);
+  held.release();
+  await expect(cardButton(page, 'News')).toHaveAccessibleName(/^News, \d{4}-\d\d-\d\d · Patch 1\.38 notes$/);
+});
+
+test('F1 edge: To beat says when HLTB has only the all-playstyles time', { tag: '@any-width' }, async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/wishlist?game=1172470');
+  await expect(cardButton(page, 'To beat')).toHaveAccessibleName('To beat, 120 h, all playstyles');
+});
+
+test("F1 edge: Tags & details names each chip's kind, grouped under its kind's label", async ({ page }) => {
+  await asPlayer(page, ALICE, { openCards: ['tags'] });
   await page.goto('/lists/owned?game=620');
   const chips = page.locator('.panel-tags').getByRole('button');
   await expect(chips.first()).toBeVisible();
@@ -6013,19 +6289,7 @@ test("F1 edge: Tags & details names each chip's kind, and draws each kind's dot 
     await expect(page.locator('.panel-tags').getByRole('button', { name, exact: true })).toBeVisible();
   const names = await chips.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
   expect(new Set(names).size).toBe(names.length);
-  const shapes = await page.locator('.panel-tag-legend .panel-tag-dot').evaluateAll((dots) =>
-    dots.map((d) => {
-      const s = getComputedStyle(d);
-      return `${s.borderRadius} ${s.rotate} ${s.clipPath}`;
-    }),
-  );
-  expect(shapes.length).toBeGreaterThanOrEqual(3);
-  expect(new Set(shapes).size).toBe(shapes.length);
-  const colours = await page
-    .locator('.panel-tag-legend .panel-tag-dot')
-    .evaluateAll((dots) => dots.map((d) => getComputedStyle(d).backgroundColor));
-  expect(colours).not.toContain('rgba(0, 0, 0, 0)');
-  expect(new Set(colours).size).toBe(colours.length);
+  await expect(page.locator('.panel-tag-group dt')).toHaveText(['Genres', 'Tags', 'Features']);
 });
 
 // A failed health check stops the panel before its price lookup, so each failure gets its own run.
@@ -6058,8 +6322,7 @@ test("F1 edge: a DLC's capsule that fails to load hides, keeping its box", async
   );
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360');
-  const card = page.locator('#panel-section-dlc');
-  await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+  const card = await openCard(page, 'DLC');
   const capsule = (name: string) =>
     card.locator('.panel-dlc-item', { hasText: new RegExp(`^${name}$`) }).locator('img');
   await expect(capsule('Expansion 1')).toHaveCSS('visibility', 'visible');
@@ -6091,8 +6354,7 @@ test(
     const held = await gate(page, '**/api/game-meta/900020');
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned?game=1145360');
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await expect(card.getByText('Loading 1 more…')).toBeVisible();
     const order = () => card.locator('.panel-dlc-name').allTextContents();
     const before = await order();
@@ -6118,8 +6380,7 @@ test(
     });
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned?game=1145360');
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await expect(card.locator('.panel-dlc-item')).toHaveCount(20);
     expect(requested.every((p) => p.startsWith('/api/game-meta/'))).toBe(true);
     expect(requested).toHaveLength(20);
@@ -6130,68 +6391,6 @@ test(
     expect(requested).toHaveLength(25);
   },
 );
-
-test('F1 edge: the panel section nav highlights the section it jumped to', { tag: '@any-width' }, async ({ page }) => {
-  await asPlayer(page, ALICE);
-  await page.goto('/lists/owned');
-  await row(page, 'Hades').getByText('Hades').click();
-  await expect(page.locator('#panel-title')).toHaveText('Hades');
-  const nav = page.locator('.panel-subnav');
-  await nav.getByRole('button', { name: 'Achievements' }).click();
-  await expect(nav.getByRole('button', { name: 'Achievements' })).toHaveClass(/active/);
-  await expect(nav.getByRole('button', { name: 'Overview' })).not.toHaveClass(/active/);
-});
-
-test(
-  "F1 edge: a section arriving adds its tab to the panel's tabs without rebuilding the others",
-  { tag: '@any-width' },
-  async ({ page }) => {
-    await asPlayer(page, ALICE);
-    const achievements = await gate(page, '**/api/achievements/**');
-    await page.goto('/lists/owned?game=1145360');
-    const list = page.locator('.panel-subnav-list');
-    await expect(list.getByRole('button', { name: 'DLC' })).toBeAttached();
-    const owners = await list.getByRole('button', { name: 'Owned by' }).elementHandle();
-    achievements.release();
-    await expect(list.getByRole('button', { name: 'Achievements' })).toBeAttached();
-    // Rebuilt, a tab a test or a finger is on would leave the page under it.
-    expect(await owners!.evaluate((el) => el.isConnected)).toBe(true);
-  },
-);
-
-test("F1 edge: on a narrow phone, the panel's tabs stay one row and scroll to the current one", async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== 'phone', 'phone layout');
-  await page.setViewportSize({ width: 320, height: 844 });
-  await asPlayer(page, ALICE);
-  const achievements = await gate(page, '**/api/achievements/**');
-  await page.goto('/lists/owned?game=1145360');
-  const list = page.locator('.panel-subnav-list');
-  const last = list.getByRole('button', { name: 'DLC' });
-  await expect(last).toBeAttached();
-  const oneRow = async () =>
-    new Set(await list.locator('li').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top))).size;
-  expect(await oneRow()).toBe(1);
-
-  await page.locator('#panel-body').evaluate((el) => el.scrollTo(0, el.scrollHeight));
-  await expect(last).toHaveClass(/active/);
-  // A tab arriving before the current one pushes it along: it's brought back into view.
-  await expect(list.getByRole('button', { name: 'Achievements' })).toHaveCount(0);
-  achievements.release();
-  await expect(list.getByRole('button', { name: 'Achievements' })).toBeAttached();
-  await page.locator('#panel-body').evaluate((el) => el.scrollTo(0, el.scrollHeight));
-  await expect(last).toHaveClass(/active/);
-  expect(await oneRow()).toBe(1);
-  await expect
-    .poll(() =>
-      last.evaluate((el) => {
-        const [b, l] = [el.getBoundingClientRect(), el.closest('ul')!.getBoundingClientRect()];
-        return b.left >= l.left && b.right <= l.right + 1;
-      }),
-    )
-    .toBe(true);
-});
 
 test('F1 edge: the panel closes from its Close button after scrolling it', async ({ page }) => {
   await asPlayer(page, ALICE);
@@ -6650,6 +6849,35 @@ test("F1 edge: the panel's hero never shows the previous item while the next one
   await expect(img).toHaveCSS('opacity', '0');
   await expect(img).not.toHaveClass(/loading/);
   await expect(img).toHaveCSS('opacity', '1');
+});
+
+test("F1 edge: a broken hero cover shows the row's capsule, not the browser's broken image", async ({ page }) => {
+  await page.route('**/steam/apps/1145360/header.jpg', (route) => route.fulfill({ status: 404 }));
+  await page.route('**/capsule_231x87.jpg', (route) =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="231" height="87"><rect width="231" height="87" fill="#d22"/></svg>',
+    }),
+  );
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  const main = page.locator('#panel-hero .panel-hero-main');
+  await expect(main.locator('.panel-hero-img')).toHaveClass(/panel-hero-img--broken/);
+  await expect(main.locator('.panel-hero-img')).toBeHidden();
+  await expect(main.locator('.panel-hero-fallback-img')).toHaveAttribute('src', /capsule_231x87\.jpg/);
+  await expect(main.locator('.panel-hero-fallback-img')).toBeVisible();
+});
+
+test("F1 edge: a broken hero cover whose capsule fails too shows the game's name", async ({ page }) => {
+  await page.route('**/steamstatic.com/**', (route) => route.fulfill({ status: 404 }));
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  const main = page.locator('#panel-hero .panel-hero-main');
+  await expect(main.locator('.panel-hero-img')).toHaveClass(/panel-hero-img--broken/);
+  await expect(main.locator('.panel-hero-img')).toBeHidden();
+  await expect(main.locator('.panel-hero-fallback-img')).toHaveCount(0);
+  await expect(main.locator('.panel-hero-fallback')).toHaveText('Hades');
+  await expect(main.locator('.panel-hero-fallback')).toBeVisible();
 });
 
 test(
@@ -7916,8 +8144,7 @@ test(
     });
     await page.goto('/search?q=hades');
     await expect(page.locator('#panel-title')).toHaveText('Hades');
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await card.locator('.panel-dlc-item').first().click();
     const back = page.getByRole('button', { name: 'Back to Hades', exact: true });
     await expect(back).toBeVisible();
@@ -7939,8 +8166,7 @@ test(
     );
     await page.goto('/search?q=hades');
     await expect(page.locator('#panel-reroll')).toBeVisible();
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await card.locator('.panel-dlc-item').first().click();
     await expect(page.getByRole('button', { name: 'Back to Hades', exact: true })).toBeVisible();
     await expect(page.locator('#panel-nav button')).toHaveCount(0);
@@ -7961,10 +8187,10 @@ test('F2 edge: on /search, a lookup that fails says so', { tag: '@any-width' }, 
   );
   await page.goto('/search?q=hades');
   await expect(page.getByRole('status').filter({ hasText: 'Lookup failed' })).toContainText('Steam store error 500');
-  await expect(page.locator('.panel-glance')).toContainText("didn't answer");
+  await expect(cardButton(page, 'Rating')).toContainText("didn't answer");
   await page.unrouteAll();
   await page.getByRole('button', { name: 'Refresh details' }).click();
-  await expect(page.locator('.panel-glance')).not.toContainText("didn't answer");
+  await expect(cardButton(page, 'Rating')).not.toContainText("didn't answer");
   // Looked up after all: it joins Recently Looked Up.
   await page.goto('/game');
   await expect(row(page, 'Hades')).toBeVisible();
@@ -8263,15 +8489,16 @@ test('F1 edge: Esc closes a nav popover or the search dropdown, not the open gam
 });
 
 test(
-  "F1 edge: the panel's More links menu holds only links found nowhere else, and Esc closes it before the game",
+  "F1 edge: the panel's More actions menu holds what the action row leaves out, and Esc closes it before the game",
   { tag: '@any-width' },
   async ({ page }) => {
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned?game=1145360');
-    const more = page.getByRole('button', { name: 'More links' });
+    const more = page.getByRole('button', { name: 'More actions' });
     await more.click();
     const menu = page.locator('.panel-icon-more-menu');
-    await expect(menu.getByRole('link')).toHaveText(['Official website ↗']);
+    await expect(menu.getByRole('link')).toHaveText(['IsThereAnyDeal ↗', 'Official website ↗']);
+    await expect(more).toHaveAttribute('aria-expanded', 'true');
     await page.keyboard.press('Escape');
     await expect(menu).toBeHidden();
     await expect(page.locator('#panel-title')).toBeVisible();
@@ -8281,31 +8508,32 @@ test(
   },
 );
 
-test("F1 edge: the panel's More links menu closes once focus leaves it", { tag: '@any-width' }, async ({ page }) => {
+test("F1 edge: the panel's More actions menu closes once focus leaves it", { tag: '@any-width' }, async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360');
-  await page.getByRole('button', { name: 'More links' }).click();
+  await page.getByRole('button', { name: 'More actions' }).click();
   const menu = page.locator('.panel-icon-more-menu');
   await page.keyboard.press('Tab');
-  await expect(menu.getByRole('link')).toBeFocused();
+  await expect(menu.getByRole('link').first()).toBeFocused();
+  await menu.getByRole('button', { name: 'Copy link to this game' }).focus(); // its last item
   await page.keyboard.press('Tab');
   await expect(menu).toBeHidden();
 });
 
-test("F1 edge: Esc goes to what's above the panel's More links menu, and to nothing once the panel is gone", async ({
+test("F1 edge: Esc goes to what's above the panel's More actions menu, and to nothing once the panel is gone", async ({
   page,
 }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
   await row(page, 'Hades').getByText('Hades').click();
-  await page.getByRole('button', { name: 'More links' }).click();
+  await page.getByRole('button', { name: 'More actions' }).click();
   await page.keyboard.press('?');
   const shortcuts = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
   await expect(shortcuts).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(shortcuts).toBeHidden();
 
-  await page.getByRole('button', { name: 'More links' }).click();
+  await page.getByRole('button', { name: 'More actions' }).click();
   await page.goBack();
   await expect(page.locator('#game-panel')).toBeHidden();
   await page.keyboard.press('?');
@@ -8682,9 +8910,10 @@ test(
 // Counts the panel's sliding-out copies, and the ids they duplicate while there.
 async function watchPanelGhosts(page: Page) {
   await page.evaluate(() => {
-    const w = window as unknown as { ghosts: number; dupIds: number };
+    const w = window as unknown as { ghosts: number; dupIds: number; ghostRefs: number };
     w.ghosts = 0;
     w.dupIds = 0;
+    w.ghostRefs = 0;
     new MutationObserver((records) => {
       for (const r of records)
         for (const n of r.addedNodes)
@@ -8692,6 +8921,7 @@ async function watchPanelGhosts(page: Page) {
             w.ghosts++;
             const ids = [...document.querySelectorAll('[id]')].map((e) => e.id);
             w.dupIds += ids.length - new Set(ids).size;
+            w.ghostRefs += (n as Element).querySelectorAll('[aria-controls], [aria-labelledby]').length;
           }
     }).observe(document.body, { childList: true, subtree: true });
   });
@@ -8713,19 +8943,23 @@ test(
 );
 
 // Clicks a section's toggle and reports, in that same task, its body's state.
+// `to`: the height the slide ends at.
 const toggleSectionNow = (toggle: Locator) =>
   toggle.evaluate((b: HTMLElement) => {
     b.click();
-    const body = b.closest('.panel-achievements-card')!.querySelector<HTMLElement>('.panel-collapsible-body');
-    return body && { animations: body.getAnimations().length, inert: body.inert };
+    const body = document.getElementById(b.getAttribute('aria-controls')!);
+    const slot = body?.closest<HTMLElement>('.panel-drawer-slot, .panel-card-slot');
+    const animations = slot?.getAnimations() ?? [];
+    const to = (animations[0]?.effect as KeyframeEffect | undefined)?.getKeyframes().at(-1)?.height;
+    return body && { animations: animations.length, inert: body.inert, to: parseFloat(String(to)) };
   });
 
 test('I2 edge: under reduced motion, a section shuts at once', async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360');
-  const toggle = page.locator('#panel-section-dlc').getByRole('button', { name: /DLC · 25 available/ });
+  const toggle = cardButton(page, 'DLC');
   await toggle.click();
-  await expect(page.locator('#panel-section-dlc .panel-collapsible-body')).toBeVisible();
+  await expect(page.locator('#panel-card-dlc-body')).toBeVisible();
   expect(await toggleSectionNow(toggle)).toBeNull();
 });
 
@@ -8870,18 +9104,22 @@ test.describe('with motion on', () => {
     async ({ page }) => {
       await asPlayer(page, ALICE);
       await page.goto('/lists/owned?game=1145360');
-      const card = page.locator('#panel-section-dlc');
-      const toggle = card.getByRole('button', { name: /DLC · 25 available/ });
-      const body = card.locator('.panel-collapsible-body');
+      const toggle = cardButton(page, 'DLC');
+      const body = page.locator('#panel-card-dlc-body');
       // Not the loading shimmer's endless loop, which can't be finished.
       const finishAll = () =>
         page.evaluate(() =>
           document.getAnimations().forEach((a) => a.effect?.getComputedTiming().endTime !== Infinity && a.finish()),
         );
-      expect(await toggleSectionNow(toggle)).toEqual({ animations: 1, inert: false });
+      const opening = await toggleSectionNow(toggle);
+      expect(opening).toMatchObject({ animations: 1, inert: false });
       await finishAll();
       await expect(body).toBeVisible();
-      expect(await toggleSectionNow(toggle)).toEqual({ animations: 1, inert: true });
+      // Into an empty drawer, the slide still ends at the drawer's height, not 0.
+      const slot = body.locator('xpath=ancestor::div[contains(@class, "-slot")][1]');
+      expect(opening!.to).toBeGreaterThan(0);
+      expect(opening!.to).toBeCloseTo(await slot.evaluate((el) => el.getBoundingClientRect().height), 0);
+      expect(await toggleSectionNow(toggle)).toEqual({ animations: 1, inert: true, to: 0 });
       await finishAll();
       await expect(body).toHaveCount(0);
       await toggle.click();
@@ -8906,6 +9144,8 @@ test.describe('with motion on', () => {
       await page.getByRole('button', { name: 'Close' }).click();
       await expect.poll(ghosts).toBe(1);
       expect(await page.evaluate(() => (window as unknown as { dupIds: number }).dupIds)).toBe(0);
+      // Nor references to ids the live panel answers.
+      expect(await page.evaluate(() => (window as unknown as { ghostRefs: number }).ghostRefs)).toBe(0);
       await expect(page.locator('.panel-ghost')).toHaveCount(0);
       await expect(page.locator('#panel-title')).toBeHidden();
       await expect(row(page, 'Hades')).toBeFocused();
@@ -9194,8 +9434,7 @@ test(
     await row(page, 'Hades').focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('#panel-title')).toHaveText('Hades');
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await card.locator('.panel-dlc-item').first().click();
     await expect(page.locator('#panel-title')).not.toHaveText('Hades');
     await page.keyboard.press('Escape');
@@ -9213,9 +9452,9 @@ test(
       route.fulfill({ status: 502, json: { error: 'Steam store error 500' } }),
     );
     await page.goto('/lists/owned?game=1426210');
-    await expect(page.locator('.panel-glance')).toContainText("didn't answer");
+    await expect(cardButton(page, 'Rating')).toContainText("didn't answer");
     await page.getByRole('button', { name: 'Refresh details' }).click();
-    await expect(page.locator('.panel-glance')).not.toContainText("didn't answer");
+    await expect(cardButton(page, 'Rating')).not.toContainText("didn't answer");
     await page.goto('/game');
     await expect(row(page, 'It Takes Two')).toBeVisible();
   },
@@ -9234,7 +9473,7 @@ test(
         : route.fulfill({ status: 502, json: { error: 'Steam store error 500' } }),
     );
     await page.goto('/lists/owned?game=1426210');
-    await expect(page.locator('.panel-glance')).toContainText("didn't answer");
+    await expect(cardButton(page, 'Rating')).toContainText("didn't answer");
     const refresh = page.getByRole('button', { name: 'Refresh details' });
     await refresh.click();
     // Disabled from the click until every refetch has settled.
@@ -9260,8 +9499,7 @@ test(
       route.fulfill({ json: { appid: 900001, meta: null, failed: ['meta'] } }),
     );
     await page.goto('/lists/owned?game=1145360');
-    const card = page.locator('#panel-section-dlc');
-    await card.getByRole('button', { name: /DLC · 25 available/ }).click();
+    const card = await openCard(page, 'DLC');
     await card.locator('.panel-dlc-item').first().click();
     await page.getByRole('button', { name: 'Back to Hades', exact: true }).click();
     await expect(page.locator('#panel-title')).toHaveText('Hades');
@@ -9469,8 +9707,7 @@ test('I2 edge: a hidden achievement is revealed by Enter, and by Space, keeping 
   });
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360');
-  const card = page.locator('#panel-section-achievements');
-  await card.getByRole('button', { name: /Achievements/ }).click();
+  const card = await openCard(page, 'Achievements');
   const hidden = card.getByRole('button', { name: /Hidden achievement/ });
   await expect(hidden).toHaveCount(2);
   await hidden.first().focus();
@@ -9556,7 +9793,7 @@ test('I3.1-2,4: each main page and the open game have one h1, first, skip no hea
   // The open game's sections are headings under its name.
   const panel = page.getByRole('complementary', { name: 'Hades' });
   await expect(panel.getByRole('heading', { level: 2, name: 'Hades' })).toBeVisible();
-  for (const name of ['Price', 'Owned by', /How Long To Beat/, /Achievements/])
+  for (const name of ['Price', 'Owned by', /^To beat,/, /^Achievements,/])
     await expect(panel.getByRole('heading', { level: 3, name })).toBeVisible();
 });
 
@@ -9647,6 +9884,7 @@ test("S2 edge: copying a game's link is announced, not only shown as ✓", async
   await page.evaluate(() => {
     navigator.clipboard.writeText = async () => {};
   });
+  await page.getByRole('button', { name: 'More actions' }).click();
   await page.getByRole('button', { name: 'Copy link to this game' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Copied to clipboard' })).toHaveCount(1);
 });
@@ -9732,7 +9970,7 @@ test(
 const moreFrom = (page: Page) => page.locator('#panel-section-similar .panel-similar-more');
 
 test("F4.1-2,5: a game's publisher lists its games, the open game's panel kept, and Back returns", async ({ page }) => {
-  await asPlayer(page, ALICE);
+  await asPlayer(page, ALICE, { openCards: ['similar'] });
   await page.goto('/lists/owned');
   await row(page, 'Terraria').getByText('Terraria').click();
   await moreFrom(page).getByRole('link', { name: 'All games by indie.io (publisher)' }).click();
@@ -9758,7 +9996,7 @@ test(
   'F4 edge: a developer that also publishes is one link, and one developer leads to another',
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['similar'] });
     await page.goto('/game/1145360');
     await expect(moreFrom(page)).toContainText('Supergiant Games (developer & publisher)');
     await expect(moreFrom(page).getByRole('link')).toHaveCount(1);
@@ -9780,7 +10018,7 @@ test(
   "F4 edge: on that creator's own list, More from marks it current, whatever the path's case",
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['similar'] });
     await page.goto('/Lists/Developer/?name=Supergiant%20Games&game=1145360');
     await expect(page.locator('#panel-title')).toHaveText('Hades');
     await expect(moreFrom(page).locator('[aria-current="page"]')).toHaveText('Supergiant Games');
@@ -9908,7 +10146,7 @@ test(
 
 test('F4 edge: a game with no Steam tags still offers More from', { tag: '@any-width' }, async ({ page }) => {
   await mockApi(page, { states: ['tagless'] });
-  await asPlayer(page, ALICE);
+  await asPlayer(page, ALICE, { openCards: ['similar'] });
   await page.goto('/lists/owned?game=105600');
   await expect(moreFrom(page).getByRole('link', { name: 'All games by Re-Logic (developer)' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sort list by similarity' })).toHaveCount(0);

@@ -78,10 +78,11 @@ test('a failed owned fetch reads as unknown, not as owning nothing', async (t) =
   withFetch(t, fakeAccountFetch({ wishlistAppids: [620], failOwned: true }));
   setCurrentAccount(makeAccount('1'));
 
-  const { getMyOwnershipStatus, peekMyOwnershipStatus, peekMyOwnership } = createMyOwnershipCache();
+  const { getMyOwnershipStatus, peekMyOwnershipStatus, peekMyOwnership, getOwnersFor } = createMyOwnershipCache();
   assert.deepEqual(await getMyOwnershipStatus(440), { inLibrary: null, onWishlist: false });
   assert.deepEqual(peekMyOwnershipStatus(620), { inLibrary: null, onWishlist: true });
   assert.equal(peekMyOwnership().playtime(440), undefined);
+  assert.equal(await getOwnersFor(440), null);
 });
 
 test('getMyOwnershipStatus: only fetches once per loaded account — a second appid check reuses the cached sets', async (t) => {
@@ -420,4 +421,31 @@ test('peekMyOwnership: a peek with no lookups starts no fetch (an empty list or 
   peekMyOwnership();
 
   assert.equal(fetches, 0);
+});
+
+test("peekMemberNames: each member's name once the owned games land, for the panel's Owned by", async (t) => {
+  withFetch(t, async (url) => {
+    if (url === '/api/common-games')
+      return {
+        ok: true,
+        json: async () => ({
+          games: [{ appid: 620, name: 'Portal 2' }],
+          players: [
+            { steamid: '1', personaname: 'Alice' },
+            { steamid: '2', personaname: 'Bob' },
+          ],
+          playtime: { 620: { 1: 300 } },
+          lastPlayed: {},
+        }),
+      };
+    return { ok: true, json: async () => ({ items: [] }) };
+  });
+  setCurrentAccount(makeAccount('1', { members: ['1', '2'] }));
+  const { peekMemberNames, getOwnersFor } = createMyOwnershipCache();
+  assert.deepEqual(peekMemberNames(), []);
+  assert.deepEqual(
+    (await getOwnersFor(620)).map((o) => o.name),
+    ['Alice'],
+  );
+  assert.deepEqual(peekMemberNames(), ['Alice', 'Bob']);
 });

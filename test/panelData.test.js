@@ -54,6 +54,34 @@ test('fetchDlc: a DLC that fails to load is left out', async (t) => {
   );
 });
 
+test('fetchDlc: with `settled`, an uncached list waits the pause and is dropped once the panel moved on', async (t) => {
+  const urls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(url);
+    return { ok: true, json: async () => ({ meta: meta(Number(url.split('/').pop())) }) };
+  });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { fetchDlc } = createPanelDataCache();
+  let open = 1;
+  const left = fetchDlc([300], { settled: () => open === 1 });
+  const stayed = fetchDlc([400], { settled: () => true });
+  await new Promise(setImmediate);
+  assert.deepEqual(urls, []);
+  open = 2;
+  t.mock.timers.tick(PANEL_SETTLE_MS);
+  assert.equal(await left, null);
+  assert.deepEqual(
+    (await stayed).map((d) => d.appid),
+    [400],
+  );
+  assert.deepEqual(urls, ['/api/game-meta/400']);
+  // Known now: answered without the pause.
+  assert.deepEqual(
+    (await fetchDlc([400], { settled: () => true })).map((d) => d.appid),
+    [400],
+  );
+});
+
 // Answers the panel's routes from `data`, or fails every one but /api/health while `state.down`.
 function mockPanelRoutes(t, data, { itadConfigured = true } = {}) {
   const state = { down: false, limited: false, urls: [] };

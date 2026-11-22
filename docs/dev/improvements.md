@@ -8,6 +8,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - [Taste profile](#taste-profile)
 - [Comparing](#comparing)
 - [Bundles and prices](#bundles-and-prices)
+- [Side panel](#side-panel)
 - [Phone](#phone)
 - [Accounts and first visit](#accounts-and-first-visit)
 - [Consistency and polish](#consistency-and-polish)
@@ -67,6 +68,11 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 - **U255 · minor · B1** — the same €12.00 tier gets two "saves" figures: the hero's New to you reads "≈ €17.00 at best deals · saves €5.00 at €12.00" (the whole tier price against the new games), its group header "saves €10.00 · +€7.00 for 2 new worth €17.00" (the step's €7 against them). Name the baseline in both ("€5 less than buying the 2 new games", "this step: €10 less…"), or show one.
 - **U244 · minor · B1, C2** — grouped price columns show no total, so "what would this tier (or the missing friend's games) cost at best deals / 1-year lows" is summed by hand. Give Steam Full Price, Best Deal and the three lows an `aggregate` (region currency, once per gid, an incomplete marker for an unpriced row; off for Pick & mix), shown through the release's aggregate formatter, not the cell render (Best Deal's record badge would read the first row's lows); hiding owned rows then sums only what's new. Waits for the @vates/data-table release after 0.21.0: before it, a group split across pages sums each page's rows only.
 - **U238 · minor · B1** — `/bundles`' clock doesn't tick: its countdowns ("⏳ in 6h"), the Age and Ends in buckets and the hero's New and Ending soon counts are computed when the table processes its rows. Re-run the whole sort/filter/render pass on a timer: ticking only the hero counts would make them disagree with the rows.
+
+## Side panel
+
+- **U289 · minor · F1** — an empty panel tile (`aria-disabled`, it doesn't open) lost the outbound link the old glance chip had: HLTB's search when it has no match, ProtonDB's page to file a report, Steam's reviews. Let an empty tile open a body holding only its link, or put the link in the tile.
+- **U287 · polish · F1** — the app has no DLC price or ownership data, so the panel's DLC rows (a capsule and a name, 20 to a page) can't show what decides a purchase: no price, owned mark or release date. Needs a DLC source first.
 
 ## Phone
 

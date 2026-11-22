@@ -59,6 +59,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Loading a large list makes about 50 times fewer calls to Steam for its tags and store details
 - The first account you look up on Home becomes your ★ account; an account opened from a link never does
 - Another open tab now follows a region picked, or a game added to or removed from a list, in this one without a reload
+- The side panel folds each section into a card that answers in one line, with paired tiles for ratings, Linux, time to beat, achievements, DLC and owners; open cards are remembered per device, and the developer/publisher pills that filtered the table are gone (filter from the table's column menu)
 
 ### Fixed
 

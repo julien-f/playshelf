@@ -1917,8 +1917,6 @@
     padding: 0;
     border: 0;
     background: none;
-    /* A broken image's alt text stays at the top left. */
-    text-align: left;
     cursor: zoom-in;
   }
   /* Inside the frame, which clips. */
@@ -1984,8 +1982,27 @@
   .panel-hero-main--loading[style*='background-image']::after {
     content: none;
   }
+  /* Not the browser's broken-image glyph and alt text: the fallback below takes its place. */
   .panel-hero-img--broken {
+    display: none;
+  }
+  .panel-hero-fallback {
+    position: relative;
+    display: grid;
+    place-items: center;
+    height: 100%;
+    padding: var(--panel-pad);
     background: var(--surface-2);
+    color: var(--muted);
+    font-size: var(--fs-title);
+    text-align: center;
+  }
+  .panel-hero-fallback-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
   .panel-hero-btn {
     position: absolute;
@@ -2087,7 +2104,7 @@
     opacity: 1;
   }
 
-  /* The title, its links and the section tabs stay on top while the rest scrolls under them. */
+  /* The title, its meta line and its actions stay on top while the rest scrolls under them. */
   .panel-header-sticky {
     position: sticky;
     top: 0;
@@ -2096,9 +2113,6 @@
     padding: 16px var(--panel-pad) 12px;
     border-bottom: 1px solid var(--line);
     background: var(--panel-ground);
-  }
-  .panel-header-sticky:has(.panel-subnav) {
-    padding-bottom: 0;
   }
   /* Clear of the close button. */
   .panel-title-row > :first-child {
@@ -2115,15 +2129,28 @@
     line-height: 1.25;
     overflow-wrap: anywhere;
   }
-  .panel-release {
-    margin-top: 2px;
+  /* Each control at least 24 px tall (WCAG 2.5.8); the details' age, which is ↻, ends the line. */
+  .panel-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin-top: 4px;
     color: var(--muted);
     font-size: var(--fs-meta);
   }
-  .panel-basegame-link {
+  .panel-meta time {
+    font-family: var(--font-mono);
+  }
+  .panel-basegame-link,
+  .panel-developer {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
     color: var(--text-body);
   }
-  .panel-basegame-link:hover {
+  .panel-basegame-link:hover,
+  .panel-developer:hover {
     color: var(--text);
   }
   /* "‹ <game>": back along a DLC trail (panelHistory.ts). */
@@ -2148,13 +2175,22 @@
     color: var(--text);
   }
 
-  /* Store, ITAD and ⋯ More leave the page; after the divider, copy link and ↻ act in place. */
-  .panel-icon-links {
+  /* Steam Store (the view's one primary action), Add to list, then ⋯ for the rest. */
+  .panel-actions {
+    position: relative;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     margin-top: 10px;
+  }
+  .panel-store-btn,
+  .panel-lists-btn {
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .panel-store-btn > .lucide,
+  .panel-lists-btn > .lucide {
+    font-size: var(--fs-title);
   }
   .panel-icon-link,
   .panel-refresh-btn {
@@ -2188,6 +2224,8 @@
     color: var(--text);
   }
   .panel-refresh-btn {
+    height: 24px;
+    margin-left: auto;
     padding: 0 8px;
   }
   .panel-refresh-age {
@@ -2201,7 +2239,7 @@
   /* The presentation window is a second window on a second screen: a desktop's, at any width (a
      window snapped to half the screen still presents). The chip, which stops it, never hides. */
   @media not (any-pointer: fine) {
-    .panel-present-btn {
+    .panel-present-item {
       display: none;
     }
   }
@@ -2214,12 +2252,6 @@
   .panel-copy-link-btn--copied:hover {
     border-color: var(--good);
     color: var(--good);
-  }
-  .panel-icon-divider {
-    width: 1px;
-    height: 20px;
-    margin-inline: 2px;
-    background: var(--line-strong);
   }
   .panel-icon-more {
     position: relative;
@@ -2250,37 +2282,36 @@
     text-decoration: none;
     white-space: nowrap;
   }
+  button.panel-icon-more-item {
+    width: 100%;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
   .panel-icon-more-item:hover {
     background: var(--line);
   }
-  /* How many lists hold the game: the trigger states it, a menu away from the checkboxes. */
-  .panel-lists-btn {
-    position: relative;
+  .panel-icon-more-item kbd {
+    margin-left: auto;
   }
-  .panel-lists-count {
-    position: absolute;
-    top: -6px;
-    right: -6px;
-    min-width: 16px;
-    padding-inline: 4px;
-    border-radius: 8px;
-    background: var(--accent);
-    color: var(--bg);
-    font-size: var(--fs-label);
-    line-height: 16px;
-    text-align: center;
+  .panel-present-btn--on {
+    color: var(--accent);
   }
-  /* Placed against the icon row, not its button: from mid-row it would run off the panel either way. */
-  .panel-icon-links {
-    position: relative;
+  .panel-copied {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
   }
   .panel-icon-more[data-menu='lists'] {
     position: static;
   }
   .panel-lists-menu {
+    max-width: 100%;
+  }
+  /* ⋯ sits at the row's end: its menu opens leftwards, inside the panel. */
+  .panel-icon-more[data-menu='more'] .panel-icon-more-menu {
     right: 0;
     left: auto;
-    max-width: 100%;
   }
   .panel-lists-menu label.panel-icon-more-item {
     cursor: pointer;
@@ -2293,57 +2324,6 @@
   .panel-lists-new input {
     flex: 1;
     min-width: 0;
-  }
-
-  /* Text tabs in one sideways-scrolling row (two rows filled a phone's sticky header); the
-     scroll-spy (panel.tsx) slides one accent bar under the current tab and scrolls it into view. */
-  .panel-subnav-list {
-    position: relative;
-    display: flex;
-    column-gap: 18px;
-    margin-top: 6px;
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    scrollbar-width: none;
-  }
-  .panel-subnav-list > li {
-    flex: none;
-    scroll-snap-align: start;
-  }
-  .panel-subnav-btn {
-    min-height: 32px;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--muted);
-    font-size: var(--fs-ui);
-    cursor: pointer;
-    transition: color var(--dur-1) var(--ease-out);
-  }
-  .panel-subnav-btn:hover,
-  .panel-subnav-btn.active {
-    color: var(--text);
-  }
-  .panel-subnav-list::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 1px;
-    height: 2px;
-    background: var(--accent);
-    transform-origin: 0 0;
-    transform: translate(var(--underline-x, 0), calc(var(--underline-y, 2px) - 2px)) scaleX(var(--underline-w, 0));
-  }
-  .panel-subnav-list[data-glide]::after {
-    transition: transform var(--dur-3) var(--ease-out);
-  }
-  /* Forced colors repaint the bar's fill away. */
-  @media (forced-colors: active) {
-    .panel-subnav-btn.active {
-      text-decoration: underline 2px;
-      text-underline-offset: 6px;
-    }
   }
 
   /* Prev / position / next / random, pinned to the panel's foot (panelNav.ts); empty for a lookup. */
@@ -2450,12 +2430,10 @@
   .panel-ownership-badge.wishlisted {
     color: var(--wishlisted);
   }
-  /* At the action row's end. */
   .panel-ownership-row {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-left: auto;
   }
   .panel-ownership-badge {
     display: inline-flex;
@@ -2472,10 +2450,7 @@
   .panel-ownership-badge:hover {
     text-decoration: underline;
   }
-  /* Floated, not flex: the release line's " · " separator keeps its spaces. */
   .panel-status {
-    float: right;
-    margin-left: 8px;
     height: 24px;
     padding: 0 2px 0 6px;
     border: 0;
@@ -2488,51 +2463,13 @@
     color: var(--text);
     font-weight: 600;
   }
-  /* The narrowest phones: the mark alone, so the action row stays one line (the link keeps its name). */
+  /* The narrowest phones: the mark alone, so the meta line wraps less (the link keeps its name). */
   @media (max-width: 359px) {
     .panel-ownership-label {
       display: none;
     }
   }
 
-  /* ── The panel's body: sections on hairlines, each titled by a small muted <h3>. ── */
-  .panel-section,
-  .panel-desc {
-    padding-block: 16px;
-    border-top: 1px solid var(--line);
-  }
-  .panel-glance + .panel-section {
-    padding-top: 0;
-    border-top: 0;
-  }
-  .panel-section-title {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0 8px;
-    margin-bottom: 8px;
-    color: var(--muted);
-    font-size: var(--fs-meta);
-    font-weight: 600;
-  }
-  .panel-section-title > h3 {
-    font: inherit;
-  }
-  .panel-section-title a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 24px;
-    color: var(--muted);
-    font-weight: 400;
-    text-decoration: none;
-  }
-  .panel-section-title a:hover {
-    color: var(--text);
-    text-decoration: underline;
-  }
-  .panel-section-subtitle {
-    font-weight: 400;
-  }
   .panel-no-data {
     color: var(--muted);
     font-size: var(--fs-ui);
@@ -2553,61 +2490,245 @@
     font-size: var(--fs-title);
   }
 
-  /* At a glance: tiles split by hairlines in one box, four across once the panel is wide enough. */
-  .panel-glance {
+  /* Cards (panelCards.tsx): tiles in pairs, each opening its body in a drawer under its row. */
+  .panel-tile-row {
+    /* Open is a state: the accent edges the opened tile, its notch and the drawer. */
+    --panel-card-open: color-mix(in srgb, var(--accent) 55%, var(--line));
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1px;
-    margin-bottom: 16px;
-    overflow: hidden;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 8px;
+    margin-bottom: 8px;
+  }
+  .panel-card {
+    min-width: 0;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-3);
-    background: var(--line-strong);
-  }
-  @media (min-width: 1400px) {
-    .panel-glance {
-      grid-template-columns: repeat(4, 1fr);
-    }
-  }
-  .panel-glance-chip {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    padding: 10px 12px;
     background: var(--panel-ground);
+  }
+  .panel-card--tile.panel-card--open {
+    border-color: var(--panel-card-open);
+  }
+  .panel-card-heading {
+    font: inherit;
+  }
+  .panel-card-top {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 8px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: inherit;
+    background: none;
     color: var(--text);
-    text-decoration: none;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
     transition: background-color var(--dur-1) var(--ease-out);
   }
-  a.panel-glance-chip:hover {
+  .panel-card:not(.panel-card--empty) .panel-card-top:hover {
     background: var(--line);
+  }
+  .panel-card--empty .panel-card-top {
+    cursor: not-allowed;
+  }
+  .panel-card-icon {
+    color: var(--muted);
+  }
+  .panel-card-title {
+    overflow: hidden;
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .panel-card-chevron {
+    grid-row: 1;
+    grid-column: 3;
+    color: var(--muted);
+    transition: rotate var(--dur-2) var(--ease-out);
+  }
+  .panel-card-top[aria-expanded='true'] .panel-card-chevron {
+    rotate: 90deg;
+  }
+  /* The notch: from the opened tile down to its drawer. */
+  .panel-card--tile.panel-card--open .panel-card-top::after {
+    content: '';
+    position: absolute;
+    bottom: -9px;
+    left: 50%;
+    translate: -50% 0;
+    border: 8px solid transparent;
+    border-top-color: var(--panel-card-open);
+    border-bottom: 0;
+  }
+  /* Fixed lines, the bar's included, so a tile keeps its size from loading to ready to empty. */
+  .panel-card-summary {
+    display: grid;
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .panel-card-fig {
+    overflow: hidden;
+    height: calc(var(--fs-figure) * 1.25);
     color: var(--text);
+    font: 600 var(--fs-figure) / 1.25 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  /* Inside the tile: the box clips. */
-  a.panel-glance-chip:focus-visible {
-    outline-offset: -4px;
+  .panel-card-fig--word {
+    font-family: var(--font-sans);
+    font-size: var(--fs-title);
+    line-height: calc(var(--fs-figure) * 1.25);
   }
-  .panel-glance-chip--sk {
-    justify-content: center;
-    min-height: 76px;
+  .panel-card--empty :is(.panel-card-title, .panel-card-fig) {
+    color: var(--muted);
+    font-weight: 400;
   }
-  .panel-glance-label,
-  .panel-glance-val {
+  .panel-card-sk {
+    width: 64px;
+    height: 18px;
+  }
+  .panel-card-qualifier {
+    overflow: hidden;
+    height: calc(var(--fs-meta) * 1.45);
     color: var(--muted);
     font-size: var(--fs-meta);
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .panel-glance-num {
-    color: var(--text);
-    font-size: var(--fs-title);
+  .panel-card-bar {
+    overflow: hidden;
+    height: 4px;
+    margin-top: 5px;
+    border-radius: 2px;
+  }
+  .panel-card-bar:has(.panel-card-bar-fill) {
+    background: var(--line-strong);
+  }
+  .panel-card-bar-fill {
+    display: block;
+    height: 100%;
+  }
+  /* A wide card: its figure and qualifier on one line, which the opened body replaces. */
+  .panel-card--wide {
+    margin-bottom: 8px;
+  }
+  .panel-card--wide .panel-card-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 8px;
+  }
+  .panel-card--wide .panel-card-qualifier {
+    height: auto;
+    white-space: normal;
+  }
+  .panel-card--wide .panel-card-bar,
+  .panel-card--wide .panel-card-top[aria-expanded='true'] .panel-card-summary {
+    display: none;
+  }
+  /* A text card answers on its title's line, cut rather than wrapped; hidden once open. */
+  .panel-card--text .panel-card-top {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+  }
+  .panel-card--text .panel-card-chevron {
+    grid-column: 4;
+  }
+  .panel-card-line {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: var(--fs-meta);
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .panel-card-top[aria-expanded='true'] .panel-card-line {
+    visibility: hidden;
+  }
+  .panel-card-slot {
+    display: flow-root;
+  }
+  .panel-card-body {
+    display: grid;
+    gap: 10px;
+    padding: 0 12px 12px;
+  }
+  .panel-drawer-slot {
+    display: flow-root;
+    grid-column: 1 / -1;
+  }
+  .panel-drawer {
+    display: grid;
+    gap: 16px;
+    margin-top: 8px;
+    padding: 12px 14px 14px;
+    border: 1px solid var(--panel-card-open);
+    border-radius: var(--radius-3);
+    background: var(--surface-2);
+  }
+  .panel-drawer-part {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+  }
+  .panel-drawer-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: var(--fs-label);
     font-weight: 600;
-    line-height: 1.25;
-    overflow-wrap: break-word;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
   }
-  .panel-glance-num--figure {
-    font-family: var(--font-mono);
-    font-size: var(--fs-figure);
+  .panel-card-body-sk {
+    width: 100%;
+    height: 48px;
+  }
+  .panel-card-retry {
+    justify-self: start;
+  }
+  .panel-card-text {
+    color: var(--text-body);
+    font-size: var(--fs-ui);
+  }
+  .panel-card-link {
+    justify-self: start;
+    color: var(--text);
+    font-size: var(--fs-meta);
+    text-decoration: none;
+  }
+  .panel-card-link:hover {
+    text-decoration: underline;
+  }
+  /* A card's figures side by side, each under its caps label. */
+  .panel-figs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .panel-fig dt {
+    color: var(--muted);
+    font-size: var(--fs-label);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .panel-fig dd {
+    color: var(--text);
+    font: 600 var(--fs-figure) / 1.3 var(--font-mono);
     font-variant-numeric: tabular-nums;
+  }
+  .panel-fig dd a {
+    color: inherit;
+  }
+  .panel-fig .panel-fig-none {
+    color: var(--muted);
+    font: var(--fs-meta) / 1.3 var(--font-sans);
   }
 
   /* Price: the best deal, a buy link when there is one, the lows under it, then current bundles. */
@@ -2712,8 +2833,23 @@
     line-height: 1.6;
   }
 
-  /* Tags, genres, categories and creators in one cloud, their kind a dot; a Steam tag's share of
-     the top tag's votes a bar along its foot. */
+  /* Tags & details: a caps label per kind, its pills beside it; a Steam tag's share of the top
+     tag's votes a bar along its foot. */
+  .panel-tag-groups {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: 8px 10px;
+  }
+  .panel-tag-group {
+    display: contents;
+  }
+  .panel-tag-group dt {
+    color: var(--muted);
+    font-size: var(--fs-label);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
   .panel-tags {
     display: flex;
     flex-wrap: wrap;
@@ -2747,62 +2883,14 @@
     border-color: var(--accent);
     color: var(--text);
   }
-  /* Each kind its own shape, so the kinds don't differ by hue alone. */
-  .panel-tag-dot {
-    flex: none;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-  }
-  .panel-tag-dot--tags,
-  .tag-weight--tags {
-    background: var(--kind-tag);
-  }
-  .panel-tag-dot--genres,
-  .tag-weight--genres {
-    background: var(--kind-genre);
-  }
-  .panel-tag-dot--categories,
-  .tag-weight--categories {
-    background: var(--kind-category);
-  }
-  .panel-tag-dot--devpub,
-  .tag-weight--devpub {
-    background: var(--kind-devpub);
-  }
-  .panel-tag-dot--genres {
-    border-radius: 1px;
-  }
-  .panel-tag-dot--categories {
-    border-radius: 1px;
-    rotate: 45deg;
-    scale: 0.85;
-  }
-  .panel-tag-dot--devpub {
-    border-radius: 0;
-    clip-path: polygon(50% 0, 100% 100%, 0 100%);
-  }
   /* A Steam tag's weight, along the bottom edge of its pill in the panel. */
   .tag-weight {
     position: absolute;
     bottom: 0;
     left: 0;
     height: 2px;
+    background: var(--kind-tag);
   }
-  .panel-tag-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 14px;
-    margin-top: 10px;
-    color: var(--muted);
-    font-size: var(--fs-label);
-  }
-  .panel-tag-legend-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-
   /* Similar in the account's library, and the creators' other games. */
   .panel-similar-more {
     margin-bottom: 8px;
@@ -2914,89 +3002,6 @@
     font-size: var(--fs-meta);
   }
 
-  /* A collapsible section (CollapsibleCard): its heading is the toggle, its ↗ the source. */
-  .panel-section:has(> .panel-achievements-card) {
-    padding-block: 6px;
-  }
-  .panel-achievements-card-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .panel-collapsible-heading {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    font: inherit;
-  }
-  .panel-achievements-chip {
-    display: flex;
-    flex: 1;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    min-height: 44px;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--text);
-    font-size: var(--fs-ui);
-    text-align: left;
-    cursor: pointer;
-  }
-  .panel-achievements-chip .panel-glance-num {
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-  }
-  .panel-achievements-chip .panel-glance-val {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    color: var(--text-body);
-    font-size: var(--fs-ui);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .panel-achievements-chip b {
-    color: var(--text);
-  }
-  .panel-achievements-icon {
-    flex: none;
-    font-size: var(--fs-title);
-    line-height: 1;
-  }
-  .panel-achievements-chevron {
-    flex: none;
-    color: var(--muted);
-    transition: rotate var(--dur-2) var(--ease-out);
-  }
-  .panel-collapsible-chip[aria-expanded='true'] .panel-achievements-chevron {
-    rotate: 90deg;
-  }
-  .panel-achievements-chip:hover .panel-achievements-chevron {
-    color: var(--text);
-  }
-  .panel-achievements-list {
-    padding-bottom: 10px;
-  }
-  .panel-collapsible-body-pad {
-    padding-top: 4px;
-  }
-
-  .panel-hltb {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px 28px;
-  }
-  .panel-hltb-val {
-    margin-top: 2px;
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: var(--fs-figure);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-
   .panel-news > li + li,
   .panel-achievement-list > li + li,
   .panel-dlc-items > li + li {
@@ -3045,9 +3050,6 @@
     border-color: var(--text);
     background: var(--line);
     color: var(--text);
-  }
-  .panel-achievements-list > .panel-no-data {
-    padding-block: 4px;
   }
   .panel-achievement-row {
     display: flex;

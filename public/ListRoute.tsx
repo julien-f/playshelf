@@ -4260,8 +4260,11 @@ export default function ListRoute() {
       onTagClick,
       isTagActive,
       getOwners: (appid) =>
-        comparePlayers.length ? comparePlayers.flatMap((player) => player.owners.get(appid) ?? []) : null,
+        comparePlayers.length
+          ? comparePlayers.map((player) => ({ label: player.label, owners: player.owners.get(appid) ?? [] }))
+          : null,
       isOwnedList: kind === 'owned',
+      hasOwners: kind === 'compare',
       similarTo,
       setSimilarTo,
     });

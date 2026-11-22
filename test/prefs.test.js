@@ -8,6 +8,9 @@ const { until } = require('./until');
 // browser, not a module) — stub it before requiring so getPref/setPref have something to hit.
 const { makeMemoryLocalStorage } = require('./memoryStorage.js');
 
+// A key the server accepts: `ranking:` and a list's UUID.
+const RANKING_ID = '00000000-0000-4000-8000-000000000001';
+
 beforeEach(() => {
   global.localStorage = makeMemoryLocalStorage();
   // A new localStorage doesn't reset prefs.ts's module-level state — see _resetPrefsState's own
@@ -193,6 +196,25 @@ test('setPref: does not push anywhere when signed out', async (t) => {
   assert.equal(called, false);
 });
 
+test('setPref: a device-only key is never pushed, even when signed in', async (t) => {
+  const restore = globalThis.fetch;
+  let called = false;
+  globalThis.fetch = async () => {
+    called = true;
+    return { ok: true, json: async () => ({}) };
+  };
+  t.after(() => {
+    globalThis.fetch = restore;
+  });
+
+  const { getPref, setPref, setSignedInSteamid } = require('../public/prefs.ts');
+  setSignedInSteamid('76561198000000001');
+  setPref('panelOpenCards', ['price']);
+
+  assert.deepEqual(getPref('panelOpenCards'), ['price']);
+  assert.equal(called, false);
+});
+
 test('setPref: a table-view key (written only on Save) is pushed at once when signed in', async (t) => {
   const restore = globalThis.fetch;
   const seen = [];
@@ -240,14 +262,14 @@ test('setPref: debounces the push of a ranking: key and sends only the latest va
 
   const { setPref, setSignedInSteamid } = require('../public/prefs.ts');
   setSignedInSteamid('76561198000000001');
-  setPref('ranking:abc', { n: 1 });
-  setPref('ranking:abc', { n: 2 });
+  setPref(`ranking:${RANKING_ID}`, { n: 1 });
+  setPref(`ranking:${RANKING_ID}`, { n: 2 });
   assert.equal(seen.length, 0);
 
   t.mock.timers.tick(3000);
   assert.deepEqual(
     seen.map((s) => [s.url, s.body.value]),
-    [['/api/me/prefs/ranking%3Aabc', { n: 2 }]],
+    [[`/api/me/prefs/ranking%3A${RANKING_ID}`, { n: 2 }]],
   );
 });
 
@@ -265,9 +287,9 @@ test('flushPendingPushes: pushes a pending ranking: key immediately', async (t) 
 
   const { setPref, setSignedInSteamid, flushPendingPushes } = require('../public/prefs.ts');
   setSignedInSteamid('76561198000000001');
-  setPref('ranking:abc', { n: 1 });
+  setPref(`ranking:${RANKING_ID}`, { n: 1 });
   flushPendingPushes();
-  assert.deepEqual(seen, [{ url: '/api/me/prefs/ranking%3Aabc', keepalive: true }]);
+  assert.deepEqual(seen, [{ url: `/api/me/prefs/ranking%3A${RANKING_ID}`, keepalive: true }]);
   t.mock.timers.tick(3000);
   assert.equal(seen.length, 1);
 });
@@ -384,7 +406,7 @@ test('flushPendingPushes: a body over the browser keepalive limit is sent withou
   const { setPref, setSignedInSteamid, flushPendingPushes } = require('../public/prefs.ts');
   setSignedInSteamid('76561198000000001');
   setPref('lists', [{ id: 'a', appids: Array.from({ length: 20000 }, (_, i) => i) }]);
-  setPref('ranking:abc', { n: 1 });
+  setPref(`ranking:${RANKING_ID}`, { n: 1 });
   flushPendingPushes();
   assert.deepEqual(seen.sort(), [false, true]);
 });

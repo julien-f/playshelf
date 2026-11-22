@@ -65,6 +65,24 @@ function playerJson(p: Player, origin: string) {
 // default order differ, so stepping games in the lightbox lands on each kind: Terraria has a
 // trailer too, Hollow Knight screenshots only. The rest keep just their banner.
 const MEDIA_APPID = 1145360;
+// The games with achievements: Hades, and Portal 2 for a second one.
+const ACHIEVEMENT_APPIDS = [MEDIA_APPID, 620];
+// Portal 2's official posts, newest first: the other games have none.
+const NEWS_APPID = 620;
+const NEWS = [
+  {
+    title: 'Patch 1.38 notes',
+    url: 'https://example.com/news/2',
+    date: Math.floor(NOW / 1000) - 86400,
+    feedLabel: 'Community Announcements',
+  },
+  {
+    title: 'Anniversary update',
+    url: 'https://example.com/news/1',
+    date: Math.floor(NOW / 1000) - 30 * 86400,
+    feedLabel: 'Community Announcements',
+  },
+];
 // Trailers and screenshots per game, and the prefix that tells its images apart from Hades'.
 const MEDIA: Record<number, { movies: number; screenshots: number; label: string }> = {
   [MEDIA_APPID]: { movies: 1, screenshots: 3, label: '' },
@@ -80,8 +98,9 @@ const DLC_APPIDS = Array.from({ length: 25 }, (_, i) => 900001 + i);
 const dlcMeta = (appid: number) => ({
   name: `Expansion ${appid - 900000}`,
   capsule: `https://cdn.akamai.steamstatic.com/steam/apps/${appid}/capsule_231x87.jpg`,
-  releaseDate: `${(appid % 28) + 1} Jan, 2024`,
-  comingSoon: false,
+  // The last is announced, not out: a DLC list sorts it first.
+  releaseDate: appid === DLC_APPIDS.at(-1) ? 'Coming soon' : `${(appid % 28) + 1} Jan, 2024`,
+  comingSoon: appid === DLC_APPIDS.at(-1),
 });
 const svg = (label: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="100%" height="100%" fill="hsl(${[...label].reduce((h, c) => h + c.charCodeAt(0) * 7, 0) % 360} 45% 35%)"/><text x="50%" y="50%" fill="#fff" font-family="sans-serif" font-size="64" text-anchor="middle">${label}</text></svg>`;
@@ -163,9 +182,11 @@ function details(appid: number, states: ReadonlySet<string>) {
       total: g.reviews,
     },
     // 0: no HLTB entry (software, endless multiplayer, unreleased).
-    hltb: g.hltb
-      ? { id: appid, main: g.hltb * 0.6, extra: g.hltb * 0.9, completionist: g.hltb * 1.5, all: g.hltb }
-      : null,
+    hltb: !g.hltb
+      ? null
+      : g.hltbAllOnly
+        ? { id: appid, main: null, extra: null, completionist: null, all: g.hltb }
+        : { id: appid, main: g.hltb * 0.6, extra: g.hltb * 0.9, completionist: g.hltb * 1.5, all: g.hltb },
     meta: {
       name: g.name,
       type: 'game',
@@ -186,7 +207,7 @@ function details(appid: number, states: ReadonlySet<string>) {
       fullgame: null,
       // So the panel's More links menu has an entry.
       website: appid === MEDIA_APPID ? 'https://example.com/' : null,
-      achievementCount: appid === MEDIA_APPID ? ACHIEVEMENTS.length : 0,
+      achievementCount: ACHIEVEMENT_APPIDS.includes(appid) ? ACHIEVEMENTS.length : 0,
       platforms: ['Windows'], // lib/steam.js's shape
       languages: big?.languages ?? [],
       isFree: g.free ?? false,
@@ -443,7 +464,10 @@ export function respond(
   }
   if (path.startsWith('/api/achievements/'))
     return json(achievements(url.searchParams.get('steamids'), states.has('upstream-down')));
-  if (path.startsWith('/api/game-news/')) return json({ items: [], news: [] });
+  if (path.startsWith('/api/game-news/')) {
+    const news = Number(path.split('/').pop()) === NEWS_APPID ? NEWS : [];
+    return json({ items: [], news });
+  }
 
   if (path === '/api/search-games') {
     const q = (url.searchParams.get('q') ?? '').toLowerCase();
