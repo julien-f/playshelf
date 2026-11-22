@@ -60,7 +60,7 @@
     "@babel/eslint-parser": "^8.0.1",
     "@babel/plugin-syntax-jsx": "^8.0.1",
     "@babel/preset-typescript": "^8.0.1",
-    "@playwright/test": "~1.64.1",
+    "@playwright/test": "~1.65.1",
     "concurrently": "^10.0.5",
     "eslint": "^10.10.0",
     "eslint-plugin-solid": "^0.20.1",

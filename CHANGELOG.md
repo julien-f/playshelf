@@ -174,6 +174,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - One `fix` skill replaces `code-fix` and `ux-fix`; `backlog-run` ships features too; `deps-audit.js --full` runs npm's dependency checks
 - Update dependencies, fixing a moderate vulnerability in the lint tooling
 - setup-review is now the user-level skill from template-CLAUDE.md, declared in setup-backlog.md; its transcript digest left setup-facts.js
+- Upgrade Playwright to 1.65, focusing the presentation window before the e2e tests ask it for fullscreen
 
 ## [0.12.0] - 2026-10-30
 

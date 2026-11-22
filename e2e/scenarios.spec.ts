@@ -1669,6 +1669,8 @@ test.describe(() => {
     await expect(shown.locator('.pres-caption-name')).toHaveText('Hades');
     const chip = page.getByRole('banner').locator('.present-chip');
     await expect(chip).toContainText('Hades');
+    // Chromium 159 grants fullscreen only to a focused window, and a headless popup opens unfocused. Remove once https://github.com/microsoft/playwright/issues/44288 is fixed
+    await shown.bringToFront();
     await shown.keyboard.press('f');
     await expect.poll(() => shown.evaluate(() => !!document.fullscreenElement)).toBe(true);
 
@@ -2680,6 +2682,8 @@ test.describe(() => {
     await page.clock.install(); // after the TV opens: its windows below run on it too
     await expect(shown.locator('.pres-caption-name')).toHaveText('Hades');
     const fullscreen = () => shown.evaluate(() => !!document.fullscreenElement);
+    // Chromium 159 grants fullscreen only to a focused window, and a headless popup opens unfocused. Remove once https://github.com/microsoft/playwright/issues/44288 is fixed
+    await shown.bringToFront();
     // A double-click as the first: its second half doesn't undo the first's fullscreen.
     await shown.locator('.pres').dblclick();
     await expect.poll(fullscreen).toBe(true);
