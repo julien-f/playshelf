@@ -1917,8 +1917,6 @@
     padding: 0;
     border: 0;
     background: none;
-    /* A broken image's alt text stays at the top left. */
-    text-align: left;
     cursor: zoom-in;
   }
   /* Inside the frame, which clips. */
@@ -1984,8 +1982,27 @@
   .panel-hero-main--loading[style*='background-image']::after {
     content: none;
   }
+  /* Not the browser's broken-image glyph and alt text: the fallback below takes its place. */
   .panel-hero-img--broken {
+    display: none;
+  }
+  .panel-hero-fallback {
+    position: relative;
+    display: grid;
+    place-items: center;
+    height: 100%;
+    padding: var(--panel-pad);
     background: var(--surface-2);
+    color: var(--muted);
+    font-size: var(--fs-title);
+    text-align: center;
+  }
+  .panel-hero-fallback-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
   .panel-hero-btn {
     position: absolute;

@@ -6768,6 +6768,35 @@ test("F1 edge: the panel's hero never shows the previous item while the next one
   await expect(img).toHaveCSS('opacity', '1');
 });
 
+test("F1 edge: a broken hero cover shows the row's capsule, not the browser's broken image", async ({ page }) => {
+  await page.route('**/steam/apps/1145360/header.jpg', (route) => route.fulfill({ status: 404 }));
+  await page.route('**/capsule_231x87.jpg', (route) =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="231" height="87"><rect width="231" height="87" fill="#d22"/></svg>',
+    }),
+  );
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  const main = page.locator('#panel-hero .panel-hero-main');
+  await expect(main.locator('.panel-hero-img')).toHaveClass(/panel-hero-img--broken/);
+  await expect(main.locator('.panel-hero-img')).toBeHidden();
+  await expect(main.locator('.panel-hero-fallback-img')).toHaveAttribute('src', /capsule_231x87\.jpg/);
+  await expect(main.locator('.panel-hero-fallback-img')).toBeVisible();
+});
+
+test("F1 edge: a broken hero cover whose capsule fails too shows the game's name", async ({ page }) => {
+  await page.route('**/steamstatic.com/**', (route) => route.fulfill({ status: 404 }));
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  const main = page.locator('#panel-hero .panel-hero-main');
+  await expect(main.locator('.panel-hero-img')).toHaveClass(/panel-hero-img--broken/);
+  await expect(main.locator('.panel-hero-img')).toBeHidden();
+  await expect(main.locator('.panel-hero-fallback-img')).toHaveCount(0);
+  await expect(main.locator('.panel-hero-fallback')).toHaveText('Hades');
+  await expect(main.locator('.panel-hero-fallback')).toBeVisible();
+});
+
 test(
   'F1 edge: a slow screenshot shows its thumbnail and a spinner until it has loaded',
   { tag: '@any-width' },

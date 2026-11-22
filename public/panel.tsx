@@ -1264,7 +1264,11 @@ function HeroMain(props: { items: MediaItem[]; idx: number }): JSX.Element {
   // is hidden and its frame shows the item's thumbnail, already loaded by the filmstrip.
   const [loadedSrc, setLoadedSrc] = createSignal<string>();
   const [brokenSrc, setBrokenSrc] = createSignal<string>();
-  const loading = () => loadedSrc() !== src() && brokenSrc() !== src();
+  const broken = () => brokenSrc() === src();
+  const loading = () => loadedSrc() !== src() && !broken();
+  // A broken image shows the stand-in instead, or the game's name when that's broken or the same image.
+  const [brokenStandIn, setBrokenStandIn] = createSignal<string>();
+  const fallbackArt = () => (standIn() !== src() && brokenStandIn() !== standIn() ? standIn() : undefined);
   const isOnTv = createMemo(() => onTv(current().shotId));
   // While presenting (and not private), the lightbox it opens puts it on the TV and steers it there.
   const toTv = () => !!presented() && !privateMode();
@@ -1273,8 +1277,7 @@ function HeroMain(props: { items: MediaItem[]; idx: number }): JSX.Element {
     const g = panelGame();
     if (!g) return;
     const img = e.currentTarget.querySelector<HTMLImageElement>('.panel-hero-img');
-    if (e.detail > 0 && img && current().type === 'image' && !loading() && brokenSrc() !== src())
-      openLightboxFrom(img, g, idx());
+    if (e.detail > 0 && img && current().type === 'image' && !loading() && !broken()) openLightboxFrom(img, g, idx());
     else openLightbox(g, idx());
   };
   // A broken image (banner guess 404ing, or — as with a video's poster — a genuinely dead
@@ -1304,12 +1307,22 @@ function HeroMain(props: { items: MediaItem[]; idx: number }): JSX.Element {
           </span>
         </Show>
         <img
-          class={`panel-hero-img${loading() ? ' loading' : ''}${brokenSrc() === src() ? ' panel-hero-img--broken' : ''}${isShot() ? ' panel-hero-img--shot' : ''}`}
+          class={`panel-hero-img${loading() ? ' loading' : ''}${broken() ? ' panel-hero-img--broken' : ''}${isShot() ? ' panel-hero-img--shot' : ''}`}
           src={src()}
           alt={name()}
           onLoad={(e) => setLoadedSrc(e.currentTarget.getAttribute('src') ?? undefined)}
           onError={(e) => setBrokenSrc(e.currentTarget.getAttribute('src') ?? undefined)}
         />
+        <Show when={broken()}>
+          <span class="panel-hero-fallback">
+            {name()}
+            <Show when={fallbackArt()}>
+              {(art) => (
+                <img class="panel-hero-fallback-img" src={art()} alt="" onError={() => setBrokenStandIn(art())} />
+              )}
+            </Show>
+          </span>
+        </Show>
       </button>
       <Show when={hasMany()}>
         <button
