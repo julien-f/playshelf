@@ -5046,7 +5046,7 @@ test(
     await page.getByLabel('Preferences').click();
     await page.locator('#nav-region-select').selectOption({ label: 'United States (USD)' });
     await page.keyboard.press('Escape');
-    const bundlesAsked = page.waitForRequest(/\/api\/game-bundles\/892970\?.*country=US/);
+    const bundlesAsked = page.waitForRequest(/\/api\/game-offers\/892970\?.*country=US/);
     await row(page, 'Valheim').getByText('Valheim').click();
     await expect(amount).toContainText('$');
     await bundlesAsked;
@@ -5883,14 +5883,34 @@ test(
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned?game=620');
     await expect(page.locator('.panel-bundle').first()).toBeVisible();
-    const held = await gate(page, '**/api/game-bundles/**');
-    const asked = page.waitForRequest(/\/api\/game-bundles\//);
+    const held = await gate(page, '**/api/game-offers/**');
+    const asked = page.waitForRequest(/\/api\/game-offers\//);
     await page.getByRole('button', { name: 'Next game' }).click();
     await asked;
     await expect(page.locator('#panel-section-price')).toBeVisible();
     await expect(page.locator('.panel-bundles')).toHaveCount(0);
     held.release();
     await expect(page.locator('.panel-bundles')).toBeVisible();
+  },
+);
+
+test(
+  "F1 edge: the Price card lists the game's subscriptions above its bundles",
+  { tag: '@any-width' },
+  async ({ page }) => {
+    await asPlayer(page, ALICE);
+    await page.goto('/lists/owned?game=620');
+    const lines = page.locator('.panel-bundles li');
+    await expect(lines.nth(0)).toHaveText(/^\s*In Game Pass\s*leaves .+ \(in 5d\)$/);
+    await expect(lines.nth(1)).toHaveText('In Ubisoft+ Classics');
+    await expect(lines.nth(2)).toContainText('Test Co-op Pack');
+    await expect(lines.nth(0).getByRole('link')).toHaveCount(0); // ITAD's Game Pass isn't our PC Game Pass list
+
+    await page.route('**/api/game-offers/**', (route) => route.fulfill({ json: { bundles: [], subscriptions: null } }));
+    await page.goto('/lists/owned?game=1145360');
+    await expect(page.locator('.panel-bundles')).toHaveText(
+      "Subscriptions: IsThereAnyDeal didn't answer.Not in any current bundle.",
+    );
   },
 );
 
@@ -5904,7 +5924,7 @@ test(
 
     await mockApi(page, { states: ['upstream-down'] }); // registered last, so it answers first
     await page.goto('/lists/owned?game=1145360');
-    await expect(page.locator('.panel-bundles')).toHaveText("Bundles: IsThereAnyDeal didn't answer.");
+    await expect(page.locator('.panel-bundles')).toHaveText("Bundles and subscriptions: IsThereAnyDeal didn't answer.");
   },
 );
 

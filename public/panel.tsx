@@ -40,8 +40,8 @@ import {
   achievementsRefusal,
   fetchPrice,
   priceRefusal,
-  fetchBundles,
-  bundlesRefusal,
+  fetchOffers,
+  offersRefusal,
   fetchDlc,
   isItadOff,
 } from './panelData.ts';
@@ -49,7 +49,7 @@ import type {
   DlcEntry,
   GameBundle,
   PanelAchievements,
-  PanelBundles,
+  PanelOffers,
   PanelDlc,
   PanelNews,
   PanelPrice,
@@ -102,6 +102,7 @@ import Package from 'lucide-solid/icons/package';
 import RefreshCw from 'lucide-solid/icons/refresh-cw';
 import ShoppingCart from 'lucide-solid/icons/shopping-cart';
 import Star from 'lucide-solid/icons/star';
+import Ticket from 'lucide-solid/icons/ticket';
 import Timer from 'lucide-solid/icons/timer';
 import Cast from 'lucide-solid/icons/cast';
 import TriangleAlert from 'lucide-solid/icons/triangle-exclamation-point';
@@ -437,7 +438,7 @@ async function handlePanelRefresh() {
       panelOptions.onRefresh(game),
       panelData.refetchNews(),
       panelData.refetchPrice(),
-      panelData.refetchBundles(),
+      panelData.refetchOffers(),
       panelData.refetchAchievements(),
     ]);
   } finally {
@@ -613,10 +614,10 @@ const panelData = createRoot(() => {
     return fetchPrice(Number(appid), region, { refresh: isForced(info), settled: () => priceSource() === key });
   });
 
-  const bundlesSource = createMemo(() => (openAppid() == null ? null : `${openAppid()}:${currentRegion()}`));
-  const [bundles, { refetch: refetchBundles }] = createResource<PanelBundles, string>(bundlesSource, (key, info) => {
+  const offersSource = createMemo(() => (openAppid() == null ? null : `${openAppid()}:${currentRegion()}`));
+  const [offers, { refetch: refetchOffers }] = createResource<PanelOffers, string>(offersSource, (key, info) => {
     const [appid, region] = key.split(':');
-    return fetchBundles(Number(appid), region, { refresh: isForced(info), settled: () => bundlesSource() === key });
+    return fetchOffers(Number(appid), region, { refresh: isForced(info), settled: () => offersSource() === key });
   });
 
   // DLC is the one card whose fetch is gated behind actually expanding it (see panelData.ts's
@@ -659,8 +660,8 @@ const panelData = createRoot(() => {
     ownership,
     price,
     refetchPrice,
-    bundles,
-    refetchBundles,
+    offers,
+    refetchOffers,
     dlc,
     dlcPartial,
     dlcShown,
@@ -1749,7 +1750,7 @@ function PriceSection(props: { game: ReadonlyGame }): JSX.Element {
                 </div>
               </Show>
             </Show>
-            <PanelBundleLines game={props.game} />
+            <PanelOfferLines game={props.game} />
           </section>
         </Show>
       }
@@ -1762,31 +1763,64 @@ function PriceSection(props: { game: ReadonlyGame }): JSX.Element {
   );
 }
 
-// The current bundles the open game is in, under the Price card's own lines.
-// Nothing while loading or without ITAD (the price lines say that); otherwise none and failed are said apart.
-function PanelBundleLines(props: { game: ReadonlyGame }): JSX.Element {
+// An end date and how soon it is, colored like a bundle's: `verb` is "ends" or "leaves".
+function UrgentDate(props: { verb: string; date: string }): JSX.Element {
+  const urgency = () => bundleUrgency(props.date);
+  return (
+    <span
+      style={
+        urgency()?.tier === 'urgent'
+          ? { color: scoreColor(20) }
+          : urgency()?.tier === 'soon'
+            ? { color: scoreColor(55) }
+            : {}
+      }
+    >
+      {props.verb} <time datetime={props.date}>{fmtDateTime(props.date)}</time>
+      {urgency()?.label ? ` (${urgency()!.label})` : ''}
+    </span>
+  );
+}
+
+// The subscriptions and current bundles the open game is in, under the Price card's own lines.
+// Nothing while loading or without ITAD (the price lines say that); no subscription is silent, most games have none.
+function PanelOfferLines(props: { game: ReadonlyGame }): JSX.Element {
+  const subscriptions = () => panelData.offers()?.subscriptions ?? [];
+  const bundles = () => panelData.offers()?.bundles ?? [];
   return (
     <Show
       when={
-        !panelData.bundles.loading &&
-        panelData.bundles() !== undefined &&
-        !(panelData.bundles() === null && isItadOff())
+        !panelData.offers.loading && panelData.offers() !== undefined && !(panelData.offers() === null && isItadOff())
       }
     >
       <div class="panel-bundles">
-        <Show when={panelData.bundles() === null}>
+        <Show when={panelData.offers() === null}>
           <div class="panel-no-data">
-            Bundles: {bundlesRefusal(props.game.appid, currentRegion()) ?? "IsThereAnyDeal didn't answer."}
+            Bundles and subscriptions:{' '}
+            {offersRefusal(props.game.appid, currentRegion()) ?? "IsThereAnyDeal didn't answer."}
           </div>
         </Show>
-        <Show when={panelData.bundles()?.length === 0}>
-          <div class="panel-no-data">Not in any current bundle.</div>
+        <Show when={panelData.offers()?.subscriptions === null}>
+          <div class="panel-no-data">Subscriptions: IsThereAnyDeal didn't answer.</div>
         </Show>
-        <Show when={panelData.bundles()?.length}>
+        <Show when={subscriptions().length || bundles().length}>
           <ul class="panel-bundle-list" role="list">
-            <For each={panelData.bundles()}>
+            <For each={subscriptions()}>
+              {(s) => (
+                <li class="panel-bundle">
+                  <span class="panel-bundle-title">
+                    <Ticket /> In {s.name}
+                  </span>
+                  <Show when={s.leaving}>
+                    <div class="panel-bundle-meta">
+                      <UrgentDate verb="leaves" date={s.leaving!} />
+                    </div>
+                  </Show>
+                </li>
+              )}
+            </For>
+            <For each={bundles()}>
               {(b) => {
-                const urgency = bundleUrgency(b.expiry);
                 const shopUrl = safeHref(b.url);
                 return (
                   <li class="panel-bundle">
@@ -1805,18 +1839,7 @@ function PanelBundleLines(props: { game: ReadonlyGame }): JSX.Element {
                       <span title={b.tierPriceMax != null ? TIER_RANGE_TITLE : undefined}>{bundleTierText(b)}</span>
                       <Show when={b.expiry}>
                         <span class="panel-price-sep">·</span>
-                        <span
-                          style={
-                            urgency?.tier === 'urgent'
-                              ? { color: scoreColor(20) }
-                              : urgency?.tier === 'soon'
-                                ? { color: scoreColor(55) }
-                                : {}
-                          }
-                        >
-                          ends <time datetime={b.expiry!}>{fmtDateTime(b.expiry)}</time>
-                          {urgency?.label ? ` (${urgency.label})` : ''}
-                        </span>
+                        <UrgentDate verb="ends" date={b.expiry!} />
                       </Show>
                     </div>
                   </li>
@@ -1824,6 +1847,9 @@ function PanelBundleLines(props: { game: ReadonlyGame }): JSX.Element {
               }}
             </For>
           </ul>
+        </Show>
+        <Show when={panelData.offers()?.bundles.length === 0}>
+          <div class="panel-no-data">Not in any current bundle.</div>
         </Show>
       </div>
     </Show>

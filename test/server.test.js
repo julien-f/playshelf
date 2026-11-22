@@ -2995,19 +2995,21 @@ test('GET /api/bundles: 502 when the upstream call fails', async (t) => {
   assert.equal(res.status, 502);
 });
 
-test('GET /api/bundles and /api/game-bundles: a non-array 200 is a 502, refetched next time', async (t) => {
+test('GET /api/bundles and /api/game-offers: a non-array 200 is a 502, refetched next time', async (t) => {
   t.mock.method(console, 'error', () => {});
+  t.mock.method(console, 'warn', () => {});
   setCache('itad-gid:400', 'gid-1');
-  let calls = 0;
-  t.mock.method(globalThis, 'fetch', async () => {
-    calls++;
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls.push(String(url).match(/\/(bundles\/v1|games\/bundles|games\/subs)\b/)[1]);
     return { ok: true, json: async () => ({ error: 'oops' }) };
   });
-  for (const path of ['/api/bundles', '/api/bundles', '/api/game-bundles/400', '/api/game-bundles/400']) {
+  for (const path of ['/api/bundles', '/api/bundles', '/api/game-offers/400', '/api/game-offers/400']) {
     const res = await api.get(path);
     assert.equal(res.status, 502, path);
   }
-  assert.equal(calls, 4);
+  const count = (kind) => calls.filter((c) => c === kind).length;
+  assert.deepEqual([count('bundles/v1'), count('games/bundles'), count('games/subs')], [2, 2, 2]);
 });
 
 test('an unexpected error answers 500 with a generic message, an unreadable reply 502 without quoting it', async (t) => {
@@ -3030,36 +3032,40 @@ test('an unexpected error answers 500 with a generic message, an unreadable repl
   assert.doesNotMatch(res.body.error, /DOCTYPE|secret/);
 });
 
-// ── GET /api/game-bundles/:appid ──────────────────────────────────────────────
+// ── GET /api/game-offers/:appid ───────────────────────────────────────────────
 
-test('GET /api/game-bundles/:appid: 503 when ITAD_API_KEY is not configured', async () => {
+test('GET /api/game-offers/:appid: 503 when ITAD_API_KEY is not configured', async () => {
   const prev = process.env.ITAD_API_KEY;
   delete process.env.ITAD_API_KEY;
   try {
-    const res = await api.get('/api/game-bundles/400');
+    const res = await api.get('/api/game-offers/400');
     assert.equal(res.status, 503);
   } finally {
     if (prev !== undefined) process.env.ITAD_API_KEY = prev;
   }
 });
 
-test('GET /api/game-bundles/abc: 400 for non-numeric appid', async () => {
-  const res = await api.get('/api/game-bundles/abc');
+test('GET /api/game-offers/abc: 400 for non-numeric appid', async () => {
+  const res = await api.get('/api/game-offers/abc');
   assert.equal(res.status, 400);
 });
 
-test('GET /api/game-bundles/:appid: empty without an ITAD listing, no bundle lookup', async (t) => {
+test('GET /api/game-offers/:appid: empty without an ITAD listing, no bundle lookup', async (t) => {
   setCache('itad-gid:400', null);
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
-  const res = await api.get('/api/game-bundles/400');
+  const res = await api.get('/api/game-offers/400');
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { bundles: [] });
+  assert.deepEqual(res.body, { bundles: [], subscriptions: [] });
   assert.equal(fetchMock.mock.callCount(), 0);
 });
 
-test('GET /api/game-bundles/:appid: 200 with the bundles the game is in', async (t) => {
+test('GET /api/game-offers/:appid: 200 with the bundles and subscriptions the game is in', async (t) => {
   setCache('itad-gid:400', 'gid-1');
   t.mock.method(globalThis, 'fetch', async (url) => {
+    if (String(url).includes('/games/subs/v1')) {
+      assert.match(String(url), /country=DE/);
+      return { ok: true, json: async () => [{ id: 'gid-1', subs: [{ id: 6, name: 'Game Pass', leaving: null }] }] };
+    }
     assert.match(String(url), /\/games\/bundles\/v2\?.*id=gid-1.*country=DE/);
     return {
       ok: true,
@@ -3075,7 +3081,7 @@ test('GET /api/game-bundles/:appid: 200 with the bundles the game is in', async 
       ],
     };
   });
-  const res = await api.get('/api/game-bundles/400?country=de');
+  const res = await api.get('/api/game-offers/400?country=de');
   assert.equal(res.status, 200);
   assert.deepEqual(res.body.bundles, [
     {
@@ -3089,23 +3095,45 @@ test('GET /api/game-bundles/:appid: 200 with the bundles the game is in', async 
       tierPriceMax: null,
     },
   ]);
+  assert.deepEqual(res.body.subscriptions, [{ id: 6, name: 'Game Pass', leaving: null }]);
 });
 
-test('GET /api/game-bundles/:appid: ?refresh=1 re-fetches the bundles despite the cache', async (t) => {
+test('GET /api/game-offers/:appid: ?refresh=1 re-fetches the bundles and subscriptions despite the cache', async (t) => {
   setCache('itad-gid:402', 'gid-2');
   const fetchMock = t.mock.method(globalThis, 'fetch', async (url) => {
-    assert.match(String(url), /\/games\/bundles\/v2\?/);
+    assert.match(String(url), /\/games\/(bundles\/v2|subs\/v1)\?/);
     return { ok: true, json: async () => [] };
   });
 
-  await api.get('/api/game-bundles/402').expect(200);
-  await api.get('/api/game-bundles/402').expect(200);
-  assert.equal(fetchMock.mock.callCount(), 1);
-  await api.get('/api/game-bundles/402?refresh=1').expect(200);
+  await api.get('/api/game-offers/402').expect(200);
+  await api.get('/api/game-offers/402').expect(200);
   assert.equal(fetchMock.mock.callCount(), 2);
+  await api.get('/api/game-offers/402?refresh=1').expect(200);
+  assert.equal(fetchMock.mock.callCount(), 4);
 });
 
-test('GET /api/game-bundles/:appid: adds Fanatical pick-and-mix tiers to a null-price bundle', async (t) => {
+test('GET /api/game-offers/:appid: a failed subscriptions lookup keeps the bundles, logged and retried next time', async (t) => {
+  setCache('itad-gid:400', 'gid-1');
+  const warn = t.mock.method(console, 'warn', () => {});
+  const urls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(String(url));
+    if (String(url).includes('/games/subs/v1')) return { ok: false, status: 500 };
+    return { ok: true, json: async () => [] };
+  });
+  const res = await api.get('/api/game-offers/400');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { bundles: [], subscriptions: null });
+  assert.match(String(warn.mock.calls[0].arguments[0]), /^\[itad\] game subscriptions:/);
+  await api.get('/api/game-offers/400').expect(200);
+  assert.deepEqual(
+    urls.map((u) => u.match(/\/games\/(\w+)\//)[1]).sort(),
+    ['bundles', 'subs', 'subs'],
+    'the cached bundles are not asked again',
+  );
+});
+
+test('GET /api/game-offers/:appid: adds Fanatical pick-and-mix tiers to a null-price bundle', async (t) => {
   setCache('itad-gid:400', 'gid-1');
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url).startsWith('https://www.fanatical.com/'))
@@ -3128,16 +3156,16 @@ test('GET /api/game-bundles/:appid: adds Fanatical pick-and-mix tiers to a null-
       ],
     };
   });
-  const res = await api.get('/api/game-bundles/400');
+  const res = await api.get('/api/game-offers/400');
   assert.equal(res.status, 200);
   assert.equal(res.body.bundles[0].tierPrice, null);
   assert.deepEqual(res.body.bundles[0].pickAndMix, [{ quantity: 3, prices: { EUR: 5 } }]);
 });
 
-test('GET /api/game-bundles/:appid: 502 when the upstream call fails', async (t) => {
+test('GET /api/game-offers/:appid: 502 when the upstream call fails', async (t) => {
   setCache('itad-gid:400', 'gid-1');
   t.mock.method(globalThis, 'fetch', async () => ({ ok: false, status: 500 }));
-  const res = await api.get('/api/game-bundles/400');
+  const res = await api.get('/api/game-offers/400');
   assert.equal(res.status, 502);
 });
 
@@ -3271,7 +3299,7 @@ test('GET /api/bundles?refresh=1: a forced expired page that fails falls back to
   assert.equal(res.body.fetchedAt, oldTs);
 });
 
-test('GET /api/game-bundles/:appid: a bundle ITAD expired early is added from the cached list pages', async (t) => {
+test('GET /api/game-offers/:appid: a bundle ITAD expired early is added from the cached list pages', async (t) => {
   setCache('itad-gid:400', 'gid-k');
   const killer = {
     id: 16542,
@@ -3295,13 +3323,13 @@ test('GET /api/game-bundles/:appid: a bundle ITAD expired early is added from th
   });
   // ITAD's own answer for the game: current bundles only, so not the Killer one.
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [] }));
-  const res = await api.get('/api/game-bundles/400');
+  const res = await api.get('/api/game-offers/400');
   assert.equal(res.status, 200);
   assert.deepEqual(
     res.body.bundles.map((b) => [b.id, b.expiry]),
     [[16542, '2099-11-13T23:59:00.000Z']],
   );
-  assert.equal(fetchMock.mock.callCount(), 1, "only ITAD's game-bundles call");
+  assert.equal(fetchMock.mock.callCount(), 2, "only ITAD's game-bundles and game-subs calls");
 });
 
 // ── GET /api/bundles/:id ──────────────────────────────────────────────────────

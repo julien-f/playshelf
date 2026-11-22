@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Add a game to your lists, or start a new one with it, from its panel
 - A Runs on Linux (ProtonDB) suggested view on Owned and Wishlist: games rated Native, Platinum or Gold on ProtonDB
 - Compare's player boxes suggest the current account's friends
+- The side panel lists the subscriptions a game is in (Game Pass, EA Play, Ubisoft+), with when it leaves.
 
 ### Changed
 

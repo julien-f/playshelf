@@ -143,7 +143,7 @@ Wishlist and bundle lists carry price columns: the best deal across every shop I
 
 ## The game panel
 
-Clicking any row opens a detail panel beside the table — not over it, so the list stays usable and clicking another row just swaps the panel's contents. It carries screenshots and trailers, the weighted rating and review counts, How Long To Beat estimates, achievements, recent news from the developer, current price and the current bundles it's in (each opens that bundle's list), DLC and links out. **Refresh details**, beside its name, refetches everything for that one game.
+Clicking any row opens a detail panel beside the table — not over it, so the list stays usable and clicking another row just swaps the panel's contents. It carries screenshots and trailers, the weighted rating and review counts, How Long To Beat estimates, achievements, recent news from the developer, current price, the subscriptions it's in (Game Pass, EA Play, Ubisoft+, with when it leaves; IsThereAnyDeal's Game Pass also counts EA Play games, so it can name games the PC Game Pass list doesn't have) and the current bundles it's in (each opens that bundle's list), DLC and links out. **Refresh details**, beside its name, refetches everything for that one game.
 
 Its **Add to list** icon lists your manual lists, ticked where the game already is: tick or untick one to add or remove the game, or name a new list to make one with it. The icon shows how many of your lists hold the game.
 
