@@ -8915,12 +8915,15 @@ test(
 );
 
 // Clicks a section's toggle and reports, in that same task, its body's state.
+// `to`: the height the slide ends at.
 const toggleSectionNow = (toggle: Locator) =>
   toggle.evaluate((b: HTMLElement) => {
     b.click();
     const body = document.getElementById(b.getAttribute('aria-controls')!);
     const slot = body?.closest<HTMLElement>('.panel-drawer-slot, .panel-card-slot');
-    return body && { animations: slot!.getAnimations().length, inert: body.inert };
+    const animations = slot?.getAnimations() ?? [];
+    const to = (animations[0]?.effect as KeyframeEffect | undefined)?.getKeyframes().at(-1)?.height;
+    return body && { animations: animations.length, inert: body.inert, to: parseFloat(String(to)) };
   });
 
 test('I2 edge: under reduced motion, a section shuts at once', async ({ page }) => {
@@ -9080,10 +9083,15 @@ test.describe('with motion on', () => {
         page.evaluate(() =>
           document.getAnimations().forEach((a) => a.effect?.getComputedTiming().endTime !== Infinity && a.finish()),
         );
-      expect(await toggleSectionNow(toggle)).toEqual({ animations: 1, inert: false });
+      const opening = await toggleSectionNow(toggle);
+      expect(opening).toMatchObject({ animations: 1, inert: false });
       await finishAll();
       await expect(body).toBeVisible();
-      expect(await toggleSectionNow(toggle)).toEqual({ animations: 1, inert: true });
+      // Into an empty drawer, the slide still ends at the drawer's height, not 0.
+      const slot = body.locator('xpath=ancestor::div[contains(@class, "-slot")][1]');
+      expect(opening!.to).toBeGreaterThan(0);
+      expect(opening!.to).toBeCloseTo(await slot.evaluate((el) => el.getBoundingClientRect().height), 0);
+      expect(await toggleSectionNow(toggle)).toEqual({ animations: 1, inert: true, to: 0 });
       await finishAll();
       await expect(body).toHaveCount(0);
       await toggle.click();

@@ -212,9 +212,9 @@ export function PanelTileRow(props: { first: PanelCardDef; second: PanelCardDef 
     tiles.filter((def, i) => (open[i]() && states[i]() !== 'empty') || leaving() === def.card),
   );
   let slot!: HTMLDivElement;
-  // The drawer's height without the part leaving: 0 once it was the last.
+  // The drawer's height without the part leaving (0 once it was the last), or with the part opening.
   function measure(card: string, closing: boolean): number {
-    if (!parts().some((def) => def.card !== card)) return 0;
+    if (closing && !parts().some((def) => def.card !== card)) return 0;
     const part = closing ? document.getElementById(bodyId(card)) : null;
     if (part) part.style.display = 'none';
     const to = slot.getBoundingClientRect().height;
