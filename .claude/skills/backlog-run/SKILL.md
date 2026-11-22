@@ -18,7 +18,7 @@ Chooses what to do and ships it; each item's fix is [fix](../fix/SKILL.md). Plan
 
 ## Plan
 
-- As `~/.claude/CLAUDE.md`'s non-trivial-change rule (one specialist review round, branch named). Steps as commits, each with its test, then an out-of-scope list.
+- As `~/.claude/CLAUDE.md`'s non-trivial-change rule (the plan through `cross-review`, branch named). Steps as commits, each with its test, then an out-of-scope list.
 - `node scripts/worktree.js <branch>`, the plan committed there as `PLAN.md` while it waits for approval. A declined plan: remove that worktree and branch (`git branch -D` asks first, per `~/.claude/CLAUDE.md`'s Cleanup).
 - Per review round, keep for the log: each agent's `subagent_tokens` (the last task notification's, which includes earlier rounds), its numbered required changes (**blocking**), its optional suggestions (**other**), and how many of both you applied.
 
