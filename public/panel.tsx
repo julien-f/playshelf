@@ -491,10 +491,11 @@ const panelData = createRoot(() => {
     const key = ownershipKey();
     return key == null ? null : `${key}:${ownersRev()}`;
   });
-  const [owners] = createResource<OwnerPlayer[], string>(ownersKey, () => {
+  // undefined (Owned by loading) while the route's own owners haven't resolved: never the account's in their place.
+  const [owners] = createResource<OwnerPlayer[] | undefined, string>(ownersKey, () => {
     const appid = openAppid();
     if (appid == null) return [];
-    return panelOptions.getOwners(appid) ?? accountOwnerPlayers(appid);
+    return panelOptions.getOwners(appid) ?? (panelOptions.hasOwners() ? undefined : accountOwnerPlayers(appid));
   });
 
   const [ownership] = createResource<OwnershipStatus | null, string>(ownershipKey, () => {

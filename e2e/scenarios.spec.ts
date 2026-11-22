@@ -6158,6 +6158,31 @@ test("C4 edge: a comparison's Owned by counts a Family as one player, owning the
   await expect(cardButton(page, 'Owned by')).toHaveAccessibleName('Owned by, 1 / 2, not Carol');
 });
 
+test("C4 edge: a game looked up while a comparison loads shows Owned by loading, never the account's owners", async ({
+  page,
+}) => {
+  await asPlayer(page, ALICE);
+  // Carol's held: the comparison's players can't resolve meanwhile.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/api/common-games', async (route) => {
+    if (route.request().postData()?.includes(CAROL.vanity)) await released;
+    await route.fallback();
+  });
+  const alicesLibrary = page.waitForResponse(
+    (res) => res.url().endsWith('/api/common-games') && !!res.request().postData()?.includes(ALICE.steamid),
+  );
+  await page.goto('/lists/compare?u=bob&u=carol');
+  await page.keyboard.press('/');
+  await page.keyboard.type('hollow');
+  await page.getByRole('option', { name: /Hollow Knight/ }).click();
+  await expect(page.locator('#panel-title')).toHaveText('Hollow Knight');
+  await alicesLibrary; // what the account's owners would come from
+  await expect(cardButton(page, 'Owned by')).toHaveAccessibleName('Owned by, loading');
+  release();
+  await expect(cardButton(page, 'Owned by')).toHaveAccessibleName('Owned by, 0 / 2, not owned');
+});
+
 test('F2 edge: a search shows the Owned by tile with an account, and DLC alone as a row without one', async ({
   page,
 }) => {
