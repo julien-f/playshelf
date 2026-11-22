@@ -192,9 +192,10 @@ export interface OwnerPlayer {
   owners: readonly GameOwner[];
 }
 
-// A player owns the game when any of its members does (a comparison's Family).
-export function ownedBySummary(players: readonly OwnerPlayer[] | undefined): CardSummary {
+// A player owns the game when any of its members does (a comparison's Family); null: the owners didn't answer.
+export function ownedBySummary(players: readonly OwnerPlayer[] | null | undefined): CardSummary {
   if (players === undefined) return loading('figure');
+  if (players === null) return failed('figure');
   const owners = players.flatMap((p) => p.owners);
   if (!owners.length)
     return players.length > 1

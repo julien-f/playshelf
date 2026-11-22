@@ -191,11 +191,11 @@ export function createMyOwnershipCache() {
   // Who — among the current account's members — owns this game, and how much each has played it.
   // Same account source and same fetch as the ✓/☆ markers above, so the panel's "Owned by" card
   // stays consistent with its ownership badges by construction. `[]` for a game nobody in the
-  // account owns, or with no account loaded at all (the card renders nothing either way).
-  async function getOwnersFor(appid: number): Promise<GameOwner[]> {
+  // account owns, or with no account loaded at all; `null` once the owned fetch failed: unknown, as statusOf.
+  async function getOwnersFor(appid: number): Promise<GameOwner[] | null> {
     if (!ensureLoading()) return [];
     await ownedPromise!;
-    return ownersMap.get(appid) ?? [];
+    return ownedFailed ? null : (ownersMap.get(appid) ?? []);
   }
 
   // Each member's display name, once the owned games landed (the panel's Owned by names who lacks a game).

@@ -6183,6 +6183,14 @@ test("C4 edge: a game looked up while a comparison loads shows Owned by loading,
   await expect(cardButton(page, 'Owned by')).toHaveAccessibleName('Owned by, 0 / 2, not owned');
 });
 
+test("F1 edge: when the account's library doesn't answer, Owned by says so rather than not owned", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.route('**/api/common-games', (route) => route.fulfill({ status: 502, json: { error: 'mock: down' } }));
+  await page.goto('/game/620');
+  await expect(cardButton(page, 'Owned by')).toHaveAccessibleName("Owned by, didn't answer");
+  await expect(await openCard(page, 'Owned by')).toContainText("Steam didn't answer.");
+});
+
 test('F2 edge: a search shows the Owned by tile with an account, and DLC alone as a row without one', async ({
   page,
 }) => {

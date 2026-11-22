@@ -78,10 +78,11 @@ test('a failed owned fetch reads as unknown, not as owning nothing', async (t) =
   withFetch(t, fakeAccountFetch({ wishlistAppids: [620], failOwned: true }));
   setCurrentAccount(makeAccount('1'));
 
-  const { getMyOwnershipStatus, peekMyOwnershipStatus, peekMyOwnership } = createMyOwnershipCache();
+  const { getMyOwnershipStatus, peekMyOwnershipStatus, peekMyOwnership, getOwnersFor } = createMyOwnershipCache();
   assert.deepEqual(await getMyOwnershipStatus(440), { inLibrary: null, onWishlist: false });
   assert.deepEqual(peekMyOwnershipStatus(620), { inLibrary: null, onWishlist: true });
   assert.equal(peekMyOwnership().playtime(440), undefined);
+  assert.equal(await getOwnersFor(440), null);
 });
 
 test('getMyOwnershipStatus: only fetches once per loaded account — a second appid check reuses the cached sets', async (t) => {

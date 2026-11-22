@@ -369,6 +369,10 @@ test('ownedBySummary: nobody owns it', () => {
   });
 });
 
+test("ownedBySummary: the account's owned games that didn't answer", () => {
+  assert.deepEqual(ownedBySummary(null), FAILED);
+});
+
 test('ownedBySummary: loading', () => {
   assert.deepEqual(ownedBySummary(undefined), { kind: 'figure', state: 'loading' });
 });

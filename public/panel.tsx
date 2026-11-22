@@ -492,7 +492,7 @@ const panelData = createRoot(() => {
     return key == null ? null : `${key}:${ownersRev()}`;
   });
   // undefined (Owned by loading) while the route's own owners haven't resolved: never the account's in their place.
-  const [owners] = createResource<OwnerPlayer[] | undefined, string>(ownersKey, () => {
+  const [owners] = createResource<OwnerPlayer[] | null | undefined, string>(ownersKey, () => {
     const appid = openAppid();
     if (appid == null) return [];
     return panelOptions.getOwners(appid) ?? (panelOptions.hasOwners() ? undefined : accountOwnerPlayers(appid));
@@ -1710,11 +1710,11 @@ function MoreFrom(props: { game: ReadonlyGame }): JSX.Element {
 // Synchronous, so the Owned by tile never appears late (a cold comparison's players resolve later).
 const hasOwnerSource = () => panelOptions.hasOwners() || currentMembers().length > 0;
 
-// The current account's members as Owned by's players, each owning the game or not.
-async function accountOwnerPlayers(appid: number): Promise<OwnerPlayer[]> {
+// The current account's members as Owned by's players, each owning the game or not; null when its library didn't answer.
+async function accountOwnerPlayers(appid: number): Promise<OwnerPlayer[] | null> {
   const owners = await getOwnersFor(appid);
   const account = getEffectiveCurrentAccount();
-  if (!account) return [];
+  if (!owners || !account) return owners && [];
   if (account.members.length === 1) return [{ label: accountDisplayLabel(account), owners }];
   const names = peekMemberNames();
   return (names.length ? names : account.members).map((label) => ({
@@ -2000,6 +2000,7 @@ function PanelLowerCards(props: { game: ReadonlyGame }): JSX.Element {
     icon: Users,
     summary: () => ownedBySummary(panelData.owners.loading ? undefined : panelData.owners()),
     body: <OwnersBody />,
+    failed: () => ({ message: "Steam didn't answer." }),
     wordFig: true,
     sectionId: 'panel-section-owners',
   };
