@@ -47,9 +47,9 @@ function missing(game: SummaryGame, sources: string[], kind: CardSummary['kind']
   return null;
 }
 
-// Compact count, e.g. 465234 -> "465k", 2100000 -> "2.1m".
+// Compact count, e.g. 465234 -> "465k", 2100000 -> "2.1m"; from what would round to "1000k", in millions.
 export function fmtCompactCount(n: number) {
-  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(1)}m`;
+  if (n >= 999_500) return `${+(n / 1_000_000).toFixed(1)}m`;
   if (n >= 1_000) return `${Math.round(n / 1000)}k`;
   return String(n);
 }

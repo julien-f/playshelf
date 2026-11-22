@@ -47,6 +47,12 @@ test('fmtCompactCount: plain, thousands, millions', () => {
   assert.equal(fmtCompactCount(2_100_000), '2.1m');
 });
 
+test('fmtCompactCount: a count that rounds to 1000k reads as 1m', () => {
+  assert.equal(fmtCompactCount(999_499), '999k');
+  assert.equal(fmtCompactCount(999_500), '1m');
+  assert.equal(fmtCompactCount(999_999), '1m');
+});
+
 test('ratingSummary: the Weighted Rating in its score colour, over what it is and the review count', () => {
   const rating = { score: 9, desc: '', positive: 240_000, total: 250_000 };
   const steamdb = Math.round(computeSteamdbRating(240_000, 250_000));
