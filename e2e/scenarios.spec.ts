@@ -6263,6 +6263,17 @@ test('F1 edge: News answers with its latest post on its line, and a game without
   await expect(cardButton(page, 'News')).toHaveCount(0);
 });
 
+test('F1 edge: News has no loading row: it shows once the news answers with posts', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const held = await gate(page, '**/api/game-news/620');
+  await page.goto('/lists/owned?game=620');
+  await held.requested;
+  await expect(cardButton(page, 'About')).toBeVisible();
+  await expect(cardButton(page, 'News')).toHaveCount(0);
+  held.release();
+  await expect(cardButton(page, 'News')).toHaveAccessibleName(/^News, \d{4}-\d\d-\d\d · Patch 1\.38 notes$/);
+});
+
 test('F1 edge: To beat says when HLTB has only the all-playstyles time', { tag: '@any-width' }, async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/wishlist?game=1172470');

@@ -2062,7 +2062,8 @@ function PanelLowerCards(props: { game: ReadonlyGame }): JSX.Element {
     failed: () => ({ message: "Steam didn't answer.", retry: () => void panelData.refetchNews() }),
     sectionId: 'panel-section-news',
   };
-  const hasNews = createMemo(() => newsSummary(latestNews()) !== null);
+  // No loading row: most games have no posts, and a row that then went would jump the panel under ↓.
+  const hasNews = createMemo(() => latestNews() !== undefined && newsSummary(latestNews()) !== null);
   return (
     <>
       <Show when={hasOwnerSource()} fallback={<PanelWideCard def={dlc} />}>
