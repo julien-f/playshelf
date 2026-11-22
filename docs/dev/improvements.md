@@ -71,6 +71,7 @@ UX backlog from `ux-review` runs against [journeys.md](journeys.md) and [ui-guid
 
 ## Side panel
 
+- **U289 · minor · F1** — an empty panel tile (`aria-disabled`, it doesn't open) lost the outbound link the old glance chip had: HLTB's search when it has no match, ProtonDB's page to file a report, Steam's reviews. Let an empty tile open a body holding only its link, or put the link in the tile.
 - **U287 · polish · F1** — the app has no DLC price or ownership data, so the panel's DLC rows (a capsule and a name, 20 to a page) can't show what decides a purchase: no price, owned mark or release date. Needs a DLC source first.
 
 ## Phone
