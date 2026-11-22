@@ -9,8 +9,6 @@ import {
   fmtH,
   fmtLastPlayed,
   computeSteamdbRating,
-  PROTON_TIER_COLORS,
-  PROTON_TIER_UNKNOWN,
   focusGameRow,
   fadeInOnLoad,
   safeHref,
@@ -55,6 +53,7 @@ import type {
   PanelPrice,
 } from './panelData.ts';
 import { bestPickRate, bundleUrgency, pickTiers } from './bundleRows.ts';
+import { fmtCompactCount, protonTierColor } from './panelSummaries.ts';
 import { fmtDateTime } from './dateTime.ts';
 import { formatWithEstimate } from './currency.ts';
 import { currentRegion, regionCurrency } from './region.ts';
@@ -878,13 +877,6 @@ function jumpToPanelSection(target: string) {
 // than presented as equal to a confirmed tier of the same name.
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-// Compact review-count suffix for the reviews line, e.g. 465234 -> "465k", 2100000 -> "2.1m".
-function fmtCompactCount(n: number) {
-  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(1)}m`;
-  if (n >= 1_000) return `${Math.round(n / 1000)}k`;
-  return String(n);
-}
-
 // Tags/genres/categories/developer-publisher used to each get their own "uppercase
 // title + pill row" section — four near-identical blocks in a row. Merged into one
 // cloud instead, kind distinguished by a small colored dot (+ a legend) rather than
@@ -1112,8 +1104,7 @@ function GlanceGrid(props: { game: ReadonlyGame }): JSX.Element {
           <GlanceChip href={protondbUrl()} value="—" label="Linux/Deck" detail="no reports" />
         )
       );
-    // The tier's badge colour, lightened to read as text on the panel's dark ground.
-    const color = `color-mix(in srgb, ${PROTON_TIER_COLORS[pd.tier] || PROTON_TIER_UNKNOWN} 60%, var(--text))`;
+    const color = protonTierColor(pd.tier);
     // Kept short (no "reports"/"confidence" words): a tile is narrow, and "strong · 336" reads fine without them.
     const detail = [pd.confidence, pd.total ? fmtCompactCount(pd.total) : ''].filter(Boolean).join(' · ');
     // pd.pending: too few reports for ProtonDB itself to be confident, showing its provisionalTier
