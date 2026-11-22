@@ -20,7 +20,7 @@ The panel's Price card lists the subscriptions a game is in (Game Pass, EA Play,
 2. **Render subscriptions** (UI, test-first e2e):
    - `PanelBundleLines` → `PanelOfferLines`: one `<li>` per subscription above the bundles, in one `<ul role="list">` rendered when either is non-empty; an icon not already used in the panel, "In <name>", plain text (no link: ITAD's Game Pass includes EA Play titles `/lists/game-pass` lacks). A `leaving` date gets "leaves <date>" in the bundles' "ends" format and urgency colors.
    - Silent when there are no subscriptions. "Not in any current bundle." keeps its meaning, bundles only. `subscriptions: null` adds "Subscriptions: IsThereAnyDeal didn't answer.".
-   - e2e: the mock puts appid 620 in Game Pass (leaving computed from now, +40 days) and Ubisoft+ Classics. A new F1 edge test, "panel lists the game's subscriptions, Game Pass linking to its list", and 892970 shows none. Existing bundle edges adjusted for the new wording.
+   - e2e: the mock puts appid 620 in Game Pass (leaving computed from now, +40 days) and Ubisoft+ Classics. A new F1 edge test, "panel lists the game's subscriptions above its bundles", and 892970 shows none. Existing bundle edges adjusted for the new wording.
    - Docs: glossary.md "subscription" row, panel-and-lightbox.md Sections, features.md side panel line, journeys.md F1 edge, CHANGELOG (via the merge).
 
 ## Out of scope

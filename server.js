@@ -88,6 +88,8 @@ const {
   extractPriceInfo,
   getGameBundles,
   gameBundlesCacheKey,
+  getGameSubs,
+  gameSubsCacheKey,
   extractGameBundles,
 } = require('./lib/itad');
 const { withPickAndMix, withCachedPickAndMix } = require('./lib/fanatical');
@@ -674,15 +676,17 @@ const pricesLimit = namedRateLimit('prices', {
   },
 });
 
-// The side panel's "in bundles" lines — one game at a time, so the same appid → gid → cache
-// check as pricesLimit's appids branch.
-const gameBundlesLimit = namedRateLimit('gameBundles', {
+// The side panel's bundle and subscription lines — one game at a time, so the same appid → gid →
+// cache check as pricesLimit's appids branch.
+const gameOffersLimit = namedRateLimit('gameOffers', {
   max: BUNDLES_RATE_LIMIT_MAX,
   skip: (req) => {
     if (isForceRefresh(req)) return false;
     const gid = getCached(itadIdCacheKey(req.appid), { record: false });
     if (gid === undefined) return false;
-    return gid === null || isCached(gameBundlesCacheKey(gid, parseCountry(req)));
+    if (gid === null) return true;
+    const country = parseCountry(req);
+    return isCached(gameBundlesCacheKey(gid, country)) && isCached(gameSubsCacheKey(gid, country));
   },
 });
 
@@ -1190,16 +1194,23 @@ app.post(
   }),
 );
 
+// The bundles and subscriptions one game is in, for the side panel's Price card. Subscriptions
+// are optional: a failure leaves them null rather than taking the bundles down.
 app.get(
-  '/api/game-bundles/:appid',
-  gameBundlesLimit,
+  '/api/game-offers/:appid',
+  gameOffersLimit,
   requireItad,
-  catchRouteError('game-bundles', async (req, res) => {
+  catchRouteError('game-offers', async (req, res) => {
     const { appid } = req;
     const gid = (await resolveItadIds([appid])).get(appid);
-    if (!gid) return res.json({ bundles: [] });
+    if (!gid) return res.json({ bundles: [], subscriptions: [] });
     const country = parseCountry(req);
-    const current = await getGameBundles(gid, { country, force: isForceRefresh(req) });
+    const force = isForceRefresh(req);
+    const subscriptions = getGameSubs(gid, { country, force }).catch((err) => {
+      console.warn(`[itad] game subscriptions: ${err.message}`);
+      return null;
+    });
+    const current = await getGameBundles(gid, { country, force });
     // ITAD answers current bundles only; one it expired early comes from the list pages already
     // cached (/api/bundles fetched them), never an extra call.
     const cachedPage = (params) => getCached(bundlesCacheKey({ country, ...params }), { record: false });
@@ -1211,7 +1222,10 @@ app.get(
             (b.tiers || []).some((t) => (t.games || []).some((g) => g.id === gid)),
         )
       : [];
-    res.json({ bundles: extractGameBundles(await withPickAndMix(withChoiceEnd([...current, ...revived])), gid) });
+    res.json({
+      bundles: extractGameBundles(await withPickAndMix(withChoiceEnd([...current, ...revived])), gid),
+      subscriptions: await subscriptions,
+    });
   }),
 );
 

@@ -301,7 +301,7 @@ const json = (body: unknown, status = 200): MockResponse => ({
   body: JSON.stringify(body),
 });
 
-const ITAD_ROUTE = /^\/api\/(bundles|game-bundles|prices|game-pass)(\/|$)/;
+const ITAD_ROUTE = /^\/api\/(bundles|game-offers|prices|game-pass)(\/|$)/;
 
 // Plain request in, response out: shared by mockApi() below and `npm run dev:mock` (vite.config.js).
 export function respond(
@@ -510,7 +510,7 @@ export function respond(
     ];
     return found ? json({ bundle: found(), fetchedAt: Date.now() }) : json({ error: 'Bundle not found' }, 404);
   }
-  const inBundles = path.match(/^\/api\/game-bundles\/(\d+)$/);
+  const inBundles = path.match(/^\/api\/game-offers\/(\d+)$/);
   if (inBundles) {
     const appid = Number(inBundles[1]);
     const bundles = [coopBundleJson(), pickBundleJson(url.origin)].flatMap((b) => {
@@ -535,7 +535,7 @@ export function respond(
         },
       ];
     });
-    return json({ bundles });
+    return json({ bundles, subscriptions: [] });
   }
   if (path === '/api/prices') {
     const keys: (string | number)[] = body.gids ?? body.appids ?? [];

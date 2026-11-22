@@ -66,7 +66,7 @@ function mockPanelRoutes(t, data, { itadConfigured = true } = {}) {
     if (url.startsWith('/api/game-news/')) return json({ news: data.news });
     if (url.startsWith('/api/achievements/')) return json(data.achievements);
     if (url.startsWith('/api/prices')) return json({ prices: { 620: data.price } });
-    if (url.startsWith('/api/game-bundles/')) return json({ bundles: data.bundles });
+    if (url.startsWith('/api/game-offers/')) return json(data.offers);
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return state;
@@ -78,7 +78,7 @@ const DATA = {
   news: [{ title: 'Patch' }],
   achievements: { achievements: [{ name: 'A' }], total: 1, unlocked: 0, private: false, playerCount: 1 },
   price: { steamRegular: { amount: 10, currency: 'EUR' } },
-  bundles: [{ title: 'Bundle' }],
+  offers: { bundles: [{ title: 'Bundle' }], subscriptions: [{ id: 6, name: 'Game Pass', leaving: null }] },
 };
 
 test('a failed forced refresh keeps what each source last loaded', async (t) => {
@@ -90,17 +90,17 @@ test('a failed forced refresh keeps what each source last loaded', async (t) => 
       cache.fetchNews(620, opts),
       cache.fetchAchievements(620, members, opts),
       cache.fetchPrice(620, 'FR', opts),
-      cache.fetchBundles(620, 'FR', opts),
+      cache.fetchOffers(620, 'FR', opts),
     ]);
 
-  const [news, achievements, price, bundles] = await loadAll();
+  const [news, achievements, price, offers] = await loadAll();
   assert.deepEqual(news, DATA.news);
   assert.equal(achievements.total, 1);
   assert.equal(price.steamRegular, 10);
-  assert.deepEqual(bundles, DATA.bundles);
+  assert.deepEqual(offers, DATA.offers);
 
   state.down = true;
-  assert.deepEqual(await loadAll({ refresh: true }), [news, achievements, price, bundles]);
+  assert.deepEqual(await loadAll({ refresh: true }), [news, achievements, price, offers]);
   // An unforced call answers from the cache synchronously, not with a promise.
   assert.equal(cache.fetchAchievements(620, members), achievements);
   assert.equal(cache.fetchPrice(620, 'FR'), price);
@@ -122,19 +122,19 @@ test('an entry past the max age reads as missing: refetched, and not a fallback'
   assert.equal(state.urls.length, asked + 1);
 });
 
-test('price and bundles are cached per region, and asked in it', async (t) => {
+test('price and offers are cached per region, and asked in it', async (t) => {
   const state = mockPanelRoutes(t, DATA);
   const cache = createPanelDataCache();
-  await Promise.all([cache.fetchPrice(620, 'FR'), cache.fetchBundles(620, 'FR')]);
-  await Promise.all([cache.fetchPrice(620, 'US'), cache.fetchBundles(620, 'US')]);
-  await Promise.all([cache.fetchPrice(620, 'FR'), cache.fetchBundles(620, 'FR')]);
+  await Promise.all([cache.fetchPrice(620, 'FR'), cache.fetchOffers(620, 'FR')]);
+  await Promise.all([cache.fetchPrice(620, 'US'), cache.fetchOffers(620, 'US')]);
+  await Promise.all([cache.fetchPrice(620, 'FR'), cache.fetchOffers(620, 'FR')]);
   assert.deepEqual(
     state.urls.filter((url) => url !== '/api/health'),
     [
       '/api/prices?country=FR',
-      '/api/game-bundles/620?country=FR',
+      '/api/game-offers/620?country=FR',
       '/api/prices?country=US',
-      '/api/game-bundles/620?country=US',
+      '/api/game-offers/620?country=US',
     ],
   );
 });
@@ -148,7 +148,7 @@ test("a source that fails before loading anything reads as null (didn't answer)"
       cache.fetchNews(620),
       cache.fetchAchievements(620, []),
       cache.fetchPrice(620, 'FR'),
-      cache.fetchBundles(620, 'FR'),
+      cache.fetchOffers(620, 'FR'),
     ]),
     [null, null, null, null],
   );
@@ -177,16 +177,16 @@ test("a lookup refused past this client's share keeps the server's message until
   assert.equal(cache.priceRefusal(620, 'FR'), undefined);
 });
 
-test('a refused bundles lookup keeps the server message', async (t) => {
+test('a refused offers lookup keeps the server message', async (t) => {
   const state = mockPanelRoutes(t, DATA);
   state.limited = true;
   const cache = createPanelDataCache();
-  assert.equal(await cache.fetchBundles(620, 'FR'), null);
-  assert.equal(cache.bundlesRefusal(620, 'FR'), LIMITED);
+  assert.equal(await cache.fetchOffers(620, 'FR'), null);
+  assert.equal(cache.offersRefusal(620, 'FR'), LIMITED);
   state.limited = false;
-  await cache.fetchBundles(620, 'FR'); // a refusal isn't cached: the next open asks again
-  assert.equal(cache.bundlesRefusal(620, 'FR'), undefined);
-  assert.deepEqual(cache.fetchBundles(620, 'FR'), DATA.bundles);
+  await cache.fetchOffers(620, 'FR'); // a refusal isn't cached: the next open asks again
+  assert.equal(cache.offersRefusal(620, 'FR'), undefined);
+  assert.deepEqual(cache.fetchOffers(620, 'FR'), DATA.offers);
 });
 
 // With mocked timers a paused load never settles: this fails rather than hanging the test.
@@ -198,7 +198,7 @@ test('settled: an answer known without a request skips the pause', async (t) => 
   await cache.isItadConfigured();
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const settled = () => true;
-  assert.equal(await unpaused(cache.fetchBundles(620, 'FR', { settled })), null);
+  assert.equal(await unpaused(cache.fetchOffers(620, 'FR', { settled })), null);
   assert.equal(await unpaused(cache.fetchPrice(620, 'FR', { settled })), null);
   assert.equal((await unpaused(cache.fetchAchievements(620, [], { settled, achievementCount: 0 }))).total, 0);
   assert.deepEqual(state.urls, ['/api/health']);
@@ -217,7 +217,7 @@ test('settled: a game left and come back to within the pause is fetched once', a
       cache.fetchNews(appid, { settled }),
       cache.fetchAchievements(appid, members, { settled }),
       cache.fetchPrice(appid, 'FR', { settled }),
-      cache.fetchBundles(appid, 'FR', { settled }),
+      cache.fetchOffers(appid, 'FR', { settled }),
     ]);
   };
   const passed = [];
@@ -234,7 +234,7 @@ test('settled: a game left and come back to within the pause is fetched once', a
       '/api/game-news/1',
       '/api/achievements/1?steamids=76561198000000001',
       '/api/prices?country=FR',
-      '/api/game-bundles/1?country=FR',
+      '/api/game-offers/1?country=FR',
     ],
   );
 });
@@ -292,7 +292,7 @@ test('settled: only the game still open after the pause is fetched; a cached one
       cache.fetchNews(appid, { settled }),
       cache.fetchAchievements(appid, members, { settled }),
       cache.fetchPrice(appid, 'FR', { settled }),
-      cache.fetchBundles(appid, 'FR', { settled }),
+      cache.fetchOffers(appid, 'FR', { settled }),
     ]);
   };
   const passed = [];
@@ -309,7 +309,7 @@ test('settled: only the game still open after the pause is fetched; a cached one
     '/api/game-news/10',
     '/api/achievements/10?steamids=76561198000000001',
     '/api/prices?country=FR',
-    '/api/game-bundles/10?country=FR',
+    '/api/game-offers/10?country=FR',
   ]);
 
   open = 10;
@@ -337,7 +337,7 @@ test('isItadOff: only once /api/health says ITAD is not configured', async (t) =
   const cache = createPanelDataCache();
   assert.equal(cache.isItadOff(), false, 'not asked yet');
   assert.equal(await cache.fetchPrice(620, 'FR'), null);
-  assert.equal(await cache.fetchBundles(620, 'FR'), null);
+  assert.equal(await cache.fetchOffers(620, 'FR'), null);
   assert.equal(cache.isItadOff(), true);
   assert.deepEqual(state.urls, ['/api/health'], 'asked once, and no ITAD route called');
 });

@@ -69,9 +69,17 @@ export type PanelNews = NewsItem[] | null;
 export type PanelAchievements = Achievements | null;
 export type PanelPrice = PriceFields | null;
 export type PanelDlc = DlcEntry[] | null;
-export type PanelBundles = GameBundle[] | null;
+// GET /api/game-offers/:appid. `subscriptions` null: that lookup failed while the bundles answered.
+export type PanelOffers = { bundles: GameBundle[]; subscriptions: GameSubscription[] | null } | null;
 
-// One current bundle the game is in — GET /api/game-bundles/:appid (lib/itad.js's extractGameBundles).
+// A subscription the game is in, as ITAD names it (lib/itad.js's getGameSubs).
+export interface GameSubscription {
+  id: number;
+  name: string;
+  leaving: string | null;
+}
+
+// One current bundle the game is in (lib/itad.js's extractGameBundles).
 export interface GameBundle {
   id: number;
   title: string;
@@ -162,13 +170,13 @@ function sessionCached<K, V>(
 export function createPanelDataCache() {
   const news = new Map<number, Cached<NewsItem[]>>();
   const achievements = new Map<string, Cached<Achievements>>();
-  const price = new Map<string, Cached<PriceFields>>(); // keyed `region:appid`, like bundles
-  // Why a key's last achievements, price or bundles lookup was refused, keyed like its cache.
+  const price = new Map<string, Cached<PriceFields>>(); // keyed `region:appid`, like offers
+  // Why a key's last achievements, price or offers lookup was refused, keyed like its cache.
   const achievementsRefused = new Map<string, string>();
   const priceRefused = new Map<string, string>();
-  const bundlesRefused = new Map<string, string>();
+  const offersRefused = new Map<string, string>();
   const dlcEntries = new Map<number, DlcEntry | null>(); // null: the store has no entry for it
-  const bundles = new Map<string, Cached<GameBundle[]>>();
+  const offers = new Map<string, Cached<NonNullable<PanelOffers>>>();
 
   // Lazily resolved once per session rather than per-call — a plain GET /api/health, cheap to
   // over-share across every game a price is fetched for and every list mounted (ListRoute.tsx).
@@ -286,27 +294,26 @@ export function createPanelDataCache() {
   }
 
   // Unlike price, fetched even when the row is already priced: no list loads this.
-  function fetchBundles(
+  function fetchOffers(
     appid: number,
     region: string,
     { refresh = false, settled }: LoadOptions = {},
-  ): PanelBundles | Promise<PanelBundles> {
+  ): PanelOffers | Promise<PanelOffers> {
     return sessionCached(
-      bundles,
+      offers,
       `${region}:${appid}`,
       async () => {
         if (!(await isItadConfigured())) return null;
         const qs = new URLSearchParams({ country: region });
         if (refresh) qs.set('refresh', '1');
-        const data = await fetchJson<{ bundles: PanelBundles }>(
-          `/api/game-bundles/${appid}?${qs}`,
+        return fetchJson<NonNullable<PanelOffers>>(
+          `/api/game-offers/${appid}?${qs}`,
           undefined,
           'Bundles lookup failed',
         );
-        return data.bundles;
       },
       { refresh, settled: itadOff ? undefined : settled },
-      bundlesRefused,
+      offersRefused,
     );
   }
 
@@ -370,8 +377,8 @@ export function createPanelDataCache() {
       achievementsRefused.get(achievementsKey(appid, memberIds)),
     fetchPrice,
     priceRefusal: (appid: number, region: string) => priceRefused.get(`${region}:${appid}`),
-    fetchBundles,
-    bundlesRefusal: (appid: number, region: string) => bundlesRefused.get(`${region}:${appid}`),
+    fetchOffers,
+    offersRefusal: (appid: number, region: string) => offersRefused.get(`${region}:${appid}`),
     fetchDlc,
     isItadConfigured,
     isItadOff,
@@ -384,8 +391,8 @@ export const fetchAchievements = defaultCache.fetchAchievements;
 export const achievementsRefusal = defaultCache.achievementsRefusal;
 export const fetchPrice = defaultCache.fetchPrice;
 export const priceRefusal = defaultCache.priceRefusal;
-export const fetchBundles = defaultCache.fetchBundles;
-export const bundlesRefusal = defaultCache.bundlesRefusal;
+export const fetchOffers = defaultCache.fetchOffers;
+export const offersRefusal = defaultCache.offersRefusal;
 export const fetchDlc = defaultCache.fetchDlc;
 export const isItadConfigured = defaultCache.isItadConfigured;
 export const isItadOff = defaultCache.isItadOff;

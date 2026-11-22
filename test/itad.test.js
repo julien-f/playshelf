@@ -18,6 +18,7 @@ const {
   extractPriceInfo,
   getGameBundles,
   extractGameBundles,
+  getGameSubs,
 } = require('../lib/itad');
 const { _reset, isCached } = require('../lib/cache');
 
@@ -683,6 +684,57 @@ test('getGameBundles: throws on upstream error', async (t) => {
     () => getGameBundles('g1'),
     (err) => err.isUpstream === true,
   );
+});
+
+test('getGameSubs: posts the gid per country, keeps well-formed subscriptions in order, caches, honours force', async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push({ url: String(url), body: init?.body });
+    return {
+      ok: true,
+      json: async () => [
+        {
+          id: 'g1',
+          subs: [
+            { id: 6, name: 'Game Pass', leaving: null },
+            { id: 2, name: 'EA Play', leaving: '2026-12-31T00:00:00+01:00' },
+            { id: 4, name: 'Ubisoft+ Premium', leaving: 'soonish' },
+            { id: 'x', name: 'Bad id' },
+            { id: 7 },
+          ],
+        },
+      ],
+    };
+  });
+  assert.deepEqual(await getGameSubs('g1', { country: 'FR' }), [
+    { id: 6, name: 'Game Pass', leaving: null },
+    { id: 2, name: 'EA Play', leaving: '2026-12-31T00:00:00+01:00' },
+    { id: 4, name: 'Ubisoft+ Premium', leaving: null },
+  ]);
+  assert.match(calls[0].url, /\/games\/subs\/v1\?.*country=FR/);
+  assert.equal(calls[0].body, '["g1"]');
+  await getGameSubs('g1', { country: 'FR' });
+  assert.equal(calls.length, 1, 'second call served from cache');
+  await getGameSubs('g1', { country: 'FR', force: true });
+  assert.equal(calls.length, 2, 'forced call re-fetches');
+});
+
+test('getGameSubs: a gid the reply leaves out is in no subscription, cached', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [] }));
+  assert.deepEqual(await getGameSubs('g2'), []);
+  assert.deepEqual(await getGameSubs('g2'), []);
+  assert.equal(fetchMock.mock.callCount(), 1);
+});
+
+test('getGameSubs: a non-array reply is an upstream error, not cached', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ error: 'x' }) }));
+  for (let i = 0; i < 2; i++) {
+    await assert.rejects(
+      () => getGameSubs('g3'),
+      (err) => err.isUpstream === true,
+    );
+  }
+  assert.equal(fetchMock.mock.callCount(), 2);
 });
 
 test('extractGameBundles: keeps the cheapest tier holding the game, null for a pick-and-mix tier', () => {

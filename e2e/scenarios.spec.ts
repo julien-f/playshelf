@@ -5042,7 +5042,7 @@ test(
     await page.getByLabel('Preferences').click();
     await page.locator('#nav-region-select').selectOption({ label: 'United States (USD)' });
     await page.keyboard.press('Escape');
-    const bundlesAsked = page.waitForRequest(/\/api\/game-bundles\/892970\?.*country=US/);
+    const bundlesAsked = page.waitForRequest(/\/api\/game-offers\/892970\?.*country=US/);
     await row(page, 'Valheim').getByText('Valheim').click();
     await expect(amount).toContainText('$');
     await bundlesAsked;
@@ -5879,8 +5879,8 @@ test(
     await asPlayer(page, ALICE);
     await page.goto('/lists/owned?game=620');
     await expect(page.locator('.panel-bundle').first()).toBeVisible();
-    const held = await gate(page, '**/api/game-bundles/**');
-    const asked = page.waitForRequest(/\/api\/game-bundles\//);
+    const held = await gate(page, '**/api/game-offers/**');
+    const asked = page.waitForRequest(/\/api\/game-offers\//);
     await page.getByRole('button', { name: 'Next game' }).click();
     await asked;
     await expect(page.locator('#panel-section-price')).toBeVisible();

@@ -40,8 +40,8 @@ import {
   achievementsRefusal,
   fetchPrice,
   priceRefusal,
-  fetchBundles,
-  bundlesRefusal,
+  fetchOffers,
+  offersRefusal,
   fetchDlc,
   isItadOff,
 } from './panelData.ts';
@@ -49,7 +49,7 @@ import type {
   DlcEntry,
   GameBundle,
   PanelAchievements,
-  PanelBundles,
+  PanelOffers,
   PanelDlc,
   PanelNews,
   PanelPrice,
@@ -437,7 +437,7 @@ async function handlePanelRefresh() {
       panelOptions.onRefresh(game),
       panelData.refetchNews(),
       panelData.refetchPrice(),
-      panelData.refetchBundles(),
+      panelData.refetchOffers(),
       panelData.refetchAchievements(),
     ]);
   } finally {
@@ -613,10 +613,10 @@ const panelData = createRoot(() => {
     return fetchPrice(Number(appid), region, { refresh: isForced(info), settled: () => priceSource() === key });
   });
 
-  const bundlesSource = createMemo(() => (openAppid() == null ? null : `${openAppid()}:${currentRegion()}`));
-  const [bundles, { refetch: refetchBundles }] = createResource<PanelBundles, string>(bundlesSource, (key, info) => {
+  const offersSource = createMemo(() => (openAppid() == null ? null : `${openAppid()}:${currentRegion()}`));
+  const [offers, { refetch: refetchOffers }] = createResource<PanelOffers, string>(offersSource, (key, info) => {
     const [appid, region] = key.split(':');
-    return fetchBundles(Number(appid), region, { refresh: isForced(info), settled: () => bundlesSource() === key });
+    return fetchOffers(Number(appid), region, { refresh: isForced(info), settled: () => offersSource() === key });
   });
 
   // DLC is the one card whose fetch is gated behind actually expanding it (see panelData.ts's
@@ -659,8 +659,8 @@ const panelData = createRoot(() => {
     ownership,
     price,
     refetchPrice,
-    bundles,
-    refetchBundles,
+    offers,
+    refetchOffers,
     dlc,
     dlcPartial,
     dlcShown,
@@ -1768,23 +1768,21 @@ function PanelBundleLines(props: { game: ReadonlyGame }): JSX.Element {
   return (
     <Show
       when={
-        !panelData.bundles.loading &&
-        panelData.bundles() !== undefined &&
-        !(panelData.bundles() === null && isItadOff())
+        !panelData.offers.loading && panelData.offers() !== undefined && !(panelData.offers() === null && isItadOff())
       }
     >
       <div class="panel-bundles">
-        <Show when={panelData.bundles() === null}>
+        <Show when={panelData.offers() === null}>
           <div class="panel-no-data">
-            Bundles: {bundlesRefusal(props.game.appid, currentRegion()) ?? "IsThereAnyDeal didn't answer."}
+            Bundles: {offersRefusal(props.game.appid, currentRegion()) ?? "IsThereAnyDeal didn't answer."}
           </div>
         </Show>
-        <Show when={panelData.bundles()?.length === 0}>
+        <Show when={panelData.offers()?.bundles.length === 0}>
           <div class="panel-no-data">Not in any current bundle.</div>
         </Show>
-        <Show when={panelData.bundles()?.length}>
+        <Show when={panelData.offers()?.bundles.length}>
           <ul class="panel-bundle-list" role="list">
-            <For each={panelData.bundles()}>
+            <For each={panelData.offers()?.bundles}>
               {(b) => {
                 const urgency = bundleUrgency(b.expiry);
                 const shopUrl = safeHref(b.url);

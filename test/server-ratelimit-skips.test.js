@@ -52,6 +52,7 @@ function mockUpstreams(t) {
       return json(Object.fromEntries(JSON.parse(opts.body).map((key) => [key, `gid-${key.slice(4)}`])));
     if (url.includes('/games/prices/')) return json([]);
     if (url.includes('/games/bundles/')) return json([]);
+    if (url.includes('/games/subs/')) return json([]);
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return calls;
@@ -211,21 +212,24 @@ test('prices limiter: counts cache misses but never counts cache hits, for gids 
   });
 });
 
-test('game bundles limiter: counts cache misses but never counts cache hits', async (t) => {
+test('game offers limiter: counts cache misses but never counts cache hits', async (t) => {
   _reset();
   const calls = mockUpstreams(t);
   setCache('itad-shop:steam', 61);
   setCache('itad-gid:710', 'bundled-gid');
   setCache('itad-gamebundles:US:bundled-gid', []);
+  setCache('itad-gamesubs:US:bundled-gid', []);
   setCache('itad-gid:711', null);
   setCache('itad-gid:701', 'unbundled-gid');
+  setCache('itad-gid:703', 'subs-uncached-gid');
+  setCache('itad-gamebundles:US:subs-uncached-gid', []);
 
-  const gameBundles = (path) => () => api.get(`/api/game-bundles/${path}`);
+  const gameOffers = (path) => () => api.get(`/api/game-offers/${path}`);
   await assertMissesCountHitsDont(calls, {
-    misses: { 'unresolved appid': gameBundles(700), 'uncached bundles': gameBundles(701) },
-    over: gameBundles(702),
-    refresh: gameBundles('710?refresh=1'),
-    hits: { 'cached bundles': gameBundles(710), 'null gid': gameBundles(711) },
+    misses: { 'unresolved appid': gameOffers(700), 'cached bundles, uncached subscriptions': gameOffers(703) },
+    over: gameOffers(701),
+    refresh: gameOffers('710?refresh=1'),
+    hits: { 'cached bundles and subscriptions': gameOffers(710), 'null gid': gameOffers(711) },
   });
 });
 
