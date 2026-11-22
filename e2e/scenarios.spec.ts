@@ -6021,6 +6021,21 @@ test("F1 edge: the panel doesn't link an upstream URL that isn't http(s)", { tag
   await expect(metacritic.getByRole('link')).toHaveCount(0);
 });
 
+test(
+  "F1 edge: with Steam's reviews down, the Rating tile answers with the Metacritic score and its body says both",
+  { tag: '@any-width' },
+  async ({ page }) => {
+    await mockApi(page, { states: ['upstream-down'] });
+    await asPlayer(page, ALICE);
+    await page.goto('/lists/owned?game=892970');
+    await expect(cardButton(page, 'Rating')).toHaveAccessibleName('Rating, 85, Metacritic');
+    const body = await openCard(page, 'Rating');
+    await expect(body).toContainText("Steam reviews didn't answer");
+    await expect(body.locator('.panel-fig', { hasText: 'Metacritic' })).toContainText('85');
+    await expect(body.locator('.panel-fig', { hasText: 'Weighted' })).toHaveCount(0);
+  },
+);
+
 test("I1 edge: on a phone, no panel card's title or figure is cut, and the meta line's controls are 24 px tall", async ({
   page,
 }, testInfo) => {

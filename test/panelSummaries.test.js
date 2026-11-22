@@ -72,6 +72,18 @@ test('ratingSummary: loading, failed, empty', () => {
   assert.deepEqual(ratingSummary(game()), { kind: 'figure', state: 'empty', qualifier: 'no rating' });
 });
 
+test('ratingSummary: with no Steam rating, the Metacritic score, said to be one', () => {
+  const metacritic = { score: 85, url: null };
+  const ready = { kind: 'figure', state: 'ready', fig: '85', qualifier: 'Metacritic', tone: scoreColor(85) };
+  assert.deepEqual(ratingSummary(game({ details: { meta: meta({ metacritic }) } })), ready);
+  assert.deepEqual(ratingSummary(game({ failedSources: ['rating'], details: { meta: meta({ metacritic }) } })), ready);
+  // Steam's rating still coming: it, not Metacritic, is the tile's answer.
+  assert.deepEqual(ratingSummary(game({ pendingSources: ['rating'], details: { meta: meta({ metacritic }) } })), {
+    kind: 'figure',
+    state: 'loading',
+  });
+});
+
 test('linuxDeckSummary: the ProtonDB tier in its colour, over the report count', () => {
   const protondb = { tier: 'gold', confidence: 'strong', total: 100 };
   assert.deepEqual(linuxDeckSummary(game({ details: { protondb } })), {

@@ -1469,17 +1469,27 @@ function RatingBody(props: { game: ReadonlyGame }): JSX.Element {
   const weighted = () => Math.round(computeSteamdbRating(r()?.positive ?? 0, r()?.total ?? 0) ?? 0);
   const steamPct = () => (r()?.total ? Math.round((r()!.positive / r()!.total) * 100) : 0);
   const mc = () => props.game.details?.meta?.metacritic;
+  const failed = detailsFailed('Steam reviews');
   return (
     <>
+      {/* Open with no Steam rating only for its Metacritic score (ratingSummary). */}
+      <Show when={!r() && props.game.failedSources?.includes('rating')}>
+        <p class="panel-no-data">{failed().message}</p>
+        <button type="button" class="btn panel-card-retry" onClick={() => failed().retry()}>
+          Retry
+        </button>
+      </Show>
       <dl class="panel-figs">
-        <div class="panel-fig">
-          <dt>Weighted</dt>
-          <dd style={{ color: scoreColor(weighted()) }}>{weighted()}</dd>
-        </div>
-        <div class="panel-fig">
-          <dt>Steam</dt>
-          <dd>{steamPct()}%</dd>
-        </div>
+        <Show when={r()}>
+          <div class="panel-fig">
+            <dt>Weighted</dt>
+            <dd style={{ color: scoreColor(weighted()) }}>{weighted()}</dd>
+          </div>
+          <div class="panel-fig">
+            <dt>Steam</dt>
+            <dd>{steamPct()}%</dd>
+          </div>
+        </Show>
         <div class="panel-fig">
           <dt>Metacritic</dt>
           <Show

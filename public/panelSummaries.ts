@@ -68,7 +68,20 @@ const plural = (n: number, word: string) => `${fmtCompactCount(n)} ${word}${n ==
 
 export function ratingSummary(game: SummaryGame): CardSummary {
   const r = game.details?.rating;
-  if (!r) return missing(game, ['rating'], 'figure') ?? empty('figure', 'no rating');
+  if (!r) {
+    const wait = missing(game, ['rating'], 'figure');
+    const mc = game.details?.meta?.metacritic;
+    // With no Steam rating to show, Metacritic's is the tile's only score.
+    if (mc && wait?.state !== 'loading')
+      return {
+        kind: 'figure',
+        state: 'ready',
+        fig: String(mc.score),
+        qualifier: 'Metacritic',
+        tone: scoreColor(mc.score),
+      };
+    return wait ?? empty('figure', 'no rating');
+  }
   const rating = Math.round(computeSteamdbRating(r.positive, r.total) ?? 0);
   return {
     kind: 'figure',
