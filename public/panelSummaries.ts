@@ -214,16 +214,20 @@ export function tagsSummary(game: SummaryGame): CardSummary {
   return missing(game, ['tags', 'meta'], 'text') ?? empty('text', 'no tags');
 }
 
-// `closest`: the account's closest owned games (a taste profile cached), null without one cached,
+// `library`: the cached taste's game count and closest owned games, null with no taste cached,
 // undefined when not asked (no account, on Owned, a tagless game). `account`: its label.
 export function similarSummary(
   game: SummaryGame,
-  { closest, account }: { closest: readonly string[] | null | undefined; account: string | null },
+  {
+    library,
+    account,
+  }: { library: { size: number; closest: readonly string[] } | null | undefined; account: string | null },
 ): CardSummary {
   if (game.loading || !game.details) return loading('text');
   const ready = (text: string): CardSummary => ({ kind: 'text', state: 'ready', text });
-  if (closest) return ready(closest.length ? closest.join(', ') : 'No close match in this library');
-  if (closest === null && account) return ready(`needs ${account}'s Owned list`);
+  if (library?.size)
+    return ready(library.closest.length ? library.closest.join(', ') : 'No close match in this library');
+  if (library !== undefined && account) return ready(`needs ${account}'s Owned list`);
   const basics = metaOrBasics(game.details);
   // The meta line names the developer: a different publisher is the new information.
   const publisher = basics?.publishers?.find((p) => !basics.developers?.includes(p));

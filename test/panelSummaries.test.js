@@ -405,12 +405,12 @@ test('tagsSummary: loading, failed, empty', () => {
 
 test("similarSummary: the closest owned games when the account's taste is cached", () => {
   const g = game({ details: { tags: ['RPG'], meta: meta() } });
-  assert.deepEqual(similarSummary(g, { closest: ['Alpha', 'Beta'], account: 'Alice' }), {
+  assert.deepEqual(similarSummary(g, { library: { size: 40, closest: ['Alpha', 'Beta'] }, account: 'Alice' }), {
     kind: 'text',
     state: 'ready',
     text: 'Alpha, Beta',
   });
-  assert.deepEqual(similarSummary(g, { closest: [], account: 'Alice' }), {
+  assert.deepEqual(similarSummary(g, { library: { size: 40, closest: [] }, account: 'Alice' }), {
     kind: 'text',
     state: 'ready',
     text: 'No close match in this library',
@@ -419,29 +419,37 @@ test("similarSummary: the closest owned games when the account's taste is cached
 
 test("similarSummary: names the Owned list it needs when the taste isn't cached", () => {
   const g = game({ details: { tags: ['RPG'], meta: meta() } });
-  assert.deepEqual(similarSummary(g, { closest: null, account: 'Alice' }), {
+  assert.deepEqual(similarSummary(g, { library: null, account: 'Alice' }), {
     kind: 'text',
     state: 'ready',
     text: "needs Alice's Owned list",
   });
 });
 
+test('similarSummary: a cached taste of an empty library still needs the Owned list, as the body says', () => {
+  const g = game({ details: { tags: ['RPG'], meta: meta() } });
+  assert.equal(
+    similarSummary(g, { library: { size: 0, closest: [] }, account: 'Alice' }).text,
+    "needs Alice's Owned list",
+  );
+});
+
 test('similarSummary: on Owned or with no account, the publisher if it differs from the developer', () => {
   const other = game({ details: { meta: meta({ developers: ['Studio'], publishers: ['Big Pub'] }) } });
   const same = game({ details: { meta: meta({ developers: ['Studio'], publishers: ['Studio'] }) } });
   const none = game({ details: { meta: meta() } });
-  assert.deepEqual(similarSummary(other, { closest: undefined, account: null }), {
+  assert.deepEqual(similarSummary(other, { library: undefined, account: null }), {
     kind: 'text',
     state: 'ready',
     text: 'More from Big Pub',
   });
   const steam = { kind: 'text', state: 'ready', text: 'More like this on Steam' };
-  assert.deepEqual(similarSummary(same, { closest: undefined, account: null }), steam);
-  assert.deepEqual(similarSummary(none, { closest: undefined, account: null }), steam);
+  assert.deepEqual(similarSummary(same, { library: undefined, account: null }), steam);
+  assert.deepEqual(similarSummary(none, { library: undefined, account: null }), steam);
 });
 
 test('similarSummary: loading', () => {
-  assert.deepEqual(similarSummary(game({ loading: true }), { closest: undefined, account: null }), {
+  assert.deepEqual(similarSummary(game({ loading: true }), { library: undefined, account: null }), {
     kind: 'text',
     state: 'loading',
   });

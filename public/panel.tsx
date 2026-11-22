@@ -2026,9 +2026,12 @@ function PanelLowerCards(props: { game: ReadonlyGame }): JSX.Element {
     icon: Sparkles,
     summary: () =>
       similarSummary(props.game, {
-        closest:
+        library:
           similarShown() && props.game.details?.tags?.length
-            ? (library().similar?.map((s) => s.game.name) ?? null)
+            ? library().taste && {
+                size: library().taste!.games.length,
+                closest: library().similar?.map((s) => s.game.name) ?? [],
+              }
             : undefined,
         account: similarShown() ? accountLabel() : null,
       }),
