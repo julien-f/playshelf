@@ -1796,7 +1796,8 @@ function PanelOfferLines(props: { game: ReadonlyGame }): JSX.Element {
       <div class="panel-bundles">
         <Show when={panelData.offers() === null}>
           <div class="panel-no-data">
-            Bundles: {offersRefusal(props.game.appid, currentRegion()) ?? "IsThereAnyDeal didn't answer."}
+            Bundles and subscriptions:{' '}
+            {offersRefusal(props.game.appid, currentRegion()) ?? "IsThereAnyDeal didn't answer."}
           </div>
         </Show>
         <Show when={panelData.offers()?.subscriptions === null}>

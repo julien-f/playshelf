@@ -5920,7 +5920,7 @@ test(
 
     await mockApi(page, { states: ['upstream-down'] }); // registered last, so it answers first
     await page.goto('/lists/owned?game=1145360');
-    await expect(page.locator('.panel-bundles')).toHaveText("Bundles: IsThereAnyDeal didn't answer.");
+    await expect(page.locator('.panel-bundles')).toHaveText("Bundles and subscriptions: IsThereAnyDeal didn't answer.");
   },
 );
 

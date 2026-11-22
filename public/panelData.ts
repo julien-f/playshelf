@@ -309,7 +309,7 @@ export function createPanelDataCache() {
         return fetchJson<NonNullable<PanelOffers>>(
           `/api/game-offers/${appid}?${qs}`,
           undefined,
-          'Bundles lookup failed',
+          'Bundles and subscriptions lookup failed',
         );
       },
       { refresh, settled: itadOff ? undefined : settled },
