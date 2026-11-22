@@ -143,7 +143,14 @@ Wishlist and bundle lists carry price columns: the best deal across every shop I
 
 ## The game panel
 
-Clicking any row opens a detail panel beside the table — not over it, so the list stays usable and clicking another row just swaps the panel's contents. It carries screenshots and trailers, the weighted rating and review counts, How Long To Beat estimates, achievements, recent news from the developer, current price, the subscriptions it's in (Game Pass, EA Play, Ubisoft+, with when it leaves; IsThereAnyDeal's Game Pass also counts EA Play games, so it can name games the PC Game Pass list doesn't have) and the current bundles it's in (each opens that bundle's list), DLC and links out. **Refresh details**, beside its name, refetches everything for that one game.
+Clicking any row opens a detail panel beside the table — not over it, so the list stays usable and clicking another row just swaps the panel's contents.
+
+- **Header**: the game's name; under it a line with the release date, developer (opens its games), whether you own it, its **Status** and **Refresh details** (↻, showing the details' age; it refetches everything for that one game). Then **Steam Store**, **Add to list** and **⋯ More actions** (IsThereAnyDeal, Workshop, website, Present, Copy link).
+- **Media** on top: screenshots and trailers, with the table's capsule when the picture fails to load.
+- **Tiles**, two per row, each showing one figure folded: **Rating** | **Linux/Deck**, **To beat** | **Achievements**, **DLC** | **Owned by**. Click one to open its details in a drawer under the row (the weighted rating with Steam's % and Metacritic; the three How Long To Beat times). Both tiles of a pair open share the drawer; a tile with nothing to show says why and doesn't open. **Owned by** shows only where the list knows owners (a comparison, an account).
+- **Price** card: best price, discount and shop, the record-low badges, the subscriptions it's in (Game Pass, EA Play, Ubisoft+, with when it leaves; IsThereAnyDeal's Game Pass also counts EA Play games, so it can name games the PC Game Pass list doesn't have) and the current bundles it's in (each opens that bundle's list). Open until you fold it.
+- **About**, **Tags & details** (grouped under Genres, Tags and Features), **Similar games** and **News** (the developer's own posts) are rows: folded, each says its gist on its title's line; click to open.
+- Which cards are open is remembered on this device, the same for every game.
 
 Its **Add to list** icon lists your manual lists, ticked where the game already is: tick or untick one to add or remove the game, or name a new list to make one with it. The icon shows how many of your lists hold the game.
 
@@ -186,7 +193,7 @@ A lightbox on another screen, for showing trailers and screenshots to the people
 - The nav bar's chip shows what's on the TV (a thumbnail, the game, which media) and is its remote: play, pause, replay and mute a trailer, retry what failed to load, × to stop presenting (**Space** and **M** too, once it has focus). The keyboard's play/pause key pauses and resumes the TV's trailer from anywhere. A mute holds for the next trailers until you unmute. The panel marks its media that's on the TV. Closing the tab that presents closes the TV too. A trailer muted for want of a click on the TV stays so until that click: the chip says so.
 - Only the tab that started presenting drives the window. A computer's thing: no Present button on a phone or tablet, but on a computer at any window size.
 
-![A game's detail panel: media strip, weighted rating and Metacritic score, How Long To Beat estimate, ProtonDB tier, best price with record-low badges, tags, who owns it, and collapsible HLTB/news/achievements/DLC sections](../images/game-panel.png)
+![A game's detail panel: media strip, a header with its actions, Rating and Linux/Deck tiles, To beat and Achievements tiles, the Price card, and folded About, Tags, Similar games and News rows](../images/game-panel.png)
 
 ## Search by URL
 
