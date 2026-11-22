@@ -5891,6 +5891,26 @@ test(
 );
 
 test(
+  "F1 edge: the Price card lists the game's subscriptions above its bundles",
+  { tag: '@any-width' },
+  async ({ page }) => {
+    await asPlayer(page, ALICE);
+    await page.goto('/lists/owned?game=620');
+    const lines = page.locator('.panel-bundles li');
+    await expect(lines.nth(0)).toHaveText(/^\s*In Game Pass\s*leaves .+ \(in 5d\)$/);
+    await expect(lines.nth(1)).toHaveText('In Ubisoft+ Classics');
+    await expect(lines.nth(2)).toContainText('Test Co-op Pack');
+    await expect(lines.nth(0).getByRole('link')).toHaveCount(0); // ITAD's Game Pass isn't our PC Game Pass list
+
+    await page.route('**/api/game-offers/**', (route) => route.fulfill({ json: { bundles: [], subscriptions: null } }));
+    await page.goto('/lists/owned?game=1145360');
+    await expect(page.locator('.panel-bundles')).toHaveText(
+      "Subscriptions: IsThereAnyDeal didn't answer.Not in any current bundle.",
+    );
+  },
+);
+
+test(
   "F1 edge: the Price card says when a game is in no bundle, and when ITAD didn't answer",
   { tag: '@any-width' },
   async ({ page }) => {

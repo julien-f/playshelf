@@ -361,7 +361,7 @@ Tests map to journeys by title ([testing.md](testing.md#end-to-end-tests)).
   4. read the panel (media, rating, HLTB, ProtonDB, price, owned-by)
   5. ↑/↓ or R to wander
 - **Done when**: on a list route the panel opens in place; elsewhere it goes to `/game/:appid`; the game joins Recently Looked Up.
-- **Edges**: no match; DLC → base-game link; phone width (panel vs. table); Back closes the panel (and the lightbox over it) before leaving the list.
+- **Edges**: no match; DLC → base-game link; phone width (panel vs. table); Back closes the panel (and the lightbox over it) before leaving the list; a game in a subscription (Game Pass, EA Play…) says so under Price, with when it leaves.
 
 ### F2 Search from the browser address bar
 

@@ -535,7 +535,15 @@ export function respond(
         },
       ];
     });
-    return json({ bundles, subscriptions: [] });
+    // Game Pass leaving in 5 days, for its urgency color.
+    const subscriptions =
+      appid === 620
+        ? [
+            { id: 6, name: 'Game Pass', leaving: new Date(Date.now() + 5.5 * 86400000).toISOString() },
+            { id: 5, name: 'Ubisoft+ Classics', leaving: null },
+          ]
+        : [];
+    return json({ bundles, subscriptions });
   }
   if (path === '/api/prices') {
     const keys: (string | number)[] = body.gids ?? body.appids ?? [];
