@@ -59,9 +59,9 @@ export function protonTierColor(tier: string) {
 }
 
 // ProtonDB's tier names are display words already: capitalised, not remapped, so a new tier still shows.
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+export const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-const spacedHours = (h: number) => fmtH(h).replace(/h$/, ' h');
+export const spacedHours = (h: number) => fmtH(h).replace(/h$/, ' h');
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -73,7 +73,7 @@ export function ratingSummary(game: SummaryGame): CardSummary {
     kind: 'figure',
     state: 'ready',
     fig: String(rating),
-    qualifier: `${fmtCompactCount(r.total)} reviews`,
+    qualifier: `Weighted · ${fmtCompactCount(r.total)} reviews`, // the tile is titled "Rating": "Weighted Rating" is cut at 390 px
     tone: scoreColor(rating),
   };
 }

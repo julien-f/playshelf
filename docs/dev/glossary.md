@@ -51,6 +51,7 @@ The words the UI uses, so a new label, doc line or backlog item says the same th
 | On screen       | Means                                                                                                                        | In code          | Avoid                                   |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------- | --------------------------------------- |
 | Weighted Rating | the default rating, pulled toward 50% on few reviews ([decisions.md](decisions.md#ratings--wilson-score-vs-weighted-rating)) | `steamdbRating`  | SteamDB rating, score                   |
+| To beat         | the panel tile's HowLongToBeat time: the main story, or all playstyles when that is all it has                               | `toBeatSummary`  | HLTB, length, playtime                  |
 | Taste Fit       | how close a game is to the current account's taste ([features.md](../user/features.md#lists))                                | taste fit        | match, recommendation                   |
 | Group Fit       | Taste Fit for the comparison's player it suits least ([comparing](../user/features.md#comparing-libraries))                  | group fit        | average fit                             |
 | Plays mostly    | the Steam tags an account spends its time on                                                                                 | play profile     | favourite genres                        |

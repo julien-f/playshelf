@@ -2501,10 +2501,6 @@
     padding-block: 16px;
     border-top: 1px solid var(--line);
   }
-  .panel-glance + .panel-section {
-    padding-top: 0;
-    border-top: 0;
-  }
   .panel-section-title {
     display: flex;
     flex-wrap: wrap;
@@ -2553,61 +2549,195 @@
     font-size: var(--fs-title);
   }
 
-  /* At a glance: tiles split by hairlines in one box, four across once the panel is wide enough. */
-  .panel-glance {
+  /* Cards (panelCards.tsx): tiles in pairs, each opening its body in a drawer under its row. */
+  .panel-tile-row {
+    /* Open is a state: the accent edges the opened tile, its notch and the drawer. */
+    --panel-card-open: color-mix(in srgb, var(--accent) 55%, var(--line));
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1px;
-    margin-bottom: 16px;
-    overflow: hidden;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 8px;
+    margin-bottom: 8px;
+  }
+  .panel-card {
+    min-width: 0;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-3);
-    background: var(--line-strong);
-  }
-  @media (min-width: 1400px) {
-    .panel-glance {
-      grid-template-columns: repeat(4, 1fr);
-    }
-  }
-  .panel-glance-chip {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    padding: 10px 12px;
     background: var(--panel-ground);
+  }
+  .panel-card--open {
+    border-color: var(--panel-card-open);
+  }
+  .panel-card-heading {
+    font: inherit;
+  }
+  .panel-card-top {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 8px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: inherit;
+    background: none;
     color: var(--text);
-    text-decoration: none;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
     transition: background-color var(--dur-1) var(--ease-out);
   }
-  a.panel-glance-chip:hover {
+  .panel-card:not(.panel-card--empty) .panel-card-top:hover {
     background: var(--line);
+  }
+  .panel-card--empty .panel-card-top {
+    cursor: not-allowed;
+  }
+  .panel-card-icon {
+    color: var(--muted);
+  }
+  .panel-card-title {
+    overflow: hidden;
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .panel-card-chevron {
+    grid-column: 3;
+    color: var(--muted);
+    transition: rotate var(--dur-2) var(--ease-out);
+  }
+  .panel-card-top[aria-expanded='true'] .panel-card-chevron {
+    rotate: 90deg;
+  }
+  /* The notch: from the opened tile down to its drawer. */
+  .panel-card--open .panel-card-top::after {
+    content: '';
+    position: absolute;
+    bottom: -9px;
+    left: 50%;
+    translate: -50% 0;
+    border: 8px solid transparent;
+    border-top-color: var(--panel-card-open);
+    border-bottom: 0;
+  }
+  /* Fixed lines, the bar's included, so a tile keeps its size from loading to ready to empty. */
+  .panel-card-summary {
+    display: grid;
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .panel-card-fig {
+    overflow: hidden;
+    height: calc(var(--fs-figure) * 1.25);
     color: var(--text);
+    font: 600 var(--fs-figure) / 1.25 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  /* Inside the tile: the box clips. */
-  a.panel-glance-chip:focus-visible {
-    outline-offset: -4px;
+  .panel-card--empty :is(.panel-card-title, .panel-card-fig) {
+    color: var(--muted);
+    font-weight: 400;
   }
-  .panel-glance-chip--sk {
-    justify-content: center;
-    min-height: 76px;
+  .panel-card-sk {
+    width: 64px;
+    height: 18px;
   }
-  .panel-glance-label,
-  .panel-glance-val {
+  .panel-card-qualifier {
+    overflow: hidden;
+    height: calc(var(--fs-meta) * 1.45);
     color: var(--muted);
     font-size: var(--fs-meta);
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .panel-glance-num {
-    color: var(--text);
-    font-size: var(--fs-title);
+  .panel-card-bar {
+    overflow: hidden;
+    height: 4px;
+    margin-top: 5px;
+    border-radius: 2px;
+  }
+  .panel-card-bar:has(.panel-card-bar-fill) {
+    background: var(--line-strong);
+  }
+  .panel-card-bar-fill {
+    display: block;
+    height: 100%;
+  }
+  .panel-drawer-slot {
+    display: flow-root;
+    grid-column: 1 / -1;
+  }
+  .panel-drawer {
+    display: grid;
+    gap: 16px;
+    margin-top: 8px;
+    padding: 12px 14px 14px;
+    border: 1px solid var(--panel-card-open);
+    border-radius: var(--radius-3);
+    background: var(--surface-2);
+  }
+  .panel-drawer-part {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+  }
+  .panel-drawer-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: var(--fs-label);
     font-weight: 600;
-    line-height: 1.25;
-    overflow-wrap: break-word;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
   }
-  .panel-glance-num--figure {
-    font-family: var(--font-mono);
-    font-size: var(--fs-figure);
+  .panel-drawer-sk {
+    width: 100%;
+    height: 48px;
+  }
+  .panel-drawer-retry {
+    justify-self: start;
+  }
+  .panel-card-text {
+    color: var(--text-body);
+    font-size: var(--fs-ui);
+  }
+  .panel-card-link {
+    justify-self: start;
+    color: var(--text);
+    font-size: var(--fs-meta);
+    text-decoration: none;
+  }
+  .panel-card-link:hover {
+    text-decoration: underline;
+  }
+  /* A card's figures side by side, each under its caps label. */
+  .panel-figs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .panel-fig dt {
+    color: var(--muted);
+    font-size: var(--fs-label);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .panel-fig dd {
+    color: var(--text);
+    font: 600 var(--fs-figure) / 1.3 var(--font-mono);
     font-variant-numeric: tabular-nums;
+  }
+  .panel-fig dd a {
+    color: inherit;
+  }
+  .panel-fig .panel-fig-none {
+    color: var(--muted);
+    font: var(--fs-meta) / 1.3 var(--font-sans);
   }
 
   /* Price: the best deal, a buy link when there is one, the lows under it, then current bundles. */
@@ -2944,11 +3074,7 @@
     text-align: left;
     cursor: pointer;
   }
-  .panel-achievements-chip .panel-glance-num {
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-  }
-  .panel-achievements-chip .panel-glance-val {
+  .panel-collapsible-val {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -2981,20 +3107,6 @@
   }
   .panel-collapsible-body-pad {
     padding-top: 4px;
-  }
-
-  .panel-hltb {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px 28px;
-  }
-  .panel-hltb-val {
-    margin-top: 2px;
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: var(--fs-figure);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
   }
 
   .panel-news > li + li,

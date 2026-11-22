@@ -330,13 +330,18 @@ export function createPanelDataCache() {
   // `onPartial` is called with a snapshot of the in-progress list (one slot per requested appid,
   // filled in as each resolves) so the card can stream entries in as they land instead of sitting
   // on its skeleton for however long the slowest one takes.
+  // `settled`: as the other loads', since an open DLC card stays open for every game ↓ passes.
   async function fetchDlc(
     dlcIds: readonly number[],
-    { onPartial }: { onPartial?: (entries: (DlcEntry | undefined)[]) => void } = {},
+    { onPartial, settled }: { onPartial?: (entries: (DlcEntry | undefined)[]) => void; settled?: () => boolean } = {},
   ): Promise<PanelDlc> {
     const known = () => dlcIds.map((id) => dlcEntries.get(id) ?? undefined);
     onPartial?.(known());
     const missing = dlcIds.filter((id) => !dlcEntries.has(id));
+    if (settled && missing.length) {
+      await new Promise((resolve) => setTimeout(resolve, PANEL_SETTLE_MS));
+      if (!settled()) return null;
+    }
     let failed = false;
     let next = 0;
     const worker = async () => {

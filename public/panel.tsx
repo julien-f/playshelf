@@ -6,7 +6,6 @@ import {
   smoothScroll,
   dealRecordTier,
   DEAL_RECORD_TIERS,
-  fmtH,
   fmtLastPlayed,
   computeSteamdbRating,
   focusGameRow,
@@ -19,7 +18,7 @@ import {
 } from './utils.ts';
 import { openLightbox, openLightboxFrom, lightboxShot, lightboxOpen } from './lightbox.tsx';
 import { isMorphUpdating, loadedWhen, morph } from './viewTransition.ts';
-import { animate, durationToken, easeOut, prefersReducedMotion } from './motion.ts';
+import { prefersReducedMotion } from './motion.ts';
 import { sampleArtTint } from './artTint.ts';
 import { decideSwipeAxis, type SwipeAxis } from './lightboxSwipe.ts';
 import { pushOverlayEntry, popOverlayEntry } from './overlayHistory.ts';
@@ -53,7 +52,17 @@ import type {
   PanelPrice,
 } from './panelData.ts';
 import { bestPickRate, bundleUrgency, pickTiers } from './bundleRows.ts';
-import { fmtCompactCount, protonTierColor } from './panelSummaries.ts';
+import {
+  achievementsSummary,
+  capitalize,
+  linuxDeckSummary,
+  protonTierColor,
+  ratingSummary,
+  spacedHours,
+  toBeatSummary,
+} from './panelSummaries.ts';
+import { PanelTileRow, slideHeight, type PanelCardDef } from './panelCards.tsx';
+import { isPanelCardOpen, togglePanelCard } from './panelOpenCards.ts';
 import { fmtDateTime } from './dateTime.ts';
 import { formatWithEstimate } from './currency.ts';
 import { currentRegion, regionCurrency } from './region.ts';
@@ -104,7 +113,8 @@ import Star from 'lucide-solid/icons/star';
 import Ticket from 'lucide-solid/icons/ticket';
 import Timer from 'lucide-solid/icons/timer';
 import Cast from 'lucide-solid/icons/cast';
-import TriangleAlert from 'lucide-solid/icons/triangle-exclamation-point';
+import ThumbsUp from 'lucide-solid/icons/thumbs-up';
+import Trophy from 'lucide-solid/icons/trophy';
 import Wrench from 'lucide-solid/icons/wrench';
 import X from 'lucide-solid/icons/x';
 import { focusVisible, keepFocus } from './focusHandoff.ts';
@@ -164,8 +174,8 @@ interface PanelOptions {
 // Reactivity model — three kinds of state, no "please re-render" call anywhere:
 //
 //  1. The panel's own UI state (`panelGame`/`heroIdx`/`openHeaderMenu`/`panelHistory`/
-//     `expandedSections`/`revealedAchievements`/`achievementsFilter`/`panelRefreshing`) — plain
-//     signals, set directly by this file's own click handlers.
+//     `revealedAchievements`/`achievementsFilter`/`panelRefreshing`) — plain signals, set directly
+//     by this file's own click handlers; which cards are open is panelOpenCards.ts's pref.
 //  2. The open game's data — read straight off the game object, which is a Solid *store* row
 //     owned by whichever route loaded it (see rowStore.ts). A field written as the details
 //     stream lands patches only what renders that field.
@@ -462,33 +472,12 @@ function copyPanelLink(e: MouseEvent, copied: Node) {
   });
 }
 
-// Which collapsible sections (HLTB breakdown, news, achievements — anything built with
-// CollapsibleCard() below) are expanded, keyed `${appid}:${section}` so each game/section
-// pair remembers its own choice independently, and which individual hidden achievements
-// have been click-revealed (keyed `${appid}:${apiname}`). Re-opening a game later in the
-// same session remembers prior choices; never cleared (a handful of strings per game
-// touched is negligible, and a page reload resets it anyway). Solid signals (each holding a Set,
-// replaced wholesale on every toggle) rather than plain module-level Sets, so a CollapsibleCard's
-// own expanded/collapsed chevron reacts to a toggle on its own.
-const [expandedSections, setExpandedSections] = createSignal<Set<string>>(new Set());
+// Which hidden achievements have been click-revealed (keyed `${appid}:${apiname}`), for the session.
 const [revealedAchievements, setRevealedAchievements] = createSignal<Set<string>>(new Set());
 // Which achievement list filter ('all' | 'unlocked' | 'locked') each game is currently
-// showing — same per-appid, never-cleared-this-session shape as expandedSections above.
+// showing — same per-appid, never-cleared-this-session shape as revealedAchievements above.
 // Defaults to 'all' (map lookup miss) for any appid never touched.
 const [achievementsFilter, setAchievementsFilter] = createSignal<Map<number, string>>(new Map());
-
-function isSectionExpanded(appid: number, section: string) {
-  return expandedSections().has(`${appid}:${section}`);
-}
-
-function toggleSection(appid: number, section: string) {
-  const key = `${appid}:${section}`;
-  const wasExpanded = expandedSections().has(key);
-  const next = new Set(expandedSections());
-  if (wasExpanded) next.delete(key);
-  else next.add(key);
-  setExpandedSections(next);
-}
 
 // ── Per-game async data ──────────────────────────────────────────────────────
 // News, achievements, "Owned by", ownership status, price and DLC — everything the panel
@@ -512,7 +501,7 @@ function toggleSection(appid: number, section: string) {
 // Every source below resolves to a *primitive* (an appid, or an `appid:account` string) rather
 // than an object literal: `createResource` memoizes its source with `===`, so an object would
 // refetch every time the source merely recomputed — e.g. `dlcSource` re-runs whenever any
-// section anywhere is expanded/collapsed, and must not turn that into a fresh DLC fetch.
+// card anywhere is opened/folded, and must not turn that into a fresh DLC fetch.
 // Bumped by a route whose `getOwners` answer changed (a comparison resolved, or was left).
 const [ownersRev, setOwnersRev] = createSignal(0);
 export function notifyOwnersChanged(): void {
@@ -619,19 +608,14 @@ const panelData = createRoot(() => {
     return fetchOffers(Number(appid), region, { refresh: isForced(info), settled: () => offersSource() === key });
   });
 
-  // DLC is the one card whose fetch is gated behind actually expanding it (see panelData.ts's
-  // fetchDlc) — expressed here as "this game's card is expanded" being part of the source, so
-  // expanding it *is* what starts the fetch. That also covers the case the old code needed a
-  // separate kick-off for: `expandedSections` remembers "DLC is expanded" per appid for the whole
-  // session, so a game reopened later renders its card already open, with no click left to happen
-  // — the source is already truthy on the first render, so the fetch just runs.
+  // DLC's fetch waits for its card to be open (part of the source), the same for every game.
   // `shown` is how many entries the card asks for: DLC_PAGE, plus DLC_PAGE per "Show more".
   const [dlcMore, setDlcMore] = createSignal<{ appid: number; shown: number } | null>(null);
   // The number shown rides along as an `appid:shown` string, so "Show more" re-runs the fetch.
   const dlcShown = (): number => {
     const g = panelGame();
     const ids = g?.details?.meta?.dlc;
-    if (!g || !ids?.length || !isSectionExpanded(g.appid, 'dlc')) return 0;
+    if (!g || !ids?.length || !isPanelCardOpen('dlc')) return 0;
     const more = dlcMore();
     return Math.min(ids.length, more?.appid === g.appid ? more.shown : DLC_PAGE);
   };
@@ -646,7 +630,10 @@ const panelData = createRoot(() => {
   const [dlc] = createResource<PanelDlc, string>(dlcSource, (key) => {
     const [appid, shown] = key.split(':').map(Number);
     const ids = (panelGame()?.details?.meta?.dlc ?? []).slice(0, shown);
-    return fetchDlc(ids, { onPartial: (entries) => setDlcPartial({ appid, entries }) });
+    return fetchDlc(ids, {
+      onPartial: (entries) => setDlcPartial({ appid, entries }),
+      settled: () => dlcSource() === key,
+    });
   });
   const showMoreDlc = (appid: number) => setDlcMore({ appid, shown: dlcShown() + DLC_PAGE });
 
@@ -833,8 +820,9 @@ function leavePanelGhost() {
   if (prefersReducedMotion() || document.body.classList.contains('lb-open')) return;
   const panel = document.getElementById('game-panel')!;
   const ghost = panel.cloneNode(true) as HTMLElement;
-  for (const el of [ghost, ...ghost.querySelectorAll('[id], [name], [aria-labelledby]')])
-    for (const attr of ['id', 'name', 'aria-labelledby']) el.removeAttribute(attr);
+  const refs = ['id', 'name', 'aria-labelledby', 'aria-controls'];
+  for (const el of [ghost, ...ghost.querySelectorAll(refs.map((attr) => `[${attr}]`).join(', '))])
+    for (const attr of refs) el.removeAttribute(attr);
   ghost.className = 'panel-ghost';
   ghost.inert = true;
   ghost.ariaHidden = 'true';
@@ -863,19 +851,6 @@ function jumpToPanelSection(target: string) {
   const delta = el.getBoundingClientRect().top - body.getBoundingClientRect().top - headerH - 8;
   body.scrollTo({ top: body.scrollTop + delta, behavior: smoothScroll() });
 }
-
-// ProtonDB's community-reported Linux/Steam Deck compatibility tiers, worst to best.
-// Colors are our own (not scraped from protondb.com), just distinct + dark enough for
-// white badge text: red (unplayable) through gold/platinum (flawless) plus a green
-// "native" tier for games with an actual Linux port (no Proton layer needed at all).
-// Tier names themselves come straight from ProtonDB's API (see lib/steam.js) and are
-// already human-readable words — capitalized for display, not remapped through a label
-// table, so a new tier ProtonDB introduces still renders (just without a custom color).
-// No "pending" entry — extractProtonDb (lib/steam.js) maps a "pending" (too-few-reports)
-// result to its own provisionalTier before it ever reaches the client, flagged `pd.pending`
-// (see GlanceGrid below) so it can still be shown, just visibly marked low-confidence rather
-// than presented as equal to a confirmed tier of the same name.
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // Tags/genres/categories/developer-publisher used to each get their own "uppercase
 // title + pill row" section — four near-identical blocks in a row. Merged into one
@@ -961,219 +936,17 @@ function TagCloud(props: {
   );
 }
 
-// The glance strip: four tiles (Weighted Rating, Metacritic, HLTB, Linux/Deck) —
-// every chip built from one template (a label, a value, a detail line) so the four
-// read as one family. Each chip IS the link to its source; there's no separate
-// "Links" section duplicating them. Only *evaluative* values (the two scores, the
-// Linux/Deck tier) get semantic color — HLTB is a plain duration, not a judgment,
-// so it stays neutral ink.
-// `faded`: for a value that's a real tier/score but a low-confidence one (currently only
-// ProtonDB's provisional-tier case below) — dims the whole chip so it doesn't read as equally
-// certain as a normal chip of the same color/value.
-function GlanceChip(props: {
-  href?: string | null;
-  value: string | number | JSX.Element;
-  color?: string | null;
-  label: string;
-  detail?: JSX.Element;
-  faded?: boolean;
-}): JSX.Element {
-  const inner = () => (
-    <>
-      <span class="panel-glance-label">{props.label}</span>
-      <span
-        class="panel-glance-num"
-        classList={{ 'panel-glance-num--figure': /^[\d—]/.test(String(props.value)) }}
-        style={props.color ? { color: props.color } : undefined}
-      >
-        {props.value}
-      </span>
-      <Show when={props.detail}>
-        <span class="panel-glance-val">{props.detail}</span>
-      </Show>
-    </>
-  );
-  const style = () => (props.faded ? { opacity: 0.65 } : undefined);
-  return (
-    <Show
-      when={props.href}
-      fallback={
-        <div class="panel-glance-chip panel-glance-chip--static" style={style()}>
-          {inner()}
-        </div>
-      }
-    >
-      {(href) => (
-        <a class="panel-glance-chip" href={href()} target="_blank" rel="noopener" style={style()}>
-          {inner()}
-        </a>
-      )}
-    </Show>
-  );
-}
-
-function GlanceGrid(props: { game: ReadonlyGame }): JSX.Element {
-  const details = () => props.game.details;
-  const reviewsUrl = () => `https://store.steampowered.com/app/${props.game.appid}/#app_reviews_hash`;
-  const protondbUrl = () => `https://www.protondb.com/app/${props.game.appid}`;
-  // Its stream part hasn't arrived yet: "…", not "no data".
-  const pendingChip = (source: string, label: string) =>
-    props.game.pendingSources?.includes(source) ? <GlanceChip value="…" label={label} detail="still loading" /> : null;
-  // The source errored (server.js's `failed`): said apart from "no data", ↻ above retries it.
-  const failedChip = (source: string, label: string, href: string) =>
-    pendingChip(source, label) ??
-    (props.game.failedSources?.includes(source) ? (
-      <GlanceChip href={href} value={<TriangleAlert />} color="var(--warn)" label={label} detail="didn't answer" />
-    ) : null);
-
-  // Every chip stays in the grid even when its source has no data for this game — a missing
-  // weighted rating or ProtonDB tier is itself informative, and a chip that vanishes instead makes
-  // the 2×2 grid reflow into a lopsided 3-chip layout. Each still links out where a useful
-  // destination exists, same as the HLTB search fallback. The rating link points at the game's
-  // Steam reviews (the actual source of the underlying data) rather than SteamDB, since the
-  // number/caption is this app's own weighted rating, not SteamDB's.
-  const ratingChip = () => {
-    const r = details()?.rating;
-    if (!r)
-      return (
-        failedChip('rating', 'Weighted', reviewsUrl()) ?? (
-          <GlanceChip href={reviewsUrl()} value="—" label="Weighted" detail="no rating" />
-        )
-      );
-    const pct = r.total ? Math.round((r.positive / r.total) * 100) : 0;
-    const steamdbRating = Math.round(computeSteamdbRating(r.positive, r.total) ?? 0);
-    return (
-      <GlanceChip
-        href={reviewsUrl()}
-        value={steamdbRating}
-        color={scoreColor(steamdbRating)}
-        label="Weighted"
-        detail={
-          <>
-            {pct}% of {fmtCompactCount(r.total)}
-          </>
-        }
-      />
-    );
-  };
-
-  const mcChip = () => {
-    const mc = details()?.meta?.metacritic;
-    return mc ? (
-      <GlanceChip
-        href={safeHref(mc.url)}
-        value={mc.score}
-        color={scoreColor(mc.score)}
-        label="Metacritic"
-        detail="critic score"
-      />
-    ) : (
-      (pendingChip('meta', 'Metacritic') ?? <GlanceChip value="—" label="Metacritic" detail="no score" />)
-    );
-  };
-
-  const hltbChip = () => {
-    const h = details()?.hltb;
-    // A matched HLTB entry can still have no submitted completion times (all: null, e.g. a very
-    // new/obscure game) — that's a real page with no data, not a failed search, so it still links
-    // straight to the page rather than a generic search.
-    if (!h?.id)
-      return (
-        failedChip('hltb', 'HLTB', `https://howlongtobeat.com/?q=${encodeURIComponent(props.game.name)}`) ?? (
-          <GlanceChip
-            href={`https://howlongtobeat.com/?q=${encodeURIComponent(props.game.name)}`}
-            value="—"
-            label="HLTB"
-            detail="search"
-          />
-        )
-      );
-    const hltbUrl = `https://howlongtobeat.com/game/${h.id}`;
-    return h.all ? (
-      <GlanceChip href={hltbUrl} value={`${h.all}h`} label="HLTB" detail="all playstyles" />
-    ) : (
-      <GlanceChip href={hltbUrl} value="—" label="HLTB" detail="no data" />
-    );
-  };
-
-  const protonChip = () => {
-    const pd = details()?.protondb;
-    if (!pd?.tier)
-      return (
-        failedChip('protondb', 'Linux/Deck', protondbUrl()) ?? (
-          <GlanceChip href={protondbUrl()} value="—" label="Linux/Deck" detail="no reports" />
-        )
-      );
-    const color = protonTierColor(pd.tier);
-    // Kept short (no "reports"/"confidence" words): a tile is narrow, and "strong · 336" reads fine without them.
-    const detail = [pd.confidence, pd.total ? fmtCompactCount(pd.total) : ''].filter(Boolean).join(' · ');
-    // pd.pending: too few reports for ProtonDB itself to be confident, showing its provisionalTier
-    // instead of nothing (see extractProtonDb, lib/steam.js) — faded, with a "?" and a
-    // "provisional" caption suffix, so it doesn't read as an equally-confirmed tier.
-    const value = pd.pending ? `${capitalize(pd.tier)} ?` : capitalize(pd.tier);
-    return (
-      <GlanceChip
-        href={protondbUrl()}
-        value={value}
-        color={color}
-        faded={pd.pending}
-        label="Linux/Deck"
-        detail={[detail, pd.pending && 'provisional'].filter(Boolean).join(' · ')}
-      />
-    );
-  };
-
-  return (
-    <Show
-      when={props.game.loading}
-      fallback={
-        <Show when={details()}>
-          <div class="panel-glance">
-            {ratingChip()}
-            {mcChip()}
-            {hltbChip()}
-            {protonChip()}
-          </div>
-        </Show>
-      }
-    >
-      <div class="panel-glance">
-        <For each={[0, 1, 2, 3]}>
-          {() => (
-            <div class="panel-glance-chip panel-glance-chip--sk">
-              <span class="sk" style={{ width: '100%', height: '32px', 'border-radius': '6px' }} />
-            </div>
-          )}
-        </For>
-      </div>
-    </Show>
-  );
-}
-
-// Shared "one card, expand-in-place" shape used by HLTB breakdown, news, and achievements:
-// a full-width chip (glance-grid numeral + caption, same template as GlanceChip) as the
-// header/toggle, an optional icon-link out to the source, and a divided list below once
-// expanded. Kept as one component so the three sections read as one visual family instead
-// of three near-identical hand-rolled blocks that drift apart over time.
-// `numHtml` is optional — HLTB's breakdown has no single number that isn't either
-// misleading (an arbitrary pick among Main/Extra/Completionist) or a plain repeat of the
-// glance strip's own "All PlayStyles" figure, so it renders as a plain text-only teaser
-// instead of forcing a numeral into a slot where one doesn't actually fit. `icon` fills
-// that same leading slot instead, for a card with no num at all (HLTB, News) — without
-// it, those two rows read as plain text next to achievements' bold colored percentage,
-// losing the "one visual family" look this whole shape is meant to have.
+// News and DLC until they become cards (PLAN.md step 4): a full-width toggle, its ↗ the source,
+// the body below; open is panelOpenCards' `card`, as for the tiles.
 function CollapsibleCard(props: {
-  appid: number;
-  section: string;
-  num?: JSX.Element;
-  numColor?: string | null;
-  icon?: JSX.Element;
+  card: string;
+  icon: JSX.Element;
   val: JSX.Element;
   body: JSX.Element;
   linkHref?: string | null;
   linkTitle: string;
 }): JSX.Element {
-  const expanded = () => isSectionExpanded(props.appid, props.section);
+  const expanded = createMemo(() => isPanelCardOpen(props.card));
   // A click (only: a section opened by itself or reopened on ↑/↓ just shows) slides the body open
   // or shut; it stays mounted, inert, until a collapse ends, and a click mid-way turns it around.
   const [closing, setClosing] = createSignal(false);
@@ -1185,30 +958,18 @@ function CollapsibleCard(props: {
     const from = live?.getBoundingClientRect().height ?? 0;
     for (const a of live?.getAnimations() ?? []) a.cancel();
     setClosing(!opening && !prefersReducedMotion());
-    toggleSection(props.appid, props.section);
+    togglePanelCard(props.card);
     const el = body?.isConnected ? body : undefined;
     if (!el) return;
     el.inert = !opening;
     const slide = ++slides;
     const to = opening ? el.getBoundingClientRect().height : 0;
-    const frames = [
-      { height: `${from}px`, overflow: 'clip' },
-      { height: `${to}px`, overflow: 'clip' },
-    ];
-    void animate(el, frames, { duration: durationToken('--dur-3'), easing: easeOut() }).then(() => {
+    void slideHeight(el, from, to).then(() => {
       if (slide !== slides) return;
       if (!opening) setClosing(false);
       updateSubnavScrollSpy();
     });
   };
-  const numSpan = () =>
-    props.num != null ? (
-      <span class="panel-glance-num" style={props.numColor ? { color: props.numColor } : undefined}>
-        {props.num}
-      </span>
-    ) : props.icon ? (
-      <span class="panel-achievements-icon">{props.icon}</span>
-    ) : null;
   return (
     <div class="panel-achievements-card">
       <div class="panel-achievements-card-header">
@@ -1219,8 +980,8 @@ function CollapsibleCard(props: {
             aria-expanded={expanded() ? 'true' : 'false'}
             onClick={onToggle}
           >
-            {numSpan()}
-            <span class="panel-glance-val">{props.val}</span>
+            <span class="panel-achievements-icon">{props.icon}</span>
+            <span class="panel-collapsible-val">{props.val}</span>
             <ChevronRight class="panel-achievements-chevron" />
           </button>
         </h3>
@@ -1276,29 +1037,22 @@ function setAchievementsFilterFor(appid: number, filter: string) {
   setAchievementsFilter(next);
 }
 
-// Achievements section, off the `achievements` resource (see "Per-game async data" above):
+// The Achievements tile's body, off the `achievements` resource (see "Per-game async data" above):
 // fetched separately from the rating/HLTB/tags stream, since the achievement *list* only depends
 // on the appid but progress depends on which account is loaded. The list itself is still fetched
 // and shown with zero accounts loaded (`playerCount: 0`, no `steamUrl`) — only the
 // achieved/unlocktime/progress-summary parts need an account, gated by `hasProgress` below.
-// Shown once fetched, failure included; PanelSubnav lists the section on the same condition.
+// PanelSubnav lists it once fetched, failure included.
 const achievementsShown = () => panelData.achievements() !== undefined;
 
-function AchievementsSection(props: { game: ReadonlyGame }): JSX.Element {
-  // `undefined` means the fetch hasn't been attempted yet — nothing to show and no failure to
-  // report either, so stay silent. `null` means it was attempted and failed — that's worth a
-  // visible message rather than silently looking identical to a game with no achievements at all.
-  const data = () => panelData.achievements();
+function AchievementsBody(props: { game: ReadonlyGame }): JSX.Element {
+  const data = () => panelData.achievements.latest;
   // With no player loaded (`playerCount === 0` — a standalone "look up any game" lookup),
   // `unlocked` is always 0 by construction, not a real "nobody's unlocked anything" result — the
   // list itself (names/descriptions/icons/rarity) is still real store metadata worth showing,
   // just without any progress claim on top of it. `hasProgress` gates every place that would
   // otherwise imply real unlock data.
   const hasProgress = () => (data()?.playerCount ?? 0) > 0;
-  const pct = () => {
-    const d = data();
-    return d && hasProgress() ? Math.round((d.unlocked / d.total) * 100) : null;
-  };
 
   // Sorted once per fetch and cached on the payload itself (a fresh object every fetch/refresh,
   // so this never goes stale) rather than re-sorting the full list on every render.
@@ -1403,61 +1157,16 @@ function AchievementsSection(props: { game: ReadonlyGame }): JSX.Element {
   );
 
   return (
-    <Show
-      when={panelData.achievements.loading}
-      fallback={
-        <Show when={achievementsShown()}>
-          <section class="panel-section" id="panel-section-achievements">
-            <Show
-              when={data()}
-              fallback={
-                <>
-                  <h3 class="panel-section-title">Achievements</h3>
-                  <div class="panel-no-data">
-                    {achievementsRefusal(props.game.appid, currentMembers()) ?? "Steam didn't answer."}
-                  </div>
-                </>
-              }
-            >
-              {(d) => (
-                <Show
-                  when={d().total}
-                  fallback={
-                    <>
-                      <h3 class="panel-section-title">Achievements</h3>
-                      <div class="panel-no-data">This game has no achievements.</div>
-                    </>
-                  }
-                >
-                  <CollapsibleCard
-                    appid={props.game.appid}
-                    section="achievements"
-                    num={hasProgress() ? `${pct()}%` : '—'}
-                    numColor={hasProgress() ? scoreColor(pct()!) : null}
-                    val={
-                      <>
-                        <b>Achievements</b> ·{' '}
-                        {hasProgress() ? `${d().unlocked} / ${d().total} unlocked` : `${d().total} total`}
-                      </>
-                    }
-                    body={body}
-                    linkHref={d().steamUrl}
-                    linkTitle="View achievements on Steam"
-                  />
-                </Show>
-              )}
-            </Show>
-          </section>
-        </Show>
-      }
-    >
-      <section class="panel-section" id="panel-section-achievements">
-        <h3 class="panel-section-title">Achievements</h3>
-        <div class="panel-achievements">
-          <span class="sk" style={{ width: '100%', height: '48px', 'border-radius': '6px' }} />
-        </div>
-      </section>
-    </Show>
+    <>
+      {body}
+      <Show when={data()?.steamUrl}>
+        {(href) => (
+          <a class="panel-card-link" href={href()} target="_blank" rel="noopener">
+            Achievements on Steam ↗
+          </a>
+        )}
+      </Show>
+    </>
   );
 }
 
@@ -1546,8 +1255,7 @@ function NewsSection(props: { game: ReadonlyGame }): JSX.Element {
             >
               {(list) => (
                 <CollapsibleCard
-                  appid={props.game.appid}
-                  section="news"
+                  card="news"
                   icon={<Newspaper />}
                   // Spelling out "more on Steam" here (not just relying on the ↗ icon's title
                   // tooltip) makes it explicit that this list is a preview, not the full history.
@@ -1980,8 +1688,7 @@ function DlcSection(props: { game: ReadonlyGame }): JSX.Element {
     <Show when={dlcIds().length}>
       <section class="panel-section" id="panel-section-dlc">
         <CollapsibleCard
-          appid={props.game.appid}
-          section="dlc"
+          card="dlc"
           icon={<Package />}
           val={
             <>
@@ -2191,75 +1898,192 @@ function PanelHero(): JSX.Element {
 // async loaders, most bumping on start and finish), each throwing away hover state, keyboard
 // focus and the scroll-spy's `active` class. See docs/dev/frontend.md's Reactivity section.
 
-// The HLTB Main/Extra/Completionist breakdown. The glance strip above already carries HLTB's
-// "All PlayStyles" number (see GlanceGrid), so this is the fuller breakdown beneath it, not a
-// second copy of the headline figure.
+// ── The tiles: Weighted Rating | Linux/Deck, To beat | Achievements ─────────────────────────────
+
 const HLTB_PARTS = [
   ['main', 'Main Story'],
   ['extra', 'Main + Extra'],
   ['completionist', 'Completionist'],
 ] as const;
+// PanelSubnav's condition for its To beat tab.
 const hltbShown = (g: ReadonlyGame) => {
   const h = g.details?.hltb;
   return !g.loading && !!h && HLTB_PARTS.some(([key]) => h[key]);
 };
 
-function HltbSection(props: { game: ReadonlyGame }): JSX.Element {
-  const h = () => props.game.details?.hltb;
-  const present = () => hltbShown(props.game);
-  const parts = () => {
-    const x = h();
-    return HLTB_PARTS.filter(([key]) => x?.[key]).map(([, label]) => label);
-  };
+// A details source (the stream's) that didn't answer: ↻'s refetch is its retry.
+const detailsFailed = (source: string) => () => ({
+  message: `${source} didn't answer`,
+  retry: () => void handlePanelRefresh(),
+});
 
-  // Collapsed by default like achievements/news, EXCEPT when `all` itself is missing — then this
-  // breakdown is the only duration data the panel has at all, so hiding it behind a click would
-  // bury the one piece of HLTB info actually available for this game. An effect, not a write
-  // during render: a signal write inside a tracked scope is exactly the "changing state while
-  // deriving from it" mistake the store conversion is meant to make impossible.
-  createEffect(() => {
-    const x = h();
-    if (!present() || x?.all != null) return;
-    const key = `${props.game.appid}:hltb`;
-    if (expandedSections().has(key)) return;
-    setExpandedSections((prev) => new Set(prev).add(key));
-  });
-
+function RatingBody(props: { game: ReadonlyGame }): JSX.Element {
+  const r = () => props.game.details?.rating;
+  const weighted = () => Math.round(computeSteamdbRating(r()?.positive ?? 0, r()?.total ?? 0) ?? 0);
+  const steamPct = () => (r()?.total ? Math.round((r()!.positive / r()!.total) * 100) : 0);
+  const mc = () => props.game.details?.meta?.metacritic;
   return (
-    <Show when={present()}>
-      <section class="panel-section" id="panel-section-hltb">
-        <CollapsibleCard
-          appid={props.game.appid}
-          section="hltb"
-          icon={<Timer />}
-          val={
-            <>
-              <b>How Long To Beat</b> · {parts().join(', ')}
-            </>
-          }
-          body={
-            <div class="panel-collapsible-body-pad">
-              <dl class="panel-hltb">
-                <For each={HLTB_PARTS}>
-                  {([key, label]) => (
-                    <Show when={h()?.[key]}>
-                      {(v) => (
-                        <div class="panel-hltb-item">
-                          <dt class="panel-hltb-label">{label}</dt>
-                          <dd class="panel-hltb-val">{fmtH(v())}</dd>
-                        </div>
-                      )}
-                    </Show>
+    <>
+      <dl class="panel-figs">
+        <div class="panel-fig">
+          <dt>Weighted</dt>
+          <dd style={{ color: scoreColor(weighted()) }}>{weighted()}</dd>
+        </div>
+        <div class="panel-fig">
+          <dt>Steam</dt>
+          <dd>{steamPct()}%</dd>
+        </div>
+        <div class="panel-fig">
+          <dt>Metacritic</dt>
+          <Show
+            when={mc()}
+            fallback={
+              <Show when={props.game.pendingSources?.includes('meta')} fallback={<dd class="panel-fig-none">—</dd>}>
+                <dd class="panel-fig-none">still loading</dd>
+              </Show>
+            }
+          >
+            {(m) => (
+              <dd style={{ color: scoreColor(m().score) }}>
+                <Show when={safeHref(m().url)} fallback={m().score}>
+                  {(href) => (
+                    <a href={href()} target="_blank" rel="noopener">
+                      {m().score}
+                    </a>
                   )}
-                </For>
-              </dl>
+                </Show>
+              </dd>
+            )}
+          </Show>
+        </div>
+      </dl>
+      <a
+        class="panel-card-link"
+        href={`https://store.steampowered.com/app/${props.game.appid}/#app_reviews_hash`}
+        target="_blank"
+        rel="noopener"
+      >
+        Reviews on Steam ↗
+      </a>
+    </>
+  );
+}
+
+function LinuxDeckBody(props: { game: ReadonlyGame }): JSX.Element {
+  const pd = () => props.game.details?.protondb;
+  return (
+    <>
+      <p class="panel-card-text">
+        ProtonDB: <span style={{ color: protonTierColor(pd()?.tier ?? '') }}>{capitalize(pd()?.tier ?? '')}</span>
+        {pd()?.confidence ? `, ${pd()!.confidence} confidence` : ''}
+        {pd()?.total ? ` over ${pd()!.total} reports` : ''}.
+        <Show when={pd()?.pending}> Provisional: too few reports for ProtonDB to be sure.</Show>
+      </p>
+      <a
+        class="panel-card-link"
+        href={`https://www.protondb.com/app/${props.game.appid}`}
+        target="_blank"
+        rel="noopener"
+      >
+        ProtonDB ↗
+      </a>
+    </>
+  );
+}
+
+function ToBeatBody(props: { game: ReadonlyGame }): JSX.Element {
+  const h = () => props.game.details?.hltb;
+  return (
+    <>
+      <dl class="panel-figs">
+        <For each={HLTB_PARTS}>
+          {([key, label]) => (
+            <Show when={h()?.[key]}>
+              {(v) => (
+                <div class="panel-fig">
+                  <dt>{label}</dt>
+                  <dd>{spacedHours(v())}</dd>
+                </div>
+              )}
+            </Show>
+          )}
+        </For>
+        <Show when={!HLTB_PARTS.some(([key]) => h()?.[key]) && h()?.all}>
+          {(v) => (
+            <div class="panel-fig">
+              <dt>All PlayStyles</dt>
+              <dd>{spacedHours(v())}</dd>
             </div>
-          }
-          linkHref={h()?.id ? `https://howlongtobeat.com/game/${h()!.id}` : null}
-          linkTitle="View on HowLongToBeat"
-        />
-      </section>
-    </Show>
+          )}
+        </Show>
+      </dl>
+      <a
+        class="panel-card-link"
+        href={
+          h()?.id
+            ? `https://howlongtobeat.com/game/${h()!.id}`
+            : `https://howlongtobeat.com/?q=${encodeURIComponent(props.game.name)}`
+        }
+        target="_blank"
+        rel="noopener"
+      >
+        HowLongToBeat ↗
+      </a>
+    </>
+  );
+}
+
+function PanelTiles(props: { game: ReadonlyGame }): JSX.Element {
+  // A ↻ keeps the summary shown; another game's load (the same resource, re-keyed) shimmers.
+  const achievements = () =>
+    panelData.achievements.loading && !panelRefreshing() ? undefined : panelData.achievements.latest;
+  const rating: PanelCardDef = {
+    card: 'rating',
+    title: 'Rating',
+    icon: ThumbsUp,
+    summary: () => ratingSummary(props.game),
+    body: <RatingBody game={props.game} />,
+    failed: detailsFailed('Steam reviews'),
+  };
+  const linuxDeck: PanelCardDef = {
+    card: 'linux-deck',
+    title: 'Linux/Deck',
+    icon: Gamepad2,
+    summary: () => linuxDeckSummary(props.game),
+    body: <LinuxDeckBody game={props.game} />,
+    failed: detailsFailed('ProtonDB'),
+  };
+  const toBeat: PanelCardDef = {
+    card: 'to-beat',
+    title: 'To beat',
+    icon: Timer,
+    summary: () => toBeatSummary(props.game),
+    body: <ToBeatBody game={props.game} />,
+    failed: detailsFailed('HowLongToBeat'),
+    sectionId: 'panel-section-hltb',
+  };
+  const achievementsTile: PanelCardDef = {
+    card: 'achievements',
+    title: 'Achievements',
+    icon: Trophy,
+    summary: () => {
+      const account = getEffectiveCurrentAccount();
+      return achievementsSummary(achievements(), account ? accountDisplayLabel(account) : null);
+    },
+    body: <AchievementsBody game={props.game} />,
+    failed: () => {
+      const refusal = achievementsRefusal(props.game.appid, currentMembers());
+      return refusal
+        ? { message: refusal }
+        : { message: "Steam didn't answer.", retry: () => void panelData.refetchAchievements() };
+    },
+    sectionId: 'panel-section-achievements',
+  };
+  return (
+    <>
+      <PanelTileRow first={rating} second={linuxDeck} />
+      <PanelTileRow first={toBeat} second={achievementsTile} />
+    </>
   );
 }
 
@@ -2945,7 +2769,7 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
           </a>
         )}
       </Show>
-      <GlanceGrid game={g} />
+      <PanelTiles game={g} />
       <Show when={!g.loading}>
         <PriceSection game={g} />
       </Show>
@@ -2960,9 +2784,7 @@ function PanelRest(props: { game: ReadonlyGame }): JSX.Element {
       <TagCloudSection game={g} />
       <SimilarSection game={g} />
       <OwnersSection />
-      <HltbSection game={g} />
       <NewsSection game={g} />
-      <AchievementsSection game={g} />
       <Show when={!g.loading}>
         <DlcSection game={g} />
       </Show>

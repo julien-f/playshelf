@@ -3,7 +3,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import { DEMO_OF, LIMITED, mockApi, respond } from './mockApi.ts';
 import { HEARTBEAT_MS, PRESENTATION_CHANNEL } from '../public/presentationProtocol.ts';
 import { hookPresentation, type PresTest } from './presentationHooks.ts';
-import { asPlayer, gate, shot, visibleBox } from './state.ts';
+import { asPlayer, cardButton, gate, openCard, shot, visibleBox } from './state.ts';
 import { row, rows } from './rows.ts';
 import {
   ALICE,
@@ -5431,7 +5431,7 @@ test('D2.1-2: with upstreams down, every game is still listed', async ({ page })
     "Steam reviews, HowLongToBeat and ProtonDB didn't answer for 6 games",
   );
   await row(page, 'Hades').getByText('Hades').click();
-  await expect(page.locator('.panel-glance-chip').filter({ hasText: 'HLTB' })).toContainText("didn't answer");
+  await expect(cardButton(page, 'To beat')).toContainText("didn't answer");
 });
 
 test(
@@ -5476,7 +5476,7 @@ test(
     await expect(page.locator('.price-status')).toHaveClass(/list-failed/);
     await page.goto('/lists/owned?game=1145360');
     await expect(page.locator('#panel-section-price')).toContainText(LIMITED);
-    await expect(page.locator('#panel-section-achievements')).toContainText(LIMITED);
+    await expect(await openCard(page, 'Achievements')).toContainText(LIMITED);
   },
 );
 
@@ -5640,7 +5640,7 @@ test("D2.3: once the upstream is back, the panel's Refresh details fills in what
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned');
   await row(page, 'Hades').getByText('Hades').click();
-  const hltb = page.locator('.panel-glance-chip').filter({ hasText: 'HLTB' });
+  const hltb = cardButton(page, 'To beat');
   await expect(hltb).toContainText("didn't answer");
 
   await mockApi(page); // the upstream is back: routes registered last take precedence
@@ -5801,7 +5801,7 @@ test(
     const metaAsked = gameMetaRequests(page);
     await page.goto('/lists/owned?game=1145360&shot=s1');
     await expect(page.locator('.list-status')).toContainText('Too many requests');
-    await expect(page.locator('.panel-glance')).toContainText("didn't answer");
+    await expect(cardButton(page, 'Rating')).toContainText("didn't answer");
     // Nothing was fetched, so nothing is "just now".
     await expect(page.locator('.panel-refresh-age')).toHaveCount(0);
     const lightbox = page.locator('#screenshot-lightbox');
@@ -5872,7 +5872,9 @@ test(
     await expect(row(page, 'Hades').getByTitle(/HowLongToBeat didn't answer/)).toHaveCount(0);
     await expect(row(page, 'Portal 2').getByTitle(/didn't answer/)).toHaveCount(0);
     await row(page, 'Portal 2').getByText('Portal 2').click();
-    await expect(page.locator('.panel-glance')).not.toContainText('still loading');
+    const rating = await openCard(page, 'Rating');
+    await expect(rating).toContainText('Metacritic');
+    await expect(rating).not.toContainText('still loading');
   },
 );
 
@@ -5982,16 +5984,14 @@ test(
   "F1 edge: the Achievements card says when Steam didn't answer for rarity",
   { tag: '@any-width' },
   async ({ page }) => {
-    await asPlayer(page, ALICE);
+    await asPlayer(page, ALICE, { openCards: ['achievements'] });
     await page.goto('/lists/owned?game=1145360');
-    const card = page.locator('#panel-section-achievements');
-    await card.getByRole('button', { name: /Achievements/ }).click();
+    const card = await openCard(page, 'Achievements');
     await expect(card).toContainText('71.5%');
     await expect(card).not.toContainText("Rarity: Steam didn't answer.");
 
     await mockApi(page, { states: ['upstream-down'] }); // registered last, so it answers first
     await page.reload();
-    await card.getByRole('button', { name: /Achievements/ }).click();
     await expect(card).toContainText("Rarity: Steam didn't answer.");
   },
 );
@@ -5999,9 +5999,96 @@ test(
 test("F1 edge: the panel doesn't link an upstream URL that isn't http(s)", { tag: '@any-width' }, async ({ page }) => {
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=892970');
-  const chip = page.locator('.panel-glance-chip', { hasText: 'Metacritic' });
-  await expect(chip).toBeVisible();
-  await expect(chip).not.toHaveAttribute('href', /.*/);
+  const metacritic = (await openCard(page, 'Rating')).locator('.panel-fig', { hasText: 'Metacritic' });
+  await expect(metacritic).toContainText('85');
+  await expect(metacritic.getByRole('link')).toHaveCount(0);
+});
+
+const TILES = ['Rating', 'Linux/Deck', 'To beat', 'Achievements'];
+
+test("F1 edge: opening a tile, then its neighbour, or a tile's data arriving moves no tile", async ({ page }) => {
+  await asPlayer(page, ALICE);
+  const achievements = await gate(page, '**/api/achievements/**');
+  await page.goto('/lists/owned?game=1145360');
+  const boxes = () => Promise.all(TILES.map((title) => visibleBox(cardButton(page, title))));
+  await expect(cardButton(page, 'Achievements')).toHaveAccessibleName('Achievements, loading');
+  const loading = await boxes();
+  achievements.release();
+  await expect(cardButton(page, 'Achievements')).toHaveAccessibleName(/^Achievements, 1 \/ 2/);
+  expect(await boxes()).toEqual(loading);
+
+  const rating = await openCard(page, 'Rating');
+  const opened = await boxes();
+  expect(opened.slice(0, 2)).toEqual(loading.slice(0, 2));
+  const linux = await openCard(page, 'Linux/Deck');
+  expect((await boxes()).slice(0, 2)).toEqual(loading.slice(0, 2));
+  // Both in one drawer under the row, in tile order.
+  const drawer = page.locator('.panel-drawer').first();
+  await expect(drawer.locator('section')).toHaveCount(2);
+  expect(await rating.evaluate((el) => el.nextElementSibling?.id)).toBe(await linux.getAttribute('id'));
+  await expect(drawer.locator('section').first()).toHaveAccessibleName(/^Rating, \d+, Weighted/);
+});
+
+test('I2 edge: a panel tile opens and folds from the keyboard, focus staying on it', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  const rating = cardButton(page, 'Rating');
+  await expect(rating).toHaveAttribute('aria-expanded', 'false');
+  await rating.focus();
+  await page.keyboard.press('Enter');
+  await expect(rating).toHaveAttribute('aria-expanded', 'true');
+  await expect(rating).toBeFocused();
+  // Reading order: both tiles, then their drawer.
+  await page.keyboard.press('Tab');
+  await expect(cardButton(page, 'Linux/Deck')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator(`[id="${await rating.getAttribute('aria-controls')}"] a`).first()).toBeFocused();
+  await rating.focus();
+  await page.keyboard.press(' ');
+  await expect(rating).toHaveAttribute('aria-expanded', 'false');
+  await expect(rating).toBeFocused();
+  await expect(page.locator('.panel-drawer')).toHaveCount(0);
+});
+
+test("F1 edge: a tile with nothing to show says why, and doesn't open", { tag: '@any-width' }, async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/wishlist?game=3999990');
+  const linux = cardButton(page, 'Linux/Deck');
+  await expect(linux).toHaveAccessibleName('Linux/Deck, no reports');
+  await expect(linux).toHaveAttribute('aria-disabled', 'true');
+  await expect(linux).not.toHaveAttribute('aria-expanded', /.*/);
+  await expect(linux).not.toHaveAttribute('aria-controls', /.*/);
+  await linux.click({ force: true }); // aria-disabled reads as not enabled to Playwright, not to a user
+  await expect(linux).toBeFocused();
+  await expect(page.locator('.panel-drawer')).toHaveCount(0);
+});
+
+test("D2.3: a tile whose source didn't answer opens on a Retry, which fills it in once it's back", async ({ page }) => {
+  await mockApi(page, { states: ['upstream-down'] });
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  const toBeat = cardButton(page, 'To beat');
+  await expect(toBeat).toHaveAccessibleName("To beat, didn't answer");
+  const body = await openCard(page, 'To beat');
+  await expect(body).toContainText("HowLongToBeat didn't answer");
+  await mockApi(page); // the upstream is back: routes registered last take precedence
+  await body.getByRole('button', { name: 'Retry' }).click();
+  await expect(toBeat).toHaveAccessibleName(/^To beat, 26\.7 h, main/);
+  await expect(body).toContainText('Main Story');
+});
+
+test('F1 edge: an opened card stays open on the next game, on its own page and after a reload', async ({ page }) => {
+  await asPlayer(page, ALICE);
+  await page.goto('/lists/owned?game=1145360');
+  await openCard(page, 'To beat');
+  await page.getByRole('button', { name: 'Next game' }).click();
+  await expect(page.locator('#panel-title')).not.toHaveText('Hades');
+  await expect(cardButton(page, 'To beat')).toHaveAttribute('aria-expanded', 'true');
+  await expect(cardButton(page, 'Rating')).toHaveAttribute('aria-expanded', 'false');
+  await page.goto('/game/1145360');
+  await expect(cardButton(page, 'To beat')).toHaveAttribute('aria-expanded', 'true');
+  await page.reload();
+  await expect(cardButton(page, 'To beat')).toHaveAttribute('aria-expanded', 'true');
 });
 
 test("F1 edge: Tags & details names each chip's kind, and draws each kind's dot its own shape", async ({ page }) => {
@@ -7961,10 +8048,10 @@ test('F2 edge: on /search, a lookup that fails says so', { tag: '@any-width' }, 
   );
   await page.goto('/search?q=hades');
   await expect(page.getByRole('status').filter({ hasText: 'Lookup failed' })).toContainText('Steam store error 500');
-  await expect(page.locator('.panel-glance')).toContainText("didn't answer");
+  await expect(cardButton(page, 'Rating')).toContainText("didn't answer");
   await page.unrouteAll();
   await page.getByRole('button', { name: 'Refresh details' }).click();
-  await expect(page.locator('.panel-glance')).not.toContainText("didn't answer");
+  await expect(cardButton(page, 'Rating')).not.toContainText("didn't answer");
   // Looked up after all: it joins Recently Looked Up.
   await page.goto('/game');
   await expect(row(page, 'Hades')).toBeVisible();
@@ -8682,9 +8769,10 @@ test(
 // Counts the panel's sliding-out copies, and the ids they duplicate while there.
 async function watchPanelGhosts(page: Page) {
   await page.evaluate(() => {
-    const w = window as unknown as { ghosts: number; dupIds: number };
+    const w = window as unknown as { ghosts: number; dupIds: number; ghostRefs: number };
     w.ghosts = 0;
     w.dupIds = 0;
+    w.ghostRefs = 0;
     new MutationObserver((records) => {
       for (const r of records)
         for (const n of r.addedNodes)
@@ -8692,6 +8780,7 @@ async function watchPanelGhosts(page: Page) {
             w.ghosts++;
             const ids = [...document.querySelectorAll('[id]')].map((e) => e.id);
             w.dupIds += ids.length - new Set(ids).size;
+            w.ghostRefs += (n as Element).querySelectorAll('[aria-controls], [aria-labelledby]').length;
           }
     }).observe(document.body, { childList: true, subtree: true });
   });
@@ -8906,6 +8995,8 @@ test.describe('with motion on', () => {
       await page.getByRole('button', { name: 'Close' }).click();
       await expect.poll(ghosts).toBe(1);
       expect(await page.evaluate(() => (window as unknown as { dupIds: number }).dupIds)).toBe(0);
+      // Nor references to ids the live panel answers.
+      expect(await page.evaluate(() => (window as unknown as { ghostRefs: number }).ghostRefs)).toBe(0);
       await expect(page.locator('.panel-ghost')).toHaveCount(0);
       await expect(page.locator('#panel-title')).toBeHidden();
       await expect(row(page, 'Hades')).toBeFocused();
@@ -9213,9 +9304,9 @@ test(
       route.fulfill({ status: 502, json: { error: 'Steam store error 500' } }),
     );
     await page.goto('/lists/owned?game=1426210');
-    await expect(page.locator('.panel-glance')).toContainText("didn't answer");
+    await expect(cardButton(page, 'Rating')).toContainText("didn't answer");
     await page.getByRole('button', { name: 'Refresh details' }).click();
-    await expect(page.locator('.panel-glance')).not.toContainText("didn't answer");
+    await expect(cardButton(page, 'Rating')).not.toContainText("didn't answer");
     await page.goto('/game');
     await expect(row(page, 'It Takes Two')).toBeVisible();
   },
@@ -9234,7 +9325,7 @@ test(
         : route.fulfill({ status: 502, json: { error: 'Steam store error 500' } }),
     );
     await page.goto('/lists/owned?game=1426210');
-    await expect(page.locator('.panel-glance')).toContainText("didn't answer");
+    await expect(cardButton(page, 'Rating')).toContainText("didn't answer");
     const refresh = page.getByRole('button', { name: 'Refresh details' });
     await refresh.click();
     // Disabled from the click until every refetch has settled.
@@ -9469,8 +9560,7 @@ test('I2 edge: a hidden achievement is revealed by Enter, and by Space, keeping 
   });
   await asPlayer(page, ALICE);
   await page.goto('/lists/owned?game=1145360');
-  const card = page.locator('#panel-section-achievements');
-  await card.getByRole('button', { name: /Achievements/ }).click();
+  const card = await openCard(page, 'Achievements');
   const hidden = card.getByRole('button', { name: /Hidden achievement/ });
   await expect(hidden).toHaveCount(2);
   await hidden.first().focus();
@@ -9556,7 +9646,7 @@ test('I3.1-2,4: each main page and the open game have one h1, first, skip no hea
   // The open game's sections are headings under its name.
   const panel = page.getByRole('complementary', { name: 'Hades' });
   await expect(panel.getByRole('heading', { level: 2, name: 'Hades' })).toBeVisible();
-  for (const name of ['Price', 'Owned by', /How Long To Beat/, /Achievements/])
+  for (const name of ['Price', 'Owned by', /^To beat,/, /^Achievements,/])
     await expect(panel.getByRole('heading', { level: 3, name })).toBeVisible();
 });
 

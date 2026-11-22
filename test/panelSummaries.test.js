@@ -46,14 +46,14 @@ test('fmtCompactCount: plain, thousands, millions', () => {
   assert.equal(fmtCompactCount(2_100_000), '2.1m');
 });
 
-test('ratingSummary: the Weighted Rating in its score colour, over the review count', () => {
+test('ratingSummary: the Weighted Rating in its score colour, over what it is and the review count', () => {
   const rating = { score: 9, desc: '', positive: 240_000, total: 250_000 };
   const steamdb = Math.round(computeSteamdbRating(240_000, 250_000));
   assert.deepEqual(ratingSummary(game({ details: { rating } })), {
     kind: 'figure',
     state: 'ready',
     fig: String(steamdb),
-    qualifier: '250k reviews',
+    qualifier: 'Weighted · 250k reviews',
     tone: scoreColor(steamdb),
   });
 });

@@ -6,6 +6,7 @@ import { game, type Player } from './fixtures.ts';
 // `recentGames`: Recently Looked Up's appids newest first, or `{ appid, lookedUpAt }` to stamp one. `updatedAt`: every key's last-write time.
 // `otherAccounts`: names of extra known accounts (display only: they resolve to nothing).
 // `listViews`: the listViews.ts pref, saved views per kind. `lists`: the user's lists (listsStore.ts).
+// `openCards`: the panel cards open (panelOpenCards.ts), for a test that reads one rather than opening it.
 export async function asPlayer(
   page: Page,
   player: Player,
@@ -16,6 +17,7 @@ export async function asPlayer(
     otherAccounts = [] as string[],
     listViews = undefined as object | undefined,
     lists = undefined as object[] | undefined,
+    openCards = undefined as string[] | undefined,
   } = {},
 ): Promise<void> {
   const slot = {
@@ -45,6 +47,7 @@ export async function asPlayer(
       : {}),
     ...(listViews ? { listViews: entry(listViews) } : {}),
     ...(lists ? { lists: entry(lists) } : {}),
+    ...(openCards ? { panelOpenCards: entry(openCards) } : {}),
   };
   await page.addInitScript((blob) => {
     if (sessionStorage.getItem('e2e-seeded')) return;
@@ -74,6 +77,21 @@ export async function gate(page: Page, url: string | RegExp) {
 export async function shot(page: Page, name: string): Promise<void> {
   if (test.info().project.use.screenshot !== 'on') return;
   await page.screenshot({ path: test.info().outputPath(`${name}.png`) });
+}
+
+// The panel card titled `title`: its one button, named "<title>, <summary>".
+export function cardButton(page: Page, title: string): Locator {
+  const name = new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')},`);
+  return page.locator('#game-panel').getByRole('heading', { level: 3 }).getByRole('button', { name });
+}
+
+// Opens a folded panel card and returns its body: a wide card's, or the tile's part of its row's drawer.
+export async function openCard(page: Page, title: string): Promise<Locator> {
+  const button = cardButton(page, title);
+  await expect(button).toHaveAttribute('aria-expanded', /true|false/);
+  if ((await button.getAttribute('aria-expanded')) === 'false') await button.click();
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
+  return page.locator(`[id="${await button.getAttribute('aria-controls')}"]`);
 }
 
 // `boundingBox()` doesn't wait: it's null while the element isn't shown yet.
